@@ -5,6 +5,11 @@
 builder = "DOCKERFILE"
 dockerfilePath = "Dockerfile.railway"
 
+# Variáveis disponíveis durante o build
+[build.args]
+VITE_API_URL = "/api"
+NODE_ENV = "production"
+
 [deploy]
 # Número de réplicas (1 para Hobby plan)
 replicas = 1

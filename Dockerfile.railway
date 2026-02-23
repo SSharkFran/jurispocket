@@ -6,6 +6,10 @@
 # ============================================
 FROM node:20-alpine AS frontend-builder
 
+# Argumentos de build (passados pelo Railway)
+ARG VITE_API_URL=/api
+ARG NODE_ENV=production
+
 WORKDIR /app
 
 # Copia apenas os arquivos necessários primeiro (cache eficiente)
@@ -17,7 +21,11 @@ RUN npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
 # Copia o resto dos arquivos
 COPY app/ ./
 
-# Build do frontend (gera pasta dist/)
+# Build do frontend com as variáveis de ambiente
+# O Vite usa VITE_ prefix automaticamente
+ENV VITE_API_URL=${VITE_API_URL}
+ENV NODE_ENV=${NODE_ENV}
+
 RUN npm run build
 
 # ============================================
