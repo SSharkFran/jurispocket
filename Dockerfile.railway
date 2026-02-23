@@ -5,7 +5,7 @@ WORKDIR /app/frontend
 
 # Build do frontend
 COPY app/package*.json ./
-RUN npm ci
+RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
 COPY app/ ./
 RUN npm run build
