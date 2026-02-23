@@ -15,8 +15,9 @@ WORKDIR /app
 # Copia apenas os arquivos necessários primeiro (cache eficiente)
 COPY app/package*.json ./
 
-# Instala dependências
-RUN npm ci --legacy-peer-deps 2>/dev/null || npm install --legacy-peer-deps
+# Instala dependências (incluindo devDependencies para o build do Vite)
+RUN npm_config_production=false npm ci --legacy-peer-deps 2>/dev/null || \
+    npm_config_production=false npm install --legacy-peer-deps
 
 # Copia o resto dos arquivos
 COPY app/ ./
