@@ -147,9 +147,13 @@ ia_provider = None
 
 if GROQ_API_KEY:
     try:
+        # Configuração sem proxies para evitar erros de compatibilidade
+        import httpx
+        http_client = httpx.Client(timeout=60.0)
         ia_client = OpenAI(
             api_key=GROQ_API_KEY,
-            base_url=GROQ_API_URL
+            base_url=GROQ_API_URL,
+            http_client=http_client
         )
         ia_provider = 'groq'
         print(f"✅ IA Client configurado: Groq (API compatível)")
@@ -158,7 +162,12 @@ if GROQ_API_KEY:
 
 if not ia_client and OPENAI_API_KEY:
     try:
-        ia_client = OpenAI(api_key=OPENAI_API_KEY)
+        import httpx
+        http_client = httpx.Client(timeout=60.0)
+        ia_client = OpenAI(
+            api_key=OPENAI_API_KEY,
+            http_client=http_client
+        )
         ia_provider = 'openai'
         print(f"✅ IA Client configurado: OpenAI")
     except Exception as e:
