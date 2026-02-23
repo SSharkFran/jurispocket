@@ -26,7 +26,7 @@ COPY app/ ./
 ENV VITE_API_URL=${VITE_API_URL}
 ENV NODE_ENV=${NODE_ENV}
 
-RUN npm run build
+RUN npx vite build
 
 # ============================================
 # ESTÁGIO 2: Backend Python
