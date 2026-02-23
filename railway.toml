@@ -16,7 +16,8 @@ replicas = 1
 
 # Healthcheck endpoint
 healthcheckPath = "/api/health"
-healthcheckTimeout = 30
+healthcheckTimeout = 60
+startCommand = "sh -c 'sleep 5 && gunicorn -w 1 -b 0.0.0.0:$PORT --timeout 120 --keep-alive 2 --max-requests 1000 app:app'"
 
 # Porta exposta (deve bater com o EXPOSE do Dockerfile)
 port = 8080

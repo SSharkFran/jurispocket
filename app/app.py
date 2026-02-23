@@ -58,13 +58,23 @@ from docx import Document
 # ============================================================================
 # IMPORTAÇÃO DO SERVIÇO WHATSAPP
 # ============================================================================
-from services.whatsapp_service import (
-    whatsapp_service,
-    enviar_boas_vindas,
-    enviar_link_publico,
-    notificar_nova_movimentacao,
-    notificar_novo_prazo,
-)
+try:
+    from services.whatsapp_service import (
+        whatsapp_service,
+        enviar_boas_vindas,
+        enviar_link_publico,
+        notificar_nova_movimentacao,
+        notificar_novo_prazo,
+    )
+    WHATSAPP_SERVICE_DISPONIVEL = True
+except ImportError as e:
+    WHATSAPP_SERVICE_DISPONIVEL = False
+    whatsapp_service = None
+    enviar_boas_vindas = None
+    enviar_link_publico = None
+    notificar_nova_movimentacao = None
+    notificar_novo_prazo = None
+    print(f"⚠️  Aviso: Serviço de WhatsApp não disponível: {e}")
 
 # ============================================================================
 # IMPORTAÇÃO DO SERVIÇO DE EMAIL
@@ -116,6 +126,9 @@ app.config['DATABASE'] = os.environ.get('DATABASE_PATH', DEFAULT_DB_PATH)
 
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
+
+# Token opcional para bootstrap seguro de superadmin
+SUPERADMIN_BOOTSTRAP_TOKEN = os.environ.get('SUPERADMIN_BOOTSTRAP_TOKEN')
 
 # ============================================================================
 # CONFIGURAÇÃO DE IA - OpenAI ou Groq
@@ -777,8 +790,14 @@ def init_db():
     db.commit()
 
 # Initialize database on startup
-with app.app_context():
-    init_db()
+print("🚀 Iniciando JurisPocket...")
+try:
+    with app.app_context():
+        init_db()
+    print("✅ Banco de dados inicializado com sucesso")
+except Exception as e:
+    print(f"⚠️ Erro ao inicializar banco de dados: {e}")
+    print("   A aplicação continuará rodando, mas funcionalidades podem não funcionar corretamente")
 
 # ============================================================================
 # AUTHENTICATION
@@ -5966,6 +5985,82 @@ def gerar_documento_template(template_id):
 
 
 # ============================================================================
+# SUPER ADMIN - BOOTSTRAP SEGURO
+# ============================================================================
+
+@app.route('/api/bootstrap/superadmin', methods=['POST'])
+def bootstrap_superadmin():
+    """
+    Endpoint de bootstrap para criar/promover um usuário como superadmin.
+
+    Proteções:
+    - Só funciona se a env SUPERADMIN_BOOTSTRAP_TOKEN estiver definida
+    - Requer header X-Bootstrap-Token igual a essa env
+    - Só permite executar enquanto não existir nenhum usuário com role='superadmin'
+    """
+    if not SUPERADMIN_BOOTSTRAP_TOKEN:
+        # Se não houver token configurado, como se a rota não existisse
+        return jsonify({'error': 'Bootstrap desabilitado'}), 404
+
+    token = request.headers.get('X-Bootstrap-Token')
+    if token != SUPERADMIN_BOOTSTRAP_TOKEN:
+        return jsonify({'error': 'Unauthorized'}), 401
+
+    db = get_db()
+
+    # Já existe superadmin? Então não permite mais bootstrap
+    existing = db.execute(
+        "SELECT COUNT(*) as count FROM users WHERE role = 'superadmin'"
+    ).fetchone()['count']
+    if existing > 0:
+        return jsonify({'error': 'Já existe um superadmin configurado'}), 400
+
+    data = request.get_json() or {}
+    email = data.get('email')
+    password = data.get('password')
+    nome = data.get('nome') or 'Super Admin'
+
+    if not email or not password:
+        return jsonify({'error': 'Campos obrigatórios: email, password'}), 400
+
+    # Usa o primeiro workspace existente ou cria um novo
+    ws = db.execute('SELECT id FROM workspaces ORDER BY id LIMIT 1').fetchone()
+    if ws:
+        workspace_id = ws['id']
+    else:
+        cursor = db.execute(
+            'INSERT INTO workspaces (nome) VALUES (?)',
+            ('Super Admin Workspace',)
+        )
+        workspace_id = cursor.lastrowid
+
+    # Se já existir usuário com esse email, apenas promove para superadmin
+    existing_user = db.execute(
+        'SELECT id, role FROM users WHERE email = ?',
+        (email,)
+    ).fetchone()
+
+    if existing_user:
+        db.execute(
+            'UPDATE users SET role = ?, workspace_id = ? WHERE email = ?',
+            ('superadmin', workspace_id, email)
+        )
+    else:
+        db.execute(
+            'INSERT INTO users (workspace_id, nome, email, password_hash, role) '
+            'VALUES (?, ?, ?, ?, ?)',
+            (workspace_id, nome, email, hash_senha(password), 'superadmin')
+        )
+
+    db.commit()
+
+    return jsonify({
+        'message': 'Superadmin criado/atualizado com sucesso',
+        'email': email
+    }), 201
+
+
+# ============================================================================
 # SUPER ADMIN - DASHBOARD
 # ============================================================================
 
@@ -7936,13 +8031,20 @@ STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
 
 @app.route('/api/health')
 def health_check():
-    """Health check endpoint"""
-    return jsonify({
-        'status': 'ok',
-        'static_folder': STATIC_FOLDER,
-        'static_exists': os.path.exists(STATIC_FOLDER),
-        'index_exists': os.path.exists(os.path.join(STATIC_FOLDER, 'index.html'))
-    })
+    """Health check endpoint - rápido e leve para o Railway"""
+    try:
+        # Verificação mínima - apenas retorna OK
+        # Não faz consultas ao banco para ser rápido
+        return jsonify({
+            'status': 'ok',
+            'timestamp': datetime.utcnow().isoformat(),
+            'service': 'jurispocket-api'
+        }), 200
+    except Exception as e:
+        return jsonify({
+            'status': 'error',
+            'error': str(e)
+        }), 500
 
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')

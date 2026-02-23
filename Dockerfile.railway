@@ -65,17 +65,19 @@ COPY --from=frontend-builder /app/dist ./static
 ENV PORT=8080
 EXPOSE 8080
 
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
-    CMD curl -f http://localhost:8080/api/health || exit 1
+# Health check - mais generoso para Railway
+HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+    CMD curl -f http://localhost:$PORT/api/health || exit 1
 
 # Comando para iniciar usando Gunicorn (produção)
-# Usando 2 workers para economizar memória no Railway Hobby
-CMD gunicorn -w 2 -b 0.0.0.0:$PORT \
+# Usando 1 worker para economizar memória no Railway Hobby
+# O Railway já gerencia múltiplas réplicas se necessário
+CMD exec gunicorn -w 1 -b 0.0.0.0:$PORT \
     --access-logfile - \
     --error-logfile - \
     --timeout 120 \
     --keep-alive 2 \
     --max-requests 1000 \
     --max-requests-jitter 50 \
+    --preload \
     app:app
