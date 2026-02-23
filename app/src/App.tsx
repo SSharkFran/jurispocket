@@ -1,4 +1,4 @@
-import { BrowserRouter, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Toaster } from '@/components/ui/sonner';
 import LandingPage from '@/pages/LandingPage';
@@ -21,6 +21,15 @@ import { PublicoProcessoPage } from '@/pages/PublicoProcessoPage';
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import { ChatbotIA } from '@/components/ChatbotIA';
 import { ConvitesBanner } from '@/components/ConvitesBanner';
+
+function RedirectToDashboardProcesso() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/dashboard/processos/${id}`} replace />;
+}
+function RedirectToDashboardCliente() {
+  const { id } = useParams<{ id: string }>();
+  return <Navigate to={`/dashboard/clientes/${id}`} replace />;
+}
 
 function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
@@ -71,7 +80,18 @@ function AppRoutes() {
         <Route path="configuracoes" element={<ConfiguracoesPage />} />
       </Route>
       
-      {/* Redirecionamento para compatibilidade - antiga rota / para dashboard */}
+      {/* Redirecionamentos: menu usa /financeiro etc., rotas reais são /dashboard/... */}
+      <Route path="/financeiro" element={<Navigate to="/dashboard/financeiro" replace />} />
+      <Route path="/processos" element={<Navigate to="/dashboard/processos" replace />} />
+      <Route path="/processos/:id" element={<RedirectToDashboardProcesso />} />
+      <Route path="/clientes" element={<Navigate to="/dashboard/clientes" replace />} />
+      <Route path="/clientes/:id" element={<RedirectToDashboardCliente />} />
+      <Route path="/tarefas" element={<Navigate to="/dashboard/tarefas" replace />} />
+      <Route path="/prazos" element={<Navigate to="/dashboard/prazos" replace />} />
+      <Route path="/equipe" element={<Navigate to="/dashboard/equipe" replace />} />
+      <Route path="/documentos" element={<Navigate to="/dashboard/documentos" replace />} />
+      <Route path="/templates" element={<Navigate to="/dashboard/templates" replace />} />
+      <Route path="/configuracoes" element={<Navigate to="/dashboard/configuracoes" replace />} />
       <Route path="/app" element={<Navigate to="/dashboard" />} />
       <Route 
         path="/admin" 

@@ -271,7 +271,7 @@ export function DashboardPage() {
                 <DollarSign className="w-5 h-5 text-green-400" />
                 Financeiro (Mês)
               </CardTitle>
-              <Link to="/financeiro">
+              <Link to="/dashboard/financeiro">
                 <Button variant="ghost" size="sm" className="text-cyan-400 hover:text-cyan-300">
                   Ver mais <ArrowRight className="w-4 h-4 ml-1" />
                 </Button>

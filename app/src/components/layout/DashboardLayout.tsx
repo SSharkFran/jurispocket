@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
 import { Avatar, AvatarFallback, AvatarImage } from '@/components/ui/avatar';
@@ -34,22 +34,23 @@ import { notificacoes } from '@/services/api';
 import { toast } from 'sonner';
 
 const getNavItems = (isSuperAdmin: boolean) => [
-  { path: '/', label: 'Dashboard', icon: Briefcase },
-  { path: '/processos', label: 'Processos', icon: Gavel },
-  { path: '/clientes', label: 'Clientes', icon: Users },
-  { path: '/tarefas', label: 'Tarefas', icon: CheckSquare },
-  { path: '/prazos', label: 'Prazos', icon: Calendar },
-  { path: '/financeiro', label: 'Financeiro', icon: DollarSign },
-  { path: '/documentos', label: 'Documentos', icon: FileText },
-  { path: '/templates', label: 'Templates', icon: FileCode },
-  { path: '/equipe', label: 'Equipe', icon: UserPlus },
-  { path: '/configuracoes', label: 'Configurações', icon: Settings },
+  { path: '/dashboard', label: 'Dashboard', icon: Briefcase },
+  { path: '/dashboard/processos', label: 'Processos', icon: Gavel },
+  { path: '/dashboard/clientes', label: 'Clientes', icon: Users },
+  { path: '/dashboard/tarefas', label: 'Tarefas', icon: CheckSquare },
+  { path: '/dashboard/prazos', label: 'Prazos', icon: Calendar },
+  { path: '/dashboard/financeiro', label: 'Financeiro', icon: DollarSign },
+  { path: '/dashboard/documentos', label: 'Documentos', icon: FileText },
+  { path: '/dashboard/templates', label: 'Templates', icon: FileCode },
+  { path: '/dashboard/equipe', label: 'Equipe', icon: UserPlus },
+  { path: '/dashboard/configuracoes', label: 'Configurações', icon: Settings },
   ...(isSuperAdmin ? [{ path: '/admin', label: 'Super Admin', icon: Crown }] : []),
 ];
 
 export function DashboardLayout() {
   const { user, workspace, logout } = useAuth();
   const location = useLocation();
+  const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
   const [notificacoesList, setNotificacoesList] = useState<any[]>([]);
   const [naoLidas, setNaoLidas] = useState(0);
@@ -270,7 +271,7 @@ export function DashboardLayout() {
                   <DropdownMenuLabel className="text-slate-300">Minha Conta</DropdownMenuLabel>
                   <DropdownMenuSeparator className="bg-white/10" />
                   <DropdownMenuItem
-                    onClick={() => window.location.href = '/configuracoes'}
+                    onClick={() => navigate('/dashboard/configuracoes')}
                     className="text-slate-300 focus:text-white focus:bg-white/10"
                   >
                     <Settings className="w-4 h-4 mr-2" />
