@@ -7910,32 +7910,45 @@ def uploaded_file(filename):
 
 import os
 
-# Em produção, serve o frontend React da pasta static
+STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
+
+@app.route('/api/health')
+def health_check():
+    """Health check endpoint"""
+    return jsonify({
+        'status': 'ok',
+        'static_folder': STATIC_FOLDER,
+        'static_exists': os.path.exists(STATIC_FOLDER),
+        'index_exists': os.path.exists(os.path.join(STATIC_FOLDER, 'index.html'))
+    })
+
 @app.route('/', defaults={'path': ''})
 @app.route('/<path:path>')
 def serve_frontend(path):
     """Serve o frontend React em produção"""
-    static_folder = os.path.join(os.path.dirname(__file__), 'static')
-    
-    # Se for uma rota da API, não intercepta
-    if path.startswith('api/') or path.startswith('uploads/') or path.startswith('publico/'):
+    # Se for API, não serve frontend
+    if path.startswith('api/'):
         return jsonify({'error': 'Not found'}), 404
     
-    # Tenta servir arquivo estático
-    file_path = os.path.join(static_folder, path)
-    if path and os.path.exists(file_path) and os.path.isfile(file_path):
-        return send_from_directory(static_folder, path)
+    # Tenta servir arquivo específico
+    if path:
+        file_path = os.path.join(STATIC_FOLDER, path)
+        if os.path.exists(file_path) and os.path.isfile(file_path):
+            return send_from_directory(STATIC_FOLDER, path)
     
-    # Caso contrário, serve index.html (SPA)
-    index_path = os.path.join(static_folder, 'index.html')
+    # Serve index.html para SPA
+    index_path = os.path.join(STATIC_FOLDER, 'index.html')
     if os.path.exists(index_path):
-        return send_from_directory(static_folder, 'index.html')
+        return send_from_directory(STATIC_FOLDER, 'index.html')
     
-    # Se não encontrar o frontend, retorna erro
+    # Debug - mostra o que está acontecendo
     return jsonify({
-        'status': 'API JurisPocket',
-        'message': 'Frontend não encontrado. Em desenvolvimento, use npm run dev.'
-    }), 200
+        'status': 'JurisPocket API',
+        'error': 'Frontend not found',
+        'static_folder': STATIC_FOLDER,
+        'exists': os.path.exists(STATIC_FOLDER),
+        'files': os.listdir(STATIC_FOLDER) if os.path.exists(STATIC_FOLDER) else []
+    }), 500
 
 # ============================================================================
 # MAIN
