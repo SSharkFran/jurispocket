@@ -109,7 +109,11 @@ CORS(app, resources={
     }
 })
 app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-in-production')
-app.config['DATABASE'] = os.path.join(os.path.dirname(__file__), 'jurispocket.db')
+
+# Caminho do banco de dados (permite usar volume persistente em produção)
+DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), 'jurispocket.db')
+app.config['DATABASE'] = os.environ.get('DATABASE_PATH', DEFAULT_DB_PATH)
+
 app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
@@ -387,6 +391,24 @@ def init_db():
             FOREIGN KEY (cliente_id) REFERENCES clientes (id)
         )
     ''')
+
+    # Migração: adicionar colunas usadas pelo financeiro em documentos
+    try:
+        db.execute("SELECT financeiro_id FROM documentos LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("ALTER TABLE documentos ADD COLUMN financeiro_id INTEGER")
+    try:
+        db.execute("SELECT categoria FROM documentos LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("ALTER TABLE documentos ADD COLUMN categoria TEXT")
+    try:
+        db.execute("SELECT descricao FROM documentos LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("ALTER TABLE documentos ADD COLUMN descricao TEXT")
+    try:
+        db.execute("SELECT uploaded_by FROM documentos LIMIT 1")
+    except sqlite3.OperationalError:
+        db.execute("ALTER TABLE documentos ADD COLUMN uploaded_by INTEGER")
     
     # Financeiro
     db.execute('''
