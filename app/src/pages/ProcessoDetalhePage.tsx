@@ -109,12 +109,6 @@ interface Processo {
     ultima_verificacao?: string;
     total_movimentacoes?: number;
   };
-  movimentacoes_datajud?: Array<{
-    id: number;
-    nome_movimento: string;
-    data_movimento: string;
-    complementos?: string;
-  }>;
 }
 
 export function ProcessoDetalhePage() {

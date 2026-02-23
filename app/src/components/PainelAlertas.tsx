@@ -59,8 +59,8 @@ export function PainelAlertas({
     carregando,
     erro,
     paginaAtual,
-    marcarComolido,
-    marcarTodosComolidos,
+    marcarComoLido,
+    marcarTodosComoLidos,
     recarregar,
     irParaPagina,
     exibirApenasNaoLidos,
@@ -94,7 +94,7 @@ export function PainelAlertas({
   // =========================================================================
 
   const handleMarcarLido = (alertaId: number) => {
-    marcarComolido(alertaId);
+    marcarComoLido(alertaId);
   };
 
   const handleRemoverAlerta = (alertaId: number) => {
@@ -197,7 +197,7 @@ export function PainelAlertas({
 
         {estatisticas.nao_lidos > 0 && (
           <button
-            onClick={() => marcarTodosComolidos()}
+            onClick={() => marcarTodosComoLidos()}
             className="px-3 py-2 text-sm bg-green-600 text-white rounded-lg hover:bg-green-700 transition"
           >
             ✓ Marcar Todos como Lidos
