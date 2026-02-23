@@ -42,7 +42,9 @@ const LandingPage = () => {
   }, [])
 
   useEffect(() => {
-    fetch('http://localhost:5000/api/config/public')
+    const baseUrl = (import.meta as any).env?.VITE_API_URL || '/api'
+
+    fetch(`${baseUrl}/config/public`)
       .then(res => res.json())
       .then(data => {
         if (data.whatsapp_vendas) {
