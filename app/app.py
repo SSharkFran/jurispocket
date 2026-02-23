@@ -7905,6 +7905,39 @@ def uploaded_file(filename):
 #         return send_from_directory(LANDING_PAGE_FOLDER, 'index.html')
 
 # ============================================================================
+# SERVIR FRONTEND (Produção)
+# ============================================================================
+
+import os
+
+# Em produção, serve o frontend React da pasta static
+@app.route('/', defaults={'path': ''})
+@app.route('/<path:path>')
+def serve_frontend(path):
+    """Serve o frontend React em produção"""
+    static_folder = os.path.join(os.path.dirname(__file__), 'static')
+    
+    # Se for uma rota da API, não intercepta
+    if path.startswith('api/') or path.startswith('uploads/') or path.startswith('publico/'):
+        return jsonify({'error': 'Not found'}), 404
+    
+    # Tenta servir arquivo estático
+    file_path = os.path.join(static_folder, path)
+    if path and os.path.exists(file_path) and os.path.isfile(file_path):
+        return send_from_directory(static_folder, path)
+    
+    # Caso contrário, serve index.html (SPA)
+    index_path = os.path.join(static_folder, 'index.html')
+    if os.path.exists(index_path):
+        return send_from_directory(static_folder, 'index.html')
+    
+    # Se não encontrar o frontend, retorna erro
+    return jsonify({
+        'status': 'API JurisPocket',
+        'message': 'Frontend não encontrado. Em desenvolvimento, use npm run dev.'
+    }), 200
+
+# ============================================================================
 # MAIN
 # ============================================================================
 
