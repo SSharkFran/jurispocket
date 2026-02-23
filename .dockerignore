@@ -1,0 +1,73 @@
+# Git
+.git
+.gitignore
+.gitattributes
+
+# Documentação
+*.md
+!README.md
+AGENTS.md
+CRIAR_REPO.md
+GITHUB_TOKEN.md
+RAILWAY_CONNECT.md
+RAILWAY_DEPLOY.md
+TOKEN_EXPIRADO.md
+HOSPEDAGEM.md
+
+# Docker
+docker-compose*.yml
+Dockerfile*
+.dockerignore
+
+# Node modules (serão instalados no build)
+app/node_modules
+app/frontend/node_modules
+
+# Logs
+*.log
+logs/
+app/logs/
+app/*.log
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+.venv
+
+# IDEs
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Banco de dados local (será criado no deploy)
+*.db
+*.sqlite
+*.sqlite3
+app/jurispocket.db
+
+# Arquivos de ambiente (serão configurados no Railway)
+.env
+.env.local
+.env.*.local
+
+# Uploads (serão criados no deploy)
+uploads/
+app/uploads/*
+!app/uploads/.gitkeep
+
+# Temp
+.temp/
+tmp/
+temp/
