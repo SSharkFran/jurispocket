@@ -1,9 +1,8 @@
-# Dockerfile Railway - JurisPocket Completo (Frontend + Backend)
+# Dockerfile Railway - JurisPocket
 FROM node:20-alpine AS frontend-builder
 
 WORKDIR /app/frontend
 
-# Build do frontend
 COPY app/package*.json ./
 RUN npm ci --legacy-peer-deps || npm install --legacy-peer-deps
 
@@ -13,35 +12,30 @@ RUN npm run build
 # ============================================
 FROM python:3.11-slim
 
-# Evitar prompts
 ENV DEBIAN_FRONTEND=noninteractive
 ENV PYTHONDONTWRITEBYTECODE=1
 ENV PYTHONUNBUFFERED=1
+ENV FLASK_ENV=production
 
-# Instalar dependências
 RUN apt-get update && apt-get install -y \
     gcc \
     curl \
     nginx \
     && rm -rf /var/lib/apt/lists/*
 
-# Diretório da app
 WORKDIR /app
 
-# Copiar requirements Python
 COPY app/requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
-# Copiar código backend
 COPY app/ ./
-
-# Copiar build do frontend
 COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
 
-# Configuração Nginx
+RUN mkdir -p uploads logs data
+
+# Nginx config
 RUN echo 'server { \
     listen $PORT; \
-    server_name localhost; \
     root /usr/share/nginx/html; \
     index index.html; \
     \
@@ -51,9 +45,7 @@ RUN echo 'server { \
     \
     location /api/ { \
         proxy_pass http://127.0.0.1:5000/api/; \
-        proxy_http_version 1.1; \
         proxy_set_header Host $host; \
-        proxy_set_header X-Real-IP $remote_addr; \
     } \
     \
     location /uploads/ { \
@@ -63,33 +55,17 @@ RUN echo 'server { \
     location /publico/ { \
         proxy_pass http://127.0.0.1:5000/publico/; \
     } \
-}' > /etc/nginx/sites-available/default
+}' > /etc/nginx/conf.d/default.conf
 
-# Criar diretórios
-RUN mkdir -p uploads logs data
-
-# Script de inicialização
+# Start script
 RUN echo '#!/bin/bash\n\
-echo "🚀 Iniciando JurisPocket..."\n\
-\n\
-# Substituir porta no nginx\n\
-envsubst '\$PORT' < /etc/nginx/sites-available/default > /etc/nginx/sites-enabled/default\n\
-\n\
-# Iniciar backend em background\n\
-echo "📡 Iniciando backend..."\n\
-gunicorn -w 2 -b 127.0.0.1:5000 --access-logfile - --error-logfile - --timeout 120 app:app &\n\
-\n\
-# Aguardar backend iniciar\n\
+echo "🚀 Starting JurisPocket..."\n\
+export PORT=${PORT:-8080}\n\
+sed -i "s/\$PORT/$PORT/g" /etc/nginx/conf.d/default.conf\n\
+echo "📡 Starting backend on port 5000..."\n\
+cd /app && gunicorn -w 2 -b 127.0.0.1:5000 --timeout 120 app:app &\n\
 sleep 5\n\
-\n\
-# Iniciar nginx em foreground\n\
-echo "🌐 Iniciando nginx na porta $PORT..."\n\
+echo "🌐 Starting nginx on port $PORT..."\n\
 nginx -g "daemon off;"' > /start.sh && chmod +x /start.sh
-
-# Health check
-HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
-    CMD curl -f http://localhost:$PORT/api/config/public || exit 1
-
-EXPOSE 5000
 
 CMD ["/start.sh"]
