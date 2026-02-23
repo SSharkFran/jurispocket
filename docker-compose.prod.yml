@@ -1,0 +1,90 @@
+# Docker Compose - JurisPocket Produção
+version: '3.8'
+
+services:
+  # Backend Flask
+  backend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile
+    container_name: jurispocket-backend
+    restart: unless-stopped
+    environment:
+      - FLASK_ENV=production
+      - SECRET_KEY=${SECRET_KEY:-sua-chave-secreta-aqui}
+      - DATAJUD_API_KEY=${DATAJUD_API_KEY:-}
+      - GROQ_API_KEY=${GROQ_API_KEY:-}
+      - WHATSAPP_VENDAS=${WHATSAPP_VENDAS:-5511999999999}
+      - SMTP_HOST=${SMTP_HOST:-}
+      - SMTP_USER=${SMTP_USER:-}
+      - SMTP_PASS=${SMTP_PASS:-}
+      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
+      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
+    volumes:
+      - ./data:/app/data
+      - ./uploads:/app/uploads
+      - ./logs:/app/logs
+    networks:
+      - jurispocket-network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:5000/api/config/public"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  # Frontend Nginx
+  frontend:
+    build:
+      context: ./app
+      dockerfile: Dockerfile.frontend
+    container_name: jurispocket-frontend
+    restart: unless-stopped
+    ports:
+      - "80:80"
+    depends_on:
+      - backend
+    networks:
+      - jurispocket-network
+
+  # Evolution API (WhatsApp) - Opcional
+  evolution:
+    image: atendai/evolution-api:latest
+    container_name: jurispocket-evolution
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      - SERVER_URL=${SERVER_URL:-http://localhost:8080}
+      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-sua-chave-evolution}
+      - DATABASE_ENABLED=true
+      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/evolution
+      - DATABASE_SAVE_DATA_INSTANCE=true
+      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
+    volumes:
+      - evolution_data:/evolution/instances
+    depends_on:
+      - postgres
+    networks:
+      - jurispocket-network
+
+  # PostgreSQL para Evolution
+  postgres:
+    image: postgres:15-alpine
+    container_name: jurispocket-postgres
+    restart: unless-stopped
+    environment:
+      - POSTGRES_USER=postgres
+      - POSTGRES_PASSWORD=postgres
+      - POSTGRES_DB=evolution
+    volumes:
+      - postgres_data:/var/lib/postgresql/data
+    networks:
+      - jurispocket-network
+
+volumes:
+  evolution_data:
+  postgres_data:
+
+networks:
+  jurispocket-network:
+    driver: bridge

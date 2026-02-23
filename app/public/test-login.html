@@ -1,0 +1,41 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste de Login</title>
+</head>
+<body>
+    <h1>Teste de Login - JurisPocket</h1>
+    <div id="result"></div>
+    
+    <script>
+        async function testLogin() {
+            const resultDiv = document.getElementById('result');
+            
+            try {
+                const response = await fetch('http://localhost:5000/api/auth/login', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json',
+                    },
+                    body: JSON.stringify({
+                        email: 'admin@teste.com',
+                        senha: '123456'
+                    })
+                });
+                
+                const data = await response.json();
+                
+                if (response.ok) {
+                    resultDiv.innerHTML = '<h2 style="color: green;">✓ Login funcionou!</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                } else {
+                    resultDiv.innerHTML = '<h2 style="color: red;">✗ Login falhou</h2><pre>' + JSON.stringify(data, null, 2) + '</pre>';
+                }
+            } catch (error) {
+                resultDiv.innerHTML = '<h2 style="color: red;">✗ Erro de conexão</h2><p>' + error.message + '</p>';
+            }
+        }
+        
+        testLogin();
+    </script>
+</body>
+</html>

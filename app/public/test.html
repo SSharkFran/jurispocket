@@ -1,0 +1,43 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>Teste JurisPocket</title>
+    <style>
+        body { background: #0f172a; color: white; font-family: sans-serif; padding: 40px; }
+        .ok { color: #10b981; }
+        .error { color: #ef4444; }
+        button { background: #06b6d4; color: white; border: none; padding: 10px 20px; border-radius: 6px; cursor: pointer; margin: 5px; }
+        pre { background: #1e293b; padding: 15px; border-radius: 6px; overflow-x: auto; }
+    </style>
+</head>
+<body>
+    <h1>🔧 Teste JurisPocket</h1>
+    <div id="status">Testando...</div>
+    <br>
+    <button onclick="test()">Testar Backend</button>
+    <button onclick="clearStorage()">Limpar LocalStorage</button>
+    <button onclick="goApp()">Ir para App</button>
+    <pre id="log"></pre>
+    
+    <script>
+        const API = 'http://localhost:5000/api';
+        function log(m) { document.getElementById('log').textContent += m + '\n'; }
+        
+        async function test() {
+            try {
+                const r = await fetch(API + '/health');
+                const d = await r.json();
+                document.getElementById('status').innerHTML = '<span class="ok">✅ Backend OK</span>';
+                log(JSON.stringify(d, null, 2));
+            } catch(e) {
+                document.getElementById('status').innerHTML = '<span class="error">❌ ' + e.message + '</span>';
+            }
+        }
+        
+        function clearStorage() { localStorage.clear(); alert('Limpo!'); }
+        function goApp() { location.href = '/'; }
+        
+        test();
+    </script>
+</body>
+</html>

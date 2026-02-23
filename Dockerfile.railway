@@ -1,0 +1,95 @@
+# Dockerfile Railway - JurisPocket Completo (Frontend + Backend)
+FROM node:20-alpine AS frontend-builder
+
+WORKDIR /app/frontend
+
+# Build do frontend
+COPY app/package*.json ./
+RUN npm ci
+
+COPY app/ ./
+RUN npm run build
+
+# ============================================
+FROM python:3.11-slim
+
+# Evitar prompts
+ENV DEBIAN_FRONTEND=noninteractive
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+
+# Instalar dependências
+RUN apt-get update && apt-get install -y \
+    gcc \
+    curl \
+    nginx \
+    && rm -rf /var/lib/apt/lists/*
+
+# Diretório da app
+WORKDIR /app
+
+# Copiar requirements Python
+COPY app/requirements.txt .
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copiar código backend
+COPY app/ ./
+
+# Copiar build do frontend
+COPY --from=frontend-builder /app/frontend/dist /usr/share/nginx/html
+
+# Configuração Nginx
+RUN echo 'server { \
+    listen $PORT; \
+    server_name localhost; \
+    root /usr/share/nginx/html; \
+    index index.html; \
+    \
+    location / { \
+        try_files $uri $uri/ /index.html; \
+    } \
+    \
+    location /api/ { \
+        proxy_pass http://127.0.0.1:5000/api/; \
+        proxy_http_version 1.1; \
+        proxy_set_header Host $host; \
+        proxy_set_header X-Real-IP $remote_addr; \
+    } \
+    \
+    location /uploads/ { \
+        proxy_pass http://127.0.0.1:5000/uploads/; \
+    } \
+    \
+    location /publico/ { \
+        proxy_pass http://127.0.0.1:5000/publico/; \
+    } \
+}' > /etc/nginx/sites-available/default
+
+# Criar diretórios
+RUN mkdir -p uploads logs data
+
+# Script de inicialização
+RUN echo '#!/bin/bash\n\
+echo "🚀 Iniciando JurisPocket..."\n\
+\n\
+# Substituir porta no nginx\n\
+envsubst '\$PORT' < /etc/nginx/sites-available/default > /etc/nginx/sites-enabled/default\n\
+\n\
+# Iniciar backend em background\n\
+echo "📡 Iniciando backend..."\n\
+gunicorn -w 2 -b 127.0.0.1:5000 --access-logfile - --error-logfile - --timeout 120 app:app &\n\
+\n\
+# Aguardar backend iniciar\n\
+sleep 5\n\
+\n\
+# Iniciar nginx em foreground\n\
+echo "🌐 Iniciando nginx na porta $PORT..."\n\
+nginx -g "daemon off;"' > /start.sh && chmod +x /start.sh
+
+# Health check
+HEALTHCHECK --interval=30s --timeout=10s --start-period=10s --retries=3 \
+    CMD curl -f http://localhost:$PORT/api/config/public || exit 1
+
+EXPOSE 5000
+
+CMD ["/start.sh"]

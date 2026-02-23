@@ -1,0 +1,11 @@
+# Railway Configuration for JurisPocket
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+startCommand = ""
+healthcheckPath = "/api/config/public"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 3

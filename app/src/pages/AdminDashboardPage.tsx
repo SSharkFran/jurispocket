@@ -1,0 +1,2031 @@
+import { useState, useEffect } from 'react';
+import { api } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
+import { useNavigate } from 'react-router-dom';
+import { Button } from '@/components/ui/button';
+import { Input } from '@/components/ui/input';
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
+import { Badge } from '@/components/ui/badge';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
+import { Label } from '@/components/ui/label';
+import { ScrollArea } from '@/components/ui/scroll-area';
+import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
+import { Textarea } from '@/components/ui/textarea';
+import { toast } from 'sonner';
+import { 
+  Users, 
+  Crown, 
+  Shield, 
+  Settings, 
+  FileText, 
+  TrendingUp, 
+  AlertTriangle,
+  Search,
+  LogIn,
+  Trash2,
+  Edit2,
+  Key,
+  RefreshCw,
+  DollarSign,
+  Activity,
+  ChevronLeft,
+  ChevronRight,
+  Filter,
+  Download,
+  Database,
+  Upload,
+  CheckCircle,
+  Archive,
+  CreditCard,
+  Calendar,
+  Receipt,
+  Wallet,
+  AlertCircle,
+  Check
+} from 'lucide-react';
+
+interface Estatisticas {
+  total_usuarios: number;
+  usuarios_ativos: number;
+  total_workspaces: number;
+  total_processos: number;
+  mrr: number;
+  usuarios_recentes: number;
+  distribuicao_planos: Array<{ nome: string; count: number }>;
+  logs_recentes: Array<any>;
+}
+
+interface Usuario {
+  id: number;
+  nome: string;
+  email: string;
+  role: string;
+  telefone?: string;
+  created_at: string;
+  workspace_id: number;
+  workspace_nome?: string;
+  plano_nome?: string;
+  assinatura_status?: string;
+}
+
+interface Plano {
+  id: number;
+  codigo: string;
+  nome: string;
+  descricao: string;
+  preco_mensal: number;
+  preco_anual: number;
+  ativo: boolean;
+}
+
+interface Pagamento {
+  id: number;
+  assinatura_id: number;
+  valor_pago: number;
+  data_pagamento: string;
+  mes_referencia: string;
+  metodo_pagamento: string;
+  status: string;
+  comprovante_path?: string;
+  observacoes?: string;
+  registrado_por_nome?: string;
+}
+
+interface Assinatura {
+  id: number;
+  workspace_id: number;
+  plano_id: number;
+  status: string;
+  ciclo: string;
+  valor: number;
+  data_inicio: string;
+  data_renovacao?: string;
+  workspace_nome: string;
+  plano_nome: string;
+  plano_codigo: string;
+  preco_mensal: number;
+  preco_anual: number;
+  responsavel_nome?: string;
+  responsavel_email?: string;
+  total_usuarios: number;
+  total_processos: number;
+  pagamentos: Pagamento[];
+  pago_mes_atual: boolean;
+}
+
+interface ResumoAssinaturas {
+  total_assinaturas_ativas: number;
+  total_recebido_mes: number;
+  quantidade_pagamentos_mes: number;
+  assinaturas_pendentes_mes: number;
+  mrr: number;
+  mes_referencia: string;
+}
+
+interface Configuracao {
+  chave: string;
+  valor: string;
+  descricao: string;
+  updated_at: string;
+}
+
+interface AuditLog {
+  id: number;
+  user_nome: string;
+  user_email: string;
+  acao: string;
+  entidade: string;
+  created_at: string;
+  ip_address: string;
+}
+
+export function AdminDashboardPage() {
+  const { user } = useAuth();
+  const navigate = useNavigate();
+  const [activeTab, setActiveTab] = useState('dashboard');
+  const [estatisticas, setEstatisticas] = useState<Estatisticas | null>(null);
+  const [loading, setLoading] = useState(true);
+
+  // Verificar se é super admin
+  useEffect(() => {
+    if (user && user.role !== 'superadmin') {
+      toast.error('Acesso restrito a Super Administradores');
+      navigate('/');
+    }
+  }, [user, navigate]);
+
+  useEffect(() => {
+    carregarEstatisticas();
+  }, []);
+
+  const carregarEstatisticas = async () => {
+    try {
+      const response = await api.get('/admin/estatisticas');
+      setEstatisticas(response.data);
+    } catch (error) {
+      toast.error('Erro ao carregar estatísticas');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="flex items-center justify-center h-screen bg-slate-950">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500" />
+      </div>
+    );
+  }
+
+  return (
+    <div className="min-h-screen bg-slate-950">
+      {/* Header */}
+      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
+              <Crown className="w-5 h-5 text-white" />
+            </div>
+            <div>
+              <h1 className="text-xl font-bold text-white">Super Admin</h1>
+              <p className="text-xs text-slate-400">Painel de Controle Global</p>
+            </div>
+          </div>
+          <Button variant="outline" onClick={() => navigate('/')} className="border-slate-700 text-slate-300">
+            Voltar ao Sistema
+          </Button>
+        </div>
+      </header>
+
+      <div className="flex">
+        {/* Sidebar */}
+        <aside className="w-64 bg-slate-900 border-r border-slate-800 min-h-[calc(100vh-80px)]">
+          <nav className="p-4 space-y-2">
+            <SidebarItem 
+              icon={<TrendingUp className="w-4 h-4" />} 
+              label="Dashboard" 
+              active={activeTab === 'dashboard'}
+              onClick={() => setActiveTab('dashboard')}
+            />
+            <SidebarItem 
+              icon={<Users className="w-4 h-4" />} 
+              label="Usuários" 
+              active={activeTab === 'usuarios'}
+              onClick={() => setActiveTab('usuarios')}
+            />
+            <SidebarItem 
+              icon={<DollarSign className="w-4 h-4" />} 
+              label="Planos" 
+              active={activeTab === 'planos'}
+              onClick={() => setActiveTab('planos')}
+            />
+            <SidebarItem 
+              icon={<CreditCard className="w-4 h-4" />} 
+              label="Gestão de Assinaturas" 
+              active={activeTab === 'assinaturas'}
+              onClick={() => setActiveTab('assinaturas')}
+            />
+            <SidebarItem 
+              icon={<Settings className="w-4 h-4" />} 
+              label="Configurações" 
+              active={activeTab === 'configuracoes'}
+              onClick={() => setActiveTab('configuracoes')}
+            />
+            <SidebarItem 
+              icon={<Shield className="w-4 h-4" />} 
+              label="Auditoria" 
+              active={activeTab === 'auditoria'}
+              onClick={() => setActiveTab('auditoria')}
+            />
+            <SidebarItem 
+              icon={<Database className="w-4 h-4" />} 
+              label="Backup" 
+              active={activeTab === 'backup'}
+              onClick={() => setActiveTab('backup')}
+            />
+          </nav>
+        </aside>
+
+        {/* Content */}
+        <main className="flex-1 p-6">
+          {activeTab === 'dashboard' && <DashboardTab estatisticas={estatisticas} />}
+          {activeTab === 'usuarios' && <UsuariosTab />}
+          {activeTab === 'planos' && <PlanosTab />}
+          {activeTab === 'configuracoes' && <ConfiguracoesTab />}
+          {activeTab === 'auditoria' && <AuditoriaTab />}
+          {activeTab === 'backup' && <BackupTab />}
+          {activeTab === 'assinaturas' && <AssinaturasTab />}
+        </main>
+      </div>
+    </div>
+  );
+}
+
+// ==================== BACKUP TAB ====================
+function BackupTab() {
+  const [carregando, setCarregando] = useState(false);
+  const [backupInfo, setBackupInfo] = useState<any>(null);
+  const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null);
+  const [verificacao, setVerificacao] = useState<any>(null);
+  const [showRestoreDialog, setShowRestoreDialog] = useState(false);
+  const [resultadoRestauracao, setResultadoRestauracao] = useState<any>(null);
+
+  useEffect(() => {
+    carregarInfoBackup();
+  }, []);
+
+  const carregarInfoBackup = async () => {
+    try {
+      const response = await api.get('/admin/backup/automatico');
+      setBackupInfo(response.data);
+    } catch (error) {
+      console.log('Erro ao carregar info de backup');
+    }
+  };
+
+  const handleExportarBackup = async () => {
+    setCarregando(true);
+    try {
+      const response = await api.get('/admin/backup', {
+        responseType: 'blob'
+      });
+      
+      // Criar link para download
+      const url = window.URL.createObjectURL(new Blob([response.data]));
+      const link = document.createElement('a');
+      link.href = url;
+      link.setAttribute('download', `jurispocket_backup_${new Date().toISOString().slice(0,10)}.json`);
+      document.body.appendChild(link);
+      link.click();
+      link.remove();
+      window.URL.revokeObjectURL(url);
+      
+      toast.success('Backup exportado com sucesso!');
+      carregarInfoBackup();
+    } catch (error) {
+      toast.error('Erro ao exportar backup');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  const handleVerificarArquivo = async () => {
+    if (!arquivoSelecionado) {
+      toast.error('Selecione um arquivo primeiro');
+      return;
+    }
+
+    const formData = new FormData();
+    formData.append('arquivo', arquivoSelecionado);
+
+    try {
+      const response = await api.post('/admin/backup/verificar', formData, {
+        headers: { 'Content-Type': 'multipart/form-data' }
+      });
+      setVerificacao(response.data);
+      toast.success('Arquivo verificado com sucesso!');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao verificar arquivo');
+    }
+  };
+
+  const handleRestaurar = async () => {
+    if (!arquivoSelecionado || !verificacao?.valido) return;
+
+    setCarregando(true);
+    try {
+      const conteudo = await arquivoSelecionado.text();
+      const backup = JSON.parse(conteudo);
+
+      const response = await api.post('/admin/backup/restaurar', {
+        backup,
+        opcoes: {
+          modo: 'merge', // Sempre merge para segurança
+          tabelas: [] // Todas as tabelas
+        }
+      });
+
+      setResultadoRestauracao(response.data);
+      toast.success('Backup restaurado com sucesso!');
+      setShowRestoreDialog(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao restaurar backup');
+    } finally {
+      setCarregando(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold text-white">Backup e Restauração</h2>
+
+      {/* Cards de Ação */}
+      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+        {/* Exportar Backup */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white text-lg flex items-center gap-2">
+              <Download className="w-5 h-5 text-cyan-400" />
+              Exportar Backup
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-slate-400 text-sm">
+              Exporte todos os dados do sistema em formato JSON. 
+              O arquivo inclui workspaces, usuários, processos, clientes e todas as configurações.
+            </p>
+            
+            {backupInfo?.ultimo_backup && (
+              <div className="p-3 bg-slate-800/50 rounded-lg">
+                <p className="text-slate-400 text-xs">Último backup:</p>
+                <p className="text-slate-300 text-sm">
+                  {new Date(backupInfo.ultimo_backup.created_at).toLocaleString('pt-BR')}
+                </p>
+                <p className="text-slate-500 text-xs mt-1">
+                  por {backupInfo.ultimo_backup.user_nome}
+                </p>
+              </div>
+            )}
+
+            <Button 
+              onClick={handleExportarBackup} 
+              disabled={carregando}
+              className="w-full bg-cyan-600 hover:bg-cyan-700"
+            >
+              {carregando ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Archive className="w-4 h-4 mr-2" />
+              )}
+              {carregando ? 'Gerando...' : 'Gerar Backup Agora'}
+            </Button>
+          </CardContent>
+        </Card>
+
+        {/* Restaurar Backup */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white text-lg flex items-center gap-2">
+              <Upload className="w-5 h-5 text-amber-400" />
+              Restaurar Backup
+            </CardTitle>
+          </CardHeader>
+          <CardContent className="space-y-4">
+            <p className="text-slate-400 text-sm">
+              Restaure dados de um arquivo de backup anterior. 
+              <strong className="text-amber-400"> Atenção:</strong> Esta ação não pode ser desfeita!
+            </p>
+
+            <div className="space-y-3">
+              <Input
+                type="file"
+                accept=".json"
+                onChange={(e) => {
+                  setArquivoSelecionado(e.target.files?.[0] || null);
+                  setVerificacao(null);
+                  setResultadoRestauracao(null);
+                }}
+                className="bg-slate-800 border-slate-700 file:text-slate-300"
+              />
+              
+              {arquivoSelecionado && (
+                <Button 
+                  variant="outline" 
+                  onClick={handleVerificarArquivo}
+                  className="w-full border-slate-700"
+                >
+                  <CheckCircle className="w-4 h-4 mr-2" />
+                  Verificar Arquivo
+                </Button>
+              )}
+            </div>
+
+            {verificacao?.valido && (
+              <div className="p-4 bg-green-500/10 border border-green-500/30 rounded-lg">
+                <div className="flex items-center gap-2 mb-2">
+                  <CheckCircle className="w-5 h-5 text-green-400" />
+                  <span className="text-green-400 font-medium">Arquivo válido!</span>
+                </div>
+                <p className="text-slate-400 text-sm">
+                  Exportado em: {new Date(verificacao.data_exportacao).toLocaleString('pt-BR')}
+                </p>
+                <p className="text-slate-400 text-sm">
+                  Por: {verificacao.exportado_por}
+                </p>
+                <p className="text-slate-400 text-sm">
+                  Total de registros: {verificacao.total_registros}
+                </p>
+                <Button 
+                  onClick={() => setShowRestoreDialog(true)}
+                  className="w-full mt-3 bg-amber-600 hover:bg-amber-700"
+                >
+                  <Upload className="w-4 h-4 mr-2" />
+                  Iniciar Restauração
+                </Button>
+              </div>
+            )}
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Dicas de Segurança */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white text-lg flex items-center gap-2">
+            <AlertTriangle className="w-5 h-5 text-amber-400" />
+            Boas Práticas
+          </CardTitle>
+        </CardHeader>
+        <CardContent>
+          <ul className="space-y-2 text-slate-400 text-sm">
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+              Faça backup regularmente, pelo menos uma vez por semana
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+              Armazene os backups em local seguro fora do servidor
+            </li>
+            <li className="flex items-start gap-2">
+              <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
+              Teste a restauração periodicamente para garantir que funciona
+            </li>
+            <li className="flex items-start gap-2">
+              <AlertTriangle className="w-4 h-4 text-amber-400 mt-0.5 shrink-0" />
+              Sempre faça backup antes de grandes operações ou atualizações
+            </li>
+          </ul>
+        </CardContent>
+      </Card>
+
+      {/* Resultado da Restauração */}
+      {resultadoRestauracao && (
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Resultado da Restauração</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-2">
+              {Object.entries(resultadoRestauracao.resultados).map(([tabela, resultado]: [string, any]) => (
+                <div key={tabela} className="flex items-center justify-between p-2 bg-slate-800/50 rounded">
+                  <span className="text-slate-300 capitalize">{tabela}</span>
+                  <Badge 
+                    variant="outline" 
+                    className={resultado.status === 'sucesso' ? 'border-green-500/30 text-green-400' : 'border-amber-500/30 text-amber-400'}
+                  >
+                    {resultado.importados !== undefined 
+                      ? `${resultado.importados} registros` 
+                      : resultado.mensagem}
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+      )}
+
+      {/* Dialog de Confirmação */}
+      <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-amber-400">
+              <AlertTriangle className="w-5 h-5" />
+              Confirmar Restauração
+            </DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            <p className="text-slate-300">
+              Você está prestes a restaurar <strong>{verificacao?.total_registros}</strong> registros de um backup.
+            </p>
+            <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 text-sm">
+                <strong>Atenção:</strong> Esta operação irá mesclar os dados do backup com os dados existentes. 
+                Registros conflitantes serão ignorados. Recomendamos fazer um backup atual antes de prosseguir.
+              </p>
+            </div>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowRestoreDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleRestaurar}
+              disabled={carregando}
+              className="bg-amber-600 hover:bg-amber-700"
+            >
+              {carregando ? (
+                <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Upload className="w-4 h-4 mr-2" />
+              )}
+              Confirmar Restauração
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode; label: string; active: boolean; onClick: () => void }) {
+  return (
+    <button
+      onClick={onClick}
+      className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
+        active 
+          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
+          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+      }`}
+    >
+      {icon}
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+// ==================== DASHBOARD TAB ====================
+function DashboardTab({ estatisticas }: { estatisticas: Estatisticas | null }) {
+  if (!estatisticas) return null;
+
+  const cards = [
+    { icon: Users, label: 'Total de Usuários', value: estatisticas.total_usuarios, color: 'text-cyan-400', bg: 'bg-cyan-500/20' },
+    { icon: DollarSign, label: 'Receita Mensal (MRR)', value: `R$ ${estatisticas.mrr.toFixed(2)}`, color: 'text-green-400', bg: 'bg-green-500/20' },
+    { icon: Activity, label: 'Usuários Ativos', value: estatisticas.usuarios_ativos, color: 'text-purple-400', bg: 'bg-purple-500/20' },
+    { icon: TrendingUp, label: 'Novos (30 dias)', value: estatisticas.usuarios_recentes, color: 'text-amber-400', bg: 'bg-amber-500/20' },
+  ];
+
+  return (
+    <div className="space-y-6">
+      {/* Cards de Métricas */}
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
+        {cards.map((card) => (
+          <Card key={card.label} className="bg-slate-900 border-slate-800">
+            <CardContent className="p-6">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-slate-400 text-sm">{card.label}</p>
+                  <p className={`text-2xl font-bold ${card.color} mt-1`}>{card.value}</p>
+                </div>
+                <div className={`p-3 rounded-lg ${card.bg}`}>
+                  <card.icon className={`w-6 h-6 ${card.color}`} />
+                </div>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
+        {/* Distribuição por Plano */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Distribuição por Plano</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <div className="space-y-3">
+              {estatisticas.distribuicao_planos.map((plano) => (
+                <div key={plano.nome} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                  <span className="text-slate-300">{plano.nome}</span>
+                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                    {plano.count} usuários
+                  </Badge>
+                </div>
+              ))}
+            </div>
+          </CardContent>
+        </Card>
+
+        {/* Logs Recentes */}
+        <Card className="bg-slate-900 border-slate-800">
+          <CardHeader>
+            <CardTitle className="text-white text-lg">Atividades Recentes</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <ScrollArea className="h-64">
+              <div className="space-y-2">
+                {estatisticas.logs_recentes.length === 0 ? (
+                  <p className="text-slate-500 text-center py-4">Nenhuma atividade recente</p>
+                ) : (
+                  estatisticas.logs_recentes.map((log: any) => (
+                    <div key={log.id} className="p-3 bg-slate-800/50 rounded-lg text-sm">
+                      <div className="flex items-center justify-between">
+                        <span className="text-slate-300 font-medium">{log.acao}</span>
+                        <span className="text-slate-500 text-xs">
+                          {new Date(log.created_at).toLocaleString('pt-BR')}
+                        </span>
+                      </div>
+                      <p className="text-slate-400 mt-1">
+                        {log.user_nome} • {log.entidade}
+                      </p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </ScrollArea>
+          </CardContent>
+        </Card>
+      </div>
+    </div>
+  );
+}
+
+// ==================== USUÁRIOS TAB ====================
+function UsuariosTab() {
+  const [usuarios, setUsuarios] = useState<Usuario[]>([]);
+  const [planos, setPlanos] = useState<Plano[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [page, setPage] = useState(1);
+  const [totalPages, setTotalPages] = useState(1);
+  const [usuarioSelecionado, setUsuarioSelecionado] = useState<Usuario | null>(null);
+  const [showEditDialog, setShowEditDialog] = useState(false);
+  const [showResetDialog, setShowResetDialog] = useState(false);
+  const [showDeleteDialog, setShowDeleteDialog] = useState(false);
+  const [showPlanoDialog, setShowPlanoDialog] = useState(false);
+  const [planoSelecionado, setPlanoSelecionado] = useState('');
+  const [cicloSelecionado, setCicloSelecionado] = useState('mensal');
+
+  useEffect(() => {
+    carregarUsuarios();
+    carregarPlanos();
+  }, [page, search]);
+
+  const carregarUsuarios = async () => {
+    try {
+      setLoading(true);
+      const response = await api.get('/admin/usuarios', {
+        params: { search, page, per_page: 20 }
+      });
+      setUsuarios(response.data.usuarios);
+      setTotalPages(response.data.total_pages);
+    } catch (error) {
+      toast.error('Erro ao carregar usuários');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const carregarPlanos = async () => {
+    try {
+      const response = await api.get('/admin/planos');
+      setPlanos(response.data);
+    } catch (error) {
+      console.error('Erro ao carregar planos');
+    }
+  };
+
+  const handleAlterarPlano = async () => {
+    if (!usuarioSelecionado || !planoSelecionado) return;
+    try {
+      const plano = planos.find(p => p.id === Number(planoSelecionado));
+      await api.post('/admin/assinaturas', {
+        workspace_id: usuarioSelecionado.workspace_id,
+        plano_id: Number(planoSelecionado),
+        ciclo: cicloSelecionado,
+        valor: cicloSelecionado === 'anual' ? plano?.preco_anual : plano?.preco_mensal
+      });
+      toast.success('Plano alterado com sucesso!');
+      setShowPlanoDialog(false);
+      carregarUsuarios();
+    } catch (error) {
+      toast.error('Erro ao alterar plano');
+    }
+  };
+
+  const handleImpersonate = async (userId: number) => {
+    try {
+      const response = await api.post(`/admin/impersonate/${userId}`);
+      const { token, user } = response.data;
+      
+      // Salvar token atual do admin
+      const adminToken = localStorage.getItem('token');
+      localStorage.setItem('admin_token_backup', adminToken || '');
+      
+      // Substituir pelo token do usuário
+      localStorage.setItem('token', token);
+      toast.success(`Logado como ${user.nome}`);
+      window.location.href = '/';
+    } catch (error) {
+      toast.error('Erro ao impersonar usuário');
+    }
+  };
+
+  const handleUpdateUsuario = async (data: Partial<Usuario>) => {
+    if (!usuarioSelecionado) return;
+    try {
+      await api.put(`/admin/usuarios/${usuarioSelecionado.id}`, data);
+      toast.success('Usuário atualizado com sucesso!');
+      setShowEditDialog(false);
+      carregarUsuarios();
+    } catch (error) {
+      toast.error('Erro ao atualizar usuário');
+    }
+  };
+
+  const handleResetSenha = async (senha: string) => {
+    if (!usuarioSelecionado) return;
+    try {
+      const response = await api.post(`/admin/usuarios/${usuarioSelecionado.id}/reset-senha`, { senha });
+      toast.success(`Senha resetada! Nova senha: ${response.data.senha_temporaria}`);
+      setShowResetDialog(false);
+    } catch (error) {
+      toast.error('Erro ao resetar senha');
+    }
+  };
+
+  const handleDeleteUsuario = async () => {
+    if (!usuarioSelecionado) return;
+    try {
+      await api.delete(`/admin/usuarios/${usuarioSelecionado.id}`);
+      toast.success('Usuário desativado com sucesso!');
+      setShowDeleteDialog(false);
+      carregarUsuarios();
+    } catch (error) {
+      toast.error('Erro ao desativar usuário');
+    }
+  };
+
+  const getRoleBadge = (role: string) => {
+    const styles: Record<string, string> = {
+      superadmin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
+      admin: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
+      user: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      inativo: 'bg-red-500/20 text-red-400 border-red-500/30',
+    };
+    return styles[role] || styles.user;
+  };
+
+  return (
+    <div className="space-y-4">
+      <div className="flex items-center justify-between">
+        <div className="relative w-96">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Buscar por nome ou email..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-slate-900 border-slate-700"
+          />
+        </div>
+        <Button onClick={carregarUsuarios} variant="outline" className="border-slate-700">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Atualizar
+        </Button>
+      </div>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-800 hover:bg-transparent">
+                <TableHead className="text-slate-400">Nome</TableHead>
+                <TableHead className="text-slate-400">Email</TableHead>
+                <TableHead className="text-slate-400">Plano</TableHead>
+                <TableHead className="text-slate-400">Função</TableHead>
+                <TableHead className="text-slate-400">Cadastro</TableHead>
+                <TableHead className="text-slate-400 text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : usuarios.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                    Nenhum usuário encontrado
+                  </TableCell>
+                </TableRow>
+              ) : (
+                usuarios.map((usuario) => (
+                  <TableRow key={usuario.id} className="border-slate-800">
+                    <TableCell className="text-white">{usuario.nome}</TableCell>
+                    <TableCell className="text-slate-400">{usuario.email}</TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                        {usuario.plano_nome || 'Gratuito'}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={getRoleBadge(usuario.role)}>
+                        {usuario.role}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-400">
+                      {new Date(usuario.created_at).toLocaleDateString('pt-BR')}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => handleImpersonate(usuario.id)}
+                          className="text-cyan-400 hover:text-cyan-300"
+                          title="Login como usuário"
+                        >
+                          <LogIn className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { 
+                            setUsuarioSelecionado(usuario); 
+                            setPlanoSelecionado('');
+                            setShowPlanoDialog(true); 
+                          }}
+                          className="text-emerald-400 hover:text-emerald-300"
+                          title="Alterar Plano"
+                        >
+                          <DollarSign className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setUsuarioSelecionado(usuario); setShowEditDialog(true); }}
+                          className="text-amber-400 hover:text-amber-300"
+                        >
+                          <Edit2 className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setUsuarioSelecionado(usuario); setShowResetDialog(true); }}
+                          className="text-purple-400 hover:text-purple-300"
+                        >
+                          <Key className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => { setUsuarioSelecionado(usuario); setShowDeleteDialog(true); }}
+                          className="text-red-400 hover:text-red-300"
+                          disabled={usuario.role === 'superadmin'}
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Paginação */}
+      <div className="flex items-center justify-between">
+        <p className="text-slate-400 text-sm">
+          Página {page} de {totalPages}
+        </p>
+        <div className="flex gap-2">
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.max(1, p - 1))}
+            disabled={page === 1}
+            className="border-slate-700"
+          >
+            <ChevronLeft className="w-4 h-4" />
+          </Button>
+          <Button
+            variant="outline"
+            size="sm"
+            onClick={() => setPage(p => Math.min(totalPages, p + 1))}
+            disabled={page === totalPages}
+            className="border-slate-700"
+          >
+            <ChevronRight className="w-4 h-4" />
+          </Button>
+        </div>
+      </div>
+
+      {/* Dialog de Edição */}
+      <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Editar Usuário</DialogTitle>
+          </DialogHeader>
+          {usuarioSelecionado && (
+            <div className="space-y-4">
+              <div>
+                <Label>Nome</Label>
+                <Input 
+                  defaultValue={usuarioSelecionado.nome}
+                  onChange={(e) => usuarioSelecionado.nome = e.target.value}
+                  className="bg-slate-800 border-slate-700 mt-1"
+                />
+              </div>
+              <div>
+                <Label>Email</Label>
+                <Input 
+                  defaultValue={usuarioSelecionado.email}
+                  onChange={(e) => usuarioSelecionado.email = e.target.value}
+                  className="bg-slate-800 border-slate-700 mt-1"
+                />
+              </div>
+              <div>
+                <Label>Função</Label>
+                <Select 
+                  defaultValue={usuarioSelecionado.role}
+                  onValueChange={(v) => usuarioSelecionado.role = v}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="user">Usuário</SelectItem>
+                    <SelectItem value="admin">Administrador</SelectItem>
+                    <SelectItem value="superadmin">Super Admin</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowEditDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => handleUpdateUsuario({
+                nome: usuarioSelecionado?.nome,
+                email: usuarioSelecionado?.email,
+                role: usuarioSelecionado?.role
+              })}
+              className="bg-cyan-600 hover:bg-cyan-700"
+            >
+              Salvar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Alterar Plano */}
+      <Dialog open={showPlanoDialog} onOpenChange={setShowPlanoDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <DollarSign className="w-5 h-5 text-emerald-400" />
+              Alterar Plano do Usuário
+            </DialogTitle>
+          </DialogHeader>
+          {usuarioSelecionado && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-800 rounded-lg">
+                <p className="text-slate-400 text-sm">Usuário</p>
+                <p className="text-white font-medium">{usuarioSelecionado.nome}</p>
+                <p className="text-slate-500 text-sm">{usuarioSelecionado.email}</p>
+              </div>
+              
+              <div>
+                <Label>Plano Atual</Label>
+                <div className="mt-1">
+                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                    {usuarioSelecionado.plano_nome || 'Gratuito'}
+                  </Badge>
+                </div>
+              </div>
+
+              <div>
+                <Label>Novo Plano *</Label>
+                <Select 
+                  value={planoSelecionado} 
+                  onValueChange={setPlanoSelecionado}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                    <SelectValue placeholder="Selecione um plano" />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    {planos.map((plano) => (
+                      <SelectItem key={plano.id} value={plano.id.toString()}>
+                        <div className="flex items-center justify-between w-full gap-4">
+                          <span>{plano.nome}</span>
+                          <span className="text-slate-500 text-sm">
+                            R$ {plano.preco_mensal?.toFixed(2)}/mês
+                          </span>
+                        </div>
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Ciclo de Cobrança</Label>
+                <Select 
+                  value={cicloSelecionado} 
+                  onValueChange={setCicloSelecionado}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="mensal">Mensal</SelectItem>
+                    <SelectItem value="anual">Anual</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              {planoSelecionado && (
+                <div className="p-3 bg-emerald-500/10 border border-emerald-500/30 rounded-lg">
+                  <p className="text-emerald-400 text-sm">
+                    Valor: {' '}
+                    <strong>
+                      R$ {cicloSelecionado === 'anual' 
+                        ? planos.find(p => p.id === Number(planoSelecionado))?.preco_anual?.toFixed(2)
+                        : planos.find(p => p.id === Number(planoSelecionado))?.preco_mensal?.toFixed(2)
+                      }
+                    </strong>
+                    {' '}{cicloSelecionado === 'anual' ? '/ano' : '/mês'}
+                  </p>
+                </div>
+              )}
+            </div>
+          )}
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPlanoDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleAlterarPlano}
+              disabled={!planoSelecionado}
+              className="bg-emerald-600 hover:bg-emerald-700"
+            >
+              Alterar Plano
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Reset de Senha */}
+      <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Resetar Senha</DialogTitle>
+          </DialogHeader>
+          <p className="text-slate-400">
+            Tem certeza que deseja resetar a senha de <strong className="text-white">{usuarioSelecionado?.nome}</strong>?
+          </p>
+          <div>
+            <Label>Nova Senha (opcional)</Label>
+            <Input 
+              placeholder="Deixe em branco para senha padrão"
+              id="nova-senha"
+              className="bg-slate-800 border-slate-700 mt-1"
+            />
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowResetDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={() => {
+                const senha = (document.getElementById('nova-senha') as HTMLInputElement)?.value || 'Juris@123';
+                handleResetSenha(senha);
+              }}
+              className="bg-purple-600 hover:bg-purple-700"
+            >
+              Resetar Senha
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog de Exclusão */}
+      <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+          <DialogHeader>
+            <DialogTitle>Desativar Usuário</DialogTitle>
+          </DialogHeader>
+          <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
+            <AlertTriangle className="w-6 h-6 text-red-400" />
+            <p className="text-slate-300">
+              Esta ação irá desativar o usuário <strong className="text-white">{usuarioSelecionado?.nome}</strong>. 
+              O usuário não poderá mais acessar o sistema.
+            </p>
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleDeleteUsuario}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Desativar Usuário
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
+
+// ==================== PLANOS TAB ====================
+function PlanosTab() {
+  const [planos, setPlanos] = useState<Plano[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    carregarPlanos();
+  }, []);
+
+  const carregarPlanos = async () => {
+    try {
+      const response = await api.get('/admin/planos');
+      setPlanos(response.data);
+    } catch (error) {
+      toast.error('Erro ao carregar planos');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <div className="flex justify-between">
+        <h2 className="text-xl font-semibold text-white">Planos e Preços</h2>
+        <Button className="bg-cyan-600 hover:bg-cyan-700">
+          <DollarSign className="w-4 h-4 mr-2" />
+          Novo Plano
+        </Button>
+      </div>
+
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+        {planos.map((plano) => (
+          <Card key={plano.id} className="bg-slate-900 border-slate-800">
+            <CardHeader>
+              <div className="flex items-center justify-between">
+                <CardTitle className="text-white">{plano.nome}</CardTitle>
+                {plano.ativo ? (
+                  <Badge className="bg-green-500/20 text-green-400">Ativo</Badge>
+                ) : (
+                  <Badge className="bg-red-500/20 text-red-400">Inativo</Badge>
+                )}
+              </div>
+              <p className="text-slate-400 text-sm">{plano.descricao}</p>
+            </CardHeader>
+            <CardContent className="space-y-4">
+              <div className="space-y-2">
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Mensal:</span>
+                  <span className="text-white font-medium">
+                    R$ {plano.preco_mensal.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between">
+                  <span className="text-slate-400">Anual:</span>
+                  <span className="text-white font-medium">
+                    R$ {plano.preco_anual?.toFixed(2) || '-'}
+                  </span>
+                </div>
+              </div>
+              <div className="flex gap-2 pt-4">
+                <Button variant="outline" size="sm" className="flex-1 border-slate-700">
+                  <Edit2 className="w-4 h-4 mr-1" />
+                  Editar
+                </Button>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+    </div>
+  );
+}
+
+// ==================== CONFIGURAÇÕES TAB ====================
+function ConfiguracoesTab() {
+  const [configuracoes, setConfiguracoes] = useState<Configuracao[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    carregarConfiguracoes();
+  }, []);
+
+  const carregarConfiguracoes = async () => {
+    try {
+      const response = await api.get('/admin/configuracoes');
+      setConfiguracoes(response.data);
+    } catch (error) {
+      toast.error('Erro ao carregar configurações');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleUpdateConfig = async (chave: string, valor: string) => {
+    try {
+      await api.put(`/admin/configuracoes/${chave}`, { valor });
+      toast.success('Configuração atualizada!');
+      carregarConfiguracoes();
+    } catch (error) {
+      toast.error('Erro ao atualizar configuração');
+    }
+  };
+
+  return (
+    <div className="space-y-6">
+      <h2 className="text-xl font-semibold text-white">Configurações Globais</h2>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardContent className="p-6">
+          <div className="space-y-6">
+            {configuracoes.map((config) => (
+              <div key={config.chave} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg">
+                <div>
+                  <p className="text-white font-medium">{config.chave}</p>
+                  <p className="text-slate-400 text-sm">{config.descricao}</p>
+                </div>
+                <div className="flex items-center gap-3">
+                  {config.chave === 'modo_manutencao' ? (
+                    <Select 
+                      value={config.valor} 
+                      onValueChange={(v) => handleUpdateConfig(config.chave, v)}
+                    >
+                      <SelectTrigger className="w-32 bg-slate-800 border-slate-700">
+                        <SelectValue />
+                      </SelectTrigger>
+                      <SelectContent className="bg-slate-800 border-slate-700">
+                        <SelectItem value="true">Ativado</SelectItem>
+                        <SelectItem value="false">Desativado</SelectItem>
+                      </SelectContent>
+                    </Select>
+                  ) : (
+                    <Input
+                      value={config.valor}
+                      onChange={(e) => handleUpdateConfig(config.chave, e.target.value)}
+                      className="w-48 bg-slate-800 border-slate-700"
+                    />
+                  )}
+                </div>
+              </div>
+            ))}
+          </div>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ==================== AUDITORIA TAB ====================
+function AuditoriaTab() {
+  const [logs, setLogs] = useState<AuditLog[]>([]);
+  const [loading, setLoading] = useState(true);
+
+  useEffect(() => {
+    carregarLogs();
+  }, []);
+
+  const carregarLogs = async () => {
+    try {
+      const response = await api.get('/admin/auditoria');
+      setLogs(response.data.logs);
+    } catch (error) {
+      toast.error('Erro ao carregar logs');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  return (
+    <div className="space-y-4">
+      <h2 className="text-xl font-semibold text-white">Logs de Auditoria</h2>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-800 hover:bg-transparent">
+                <TableHead className="text-slate-400">Data</TableHead>
+                <TableHead className="text-slate-400">Usuário</TableHead>
+                <TableHead className="text-slate-400">Ação</TableHead>
+                <TableHead className="text-slate-400">Entidade</TableHead>
+                <TableHead className="text-slate-400">IP</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {logs.map((log) => (
+                <TableRow key={log.id} className="border-slate-800">
+                  <TableCell className="text-slate-400 text-sm">
+                    {new Date(log.created_at).toLocaleString('pt-BR')}
+                  </TableCell>
+                  <TableCell>
+                    <div>
+                      <p className="text-white text-sm">{log.user_nome}</p>
+                      <p className="text-slate-500 text-xs">{log.user_email}</p>
+                    </div>
+                  </TableCell>
+                  <TableCell>
+                    <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                      {log.acao}
+                    </Badge>
+                  </TableCell>
+                  <TableCell className="text-slate-300">{log.entidade}</TableCell>
+                  <TableCell className="text-slate-500 text-sm">{log.ip_address}</TableCell>
+                </TableRow>
+              ))}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+    </div>
+  );
+}
+
+// ==================== ASSINATURAS TAB ====================
+function AssinaturasTab() {
+  const [assinaturas, setAssinaturas] = useState<Assinatura[]>([]);
+  const [resumo, setResumo] = useState<ResumoAssinaturas | null>(null);
+  const [loading, setLoading] = useState(true);
+  const [search, setSearch] = useState('');
+  const [statusFilter, setStatusFilter] = useState('todos');
+  const [assinaturaSelecionada, setAssinaturaSelecionada] = useState<Assinatura | null>(null);
+  const [showPagamentoDialog, setShowPagamentoDialog] = useState(false);
+  const [showHistoricoDialog, setShowHistoricoDialog] = useState(false);
+  const [comprovanteFile, setComprovanteFile] = useState<File | null>(null);
+  const [pagamentoParaDeletar, setPagamentoParaDeletar] = useState<Pagamento | null>(null);
+  const [showDeletePagamentoDialog, setShowDeletePagamentoDialog] = useState(false);
+  const [assinaturaParaExcluir, setAssinaturaParaExcluir] = useState<Assinatura | null>(null);
+  const [showDeleteAssinaturaDialog, setShowDeleteAssinaturaDialog] = useState(false);
+  
+  const [pagamentoForm, setPagamentoForm] = useState({
+    valor_pago: '',
+    mes_referencia: new Date().toISOString().slice(0, 7),
+    metodo_pagamento: 'pix',
+    status: 'confirmado',
+    observacoes: ''
+  });
+
+  useEffect(() => {
+    carregarDados();
+  }, [search, statusFilter]);
+
+  const carregarDados = async () => {
+    try {
+      setLoading(true);
+      const [assinaturasRes, resumoRes] = await Promise.all([
+        api.get('/admin/assinaturas', { params: { search, status: statusFilter === 'todos' ? '' : statusFilter } }),
+        api.get('/admin/assinaturas/resumo')
+      ]);
+      setAssinaturas(assinaturasRes.data);
+      setResumo(resumoRes.data);
+    } catch (error) {
+      toast.error('Erro ao carregar dados');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleRegistrarPagamento = async () => {
+    if (!assinaturaSelecionada) return;
+    
+    try {
+      const response = await api.post(`/admin/assinaturas/${assinaturaSelecionada.id}/pagamentos`, {
+        valor_pago: parseFloat(pagamentoForm.valor_pago),
+        mes_referencia: pagamentoForm.mes_referencia,
+        metodo_pagamento: pagamentoForm.metodo_pagamento,
+        status: pagamentoForm.status,
+        observacoes: pagamentoForm.observacoes
+      });
+      
+      // Se tem comprovante, faz upload
+      if (comprovanteFile && response.data.id) {
+        const formData = new FormData();
+        formData.append('comprovante', comprovanteFile);
+        formData.append('pagamento_id', response.data.id);
+        
+        await api.post(`/admin/assinaturas/${assinaturaSelecionada.id}/comprovante`, formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+      }
+      
+      toast.success('Pagamento registrado com sucesso!');
+      setShowPagamentoDialog(false);
+      setComprovanteFile(null);
+      setPagamentoForm({
+        valor_pago: '',
+        mes_referencia: new Date().toISOString().slice(0, 7),
+        metodo_pagamento: 'pix',
+        status: 'confirmado',
+        observacoes: ''
+      });
+      carregarDados();
+    } catch (error) {
+      toast.error('Erro ao registrar pagamento');
+    }
+  };
+
+  const handleDeletarPagamento = async () => {
+    if (!assinaturaSelecionada || !pagamentoParaDeletar) return;
+    
+    try {
+      await api.delete(`/admin/assinaturas/${assinaturaSelecionada.id}/pagamentos/${pagamentoParaDeletar.id}`);
+      toast.success('Pagamento excluído com sucesso!');
+      setShowDeletePagamentoDialog(false);
+      setPagamentoParaDeletar(null);
+      
+      // Atualiza a lista de assinaturas
+      await carregarDados();
+      
+      // Atualiza o histórico local
+      if (assinaturaSelecionada) {
+        const updatedAssinatura = { ...assinaturaSelecionada };
+        updatedAssinatura.pagamentos = updatedAssinatura.pagamentos?.filter(
+          p => p.id !== pagamentoParaDeletar.id
+        ) || [];
+        setAssinaturaSelecionada(updatedAssinatura);
+      }
+    } catch (error) {
+      toast.error('Erro ao excluir pagamento');
+    }
+  };
+
+  const handleExcluirAssinatura = async () => {
+    if (!assinaturaParaExcluir) return;
+    
+    try {
+      await api.delete(`/admin/assinaturas/${assinaturaParaExcluir.id}`);
+      toast.success('Assinatura excluída com sucesso!');
+      setShowDeleteAssinaturaDialog(false);
+      setAssinaturaParaExcluir(null);
+      carregarDados();
+    } catch (error) {
+      toast.error('Erro ao excluir assinatura');
+    }
+  };
+
+  const getStatusBadge = (status: string) => {
+    const styles: Record<string, string> = {
+      ativo: 'bg-green-500/20 text-green-400 border-green-500/30',
+      cancelado: 'bg-red-500/20 text-red-400 border-red-500/30',
+      suspenso: 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30',
+      pendente: 'bg-amber-500/20 text-amber-400 border-amber-500/30',
+    };
+    return styles[status] || styles.pendente;
+  };
+
+  const getMetodoLabel = (metodo: string) => {
+    const labels: Record<string, string> = {
+      pix: 'PIX',
+      cartao: 'Cartão',
+      boleto: 'Boleto',
+      transferencia: 'Transferência'
+    };
+    return labels[metodo] || metodo;
+  };
+
+  return (
+    <div className="space-y-6">
+      {/* Header com Resumo */}
+      <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
+                <CreditCard className="w-5 h-5 text-blue-400" />
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Assinaturas Ativas</p>
+                <p className="text-2xl font-bold text-white">{resumo?.total_assinaturas_ativas || 0}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
+                <DollarSign className="w-5 h-5 text-green-400" />
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Recebido no Mês</p>
+                <p className="text-2xl font-bold text-white">
+                  R$ {(resumo?.total_recebido_mes || 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
+                <AlertCircle className="w-5 h-5 text-amber-400" />
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">Pendentes</p>
+                <p className="text-2xl font-bold text-white">{resumo?.assinaturas_pendentes_mes || 0}</p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+        
+        <Card className="bg-slate-900 border-slate-800">
+          <CardContent className="p-4">
+            <div className="flex items-center gap-3">
+              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-purple-400" />
+              </div>
+              <div>
+                <p className="text-slate-400 text-sm">MRR</p>
+                <p className="text-2xl font-bold text-white">
+                  R$ {(resumo?.mrr || 0).toFixed(2)}
+                </p>
+              </div>
+            </div>
+          </CardContent>
+        </Card>
+      </div>
+
+      {/* Filtros */}
+      <div className="flex gap-4">
+        <div className="relative flex-1 max-w-md">
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Input
+            placeholder="Buscar por workspace ou responsável..."
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            className="pl-10 bg-slate-900 border-slate-700"
+          />
+        </div>
+        <Select value={statusFilter} onValueChange={setStatusFilter}>
+          <SelectTrigger className="w-40 bg-slate-900 border-slate-700">
+            <SelectValue placeholder="Todos status" />
+          </SelectTrigger>
+          <SelectContent className="bg-slate-900 border-slate-700">
+            <SelectItem value="todos">Todos</SelectItem>
+            <SelectItem value="ativo">Ativo</SelectItem>
+            <SelectItem value="pendente">Pendente</SelectItem>
+            <SelectItem value="suspenso">Suspenso</SelectItem>
+            <SelectItem value="cancelado">Cancelado</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button onClick={carregarDados} variant="outline" className="border-slate-700">
+          <RefreshCw className="w-4 h-4 mr-2" />
+          Atualizar
+        </Button>
+      </div>
+
+      {/* Tabela */}
+      <Card className="bg-slate-900 border-slate-800">
+        <CardContent className="p-0">
+          <Table>
+            <TableHeader>
+              <TableRow className="border-slate-800 hover:bg-transparent">
+                <TableHead className="text-slate-400">Workspace</TableHead>
+                <TableHead className="text-slate-400">Plano</TableHead>
+                <TableHead className="text-slate-400">Ciclo</TableHead>
+                <TableHead className="text-slate-400">Valor</TableHead>
+                <TableHead className="text-slate-400">Status</TableHead>
+                <TableHead className="text-slate-400">Pagamento</TableHead>
+                <TableHead className="text-slate-400 text-right">Ações</TableHead>
+              </TableRow>
+            </TableHeader>
+            <TableBody>
+              {loading ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8">
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto" />
+                  </TableCell>
+                </TableRow>
+              ) : !assinaturas || assinaturas.length === 0 ? (
+                <TableRow>
+                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                    Nenhuma assinatura encontrada
+                  </TableCell>
+                </TableRow>
+              ) : (
+                assinaturas?.map((assinatura) => (
+                  <TableRow key={assinatura.id} className="border-slate-800">
+                    <TableCell>
+                      <div>
+                        <p className="text-white font-medium">{assinatura.workspace_nome}</p>
+                        <p className="text-slate-500 text-sm">{assinatura.responsavel_email}</p>
+                      </div>
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                        {assinatura.plano_nome}
+                      </Badge>
+                    </TableCell>
+                    <TableCell className="text-slate-300 capitalize">{assinatura.ciclo}</TableCell>
+                    <TableCell className="text-slate-300">
+                      R$ {assinatura.valor?.toFixed(2)}
+                    </TableCell>
+                    <TableCell>
+                      <Badge variant="outline" className={getStatusBadge(assinatura.status)}>
+                        {assinatura.status}
+                      </Badge>
+                    </TableCell>
+                    <TableCell>
+                      {assinatura.pago_mes_atual ? (
+                        <div className="flex items-center gap-2 text-green-400">
+                          <Check className="w-4 h-4" />
+                          <span className="text-sm">Pago</span>
+                        </div>
+                      ) : (
+                        <div className="flex items-center gap-2 text-amber-400">
+                          <AlertCircle className="w-4 h-4" />
+                          <span className="text-sm">Pendente</span>
+                        </div>
+                      )}
+                    </TableCell>
+                    <TableCell className="text-right">
+                      <div className="flex items-center justify-end gap-2">
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setAssinaturaSelecionada(assinatura);
+                            setPagamentoForm(prev => ({
+                              ...prev,
+                              valor_pago: assinatura.valor?.toString() || ''
+                            }));
+                            setShowPagamentoDialog(true);
+                          }}
+                          className="text-green-400 hover:text-green-300"
+                          title="Registrar Pagamento"
+                        >
+                          <Wallet className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setAssinaturaSelecionada(assinatura);
+                            setShowHistoricoDialog(true);
+                          }}
+                          className="text-cyan-400 hover:text-cyan-300"
+                          title="Ver Histórico"
+                        >
+                          <Receipt className="w-4 h-4" />
+                        </Button>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setAssinaturaParaExcluir(assinatura);
+                            setShowDeleteAssinaturaDialog(true);
+                          }}
+                          className="text-red-400 hover:text-red-300"
+                          title="Excluir Assinatura"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </TableCell>
+                  </TableRow>
+                ))
+              )}
+            </TableBody>
+          </Table>
+        </CardContent>
+      </Card>
+
+      {/* Dialog Registrar Pagamento */}
+      <Dialog open={showPagamentoDialog} onOpenChange={setShowPagamentoDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Wallet className="w-5 h-5 text-green-400" />
+              Registrar Pagamento
+            </DialogTitle>
+          </DialogHeader>
+          
+          {assinaturaSelecionada && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-800 rounded-lg">
+                <p className="text-slate-400 text-sm">Workspace</p>
+                <p className="text-white font-medium">{assinaturaSelecionada.workspace_nome}</p>
+                <p className="text-slate-400 text-sm mt-1">Plano: {assinaturaSelecionada.plano_nome}</p>
+              </div>
+
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <Label>Valor Pago *</Label>
+                  <Input
+                    type="number"
+                    step="0.01"
+                    value={pagamentoForm.valor_pago}
+                    onChange={(e) => setPagamentoForm({ ...pagamentoForm, valor_pago: e.target.value })}
+                    placeholder="0,00"
+                    className="bg-slate-800 border-slate-700 mt-1"
+                  />
+                </div>
+                <div>
+                  <Label>Mês de Referência *</Label>
+                  <Input
+                    type="month"
+                    value={pagamentoForm.mes_referencia}
+                    onChange={(e) => setPagamentoForm({ ...pagamentoForm, mes_referencia: e.target.value })}
+                    className="bg-slate-800 border-slate-700 mt-1"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label>Método de Pagamento</Label>
+                <Select 
+                  value={pagamentoForm.metodo_pagamento}
+                  onValueChange={(v) => setPagamentoForm({ ...pagamentoForm, metodo_pagamento: v })}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="pix">PIX</SelectItem>
+                    <SelectItem value="cartao">Cartão de Crédito</SelectItem>
+                    <SelectItem value="boleto">Boleto</SelectItem>
+                    <SelectItem value="transferencia">Transferência</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Status</Label>
+                <Select 
+                  value={pagamentoForm.status}
+                  onValueChange={(v) => setPagamentoForm({ ...pagamentoForm, status: v })}
+                >
+                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectItem value="confirmado">Confirmado</SelectItem>
+                    <SelectItem value="pendente">Pendente</SelectItem>
+                  </SelectContent>
+                </Select>
+              </div>
+
+              <div>
+                <Label>Comprovante (opcional)</Label>
+                <Input
+                  type="file"
+                  accept=".pdf,.jpg,.jpeg,.png"
+                  onChange={(e) => setComprovanteFile(e.target.files?.[0] || null)}
+                  className="bg-slate-800 border-slate-700 mt-1 file:text-slate-300"
+                />
+                <p className="text-xs text-slate-500 mt-1">
+                  PDF, JPG ou PNG (máx. 5MB)
+                </p>
+              </div>
+
+              <div>
+                <Label>Observações</Label>
+                <Textarea
+                  value={pagamentoForm.observacoes}
+                  onChange={(e) => setPagamentoForm({ ...pagamentoForm, observacoes: e.target.value })}
+                  placeholder="Informações adicionais..."
+                  rows={2}
+                  className="bg-slate-800 border-slate-700 mt-1 resize-none"
+                />
+              </div>
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setShowPagamentoDialog(false)} className="border-slate-700">
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleRegistrarPagamento}
+              disabled={!pagamentoForm.valor_pago || !pagamentoForm.mes_referencia}
+              className="bg-green-600 hover:bg-green-700"
+            >
+              Registrar Pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Histórico */}
+      <Dialog open={showHistoricoDialog} onOpenChange={setShowHistoricoDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2">
+              <Receipt className="w-5 h-5 text-cyan-400" />
+              Histórico de Pagamentos
+            </DialogTitle>
+          </DialogHeader>
+          
+          {assinaturaSelecionada && (
+            <div className="space-y-4">
+              <div className="p-3 bg-slate-800 rounded-lg">
+                <p className="text-slate-400 text-sm">Workspace</p>
+                <p className="text-white font-medium">{assinaturaSelecionada.workspace_nome}</p>
+              </div>
+
+              {!assinaturaSelecionada?.pagamentos || assinaturaSelecionada.pagamentos.length === 0 ? (
+                <p className="text-slate-500 text-center py-4">Nenhum pagamento registrado</p>
+              ) : (
+                <div className="space-y-2">
+                  {assinaturaSelecionada?.pagamentos?.map((pagamento) => (
+                    <div key={pagamento.id} className="p-3 bg-slate-800 rounded-lg flex items-center justify-between">
+                      <div className="flex items-center gap-3">
+                        <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                          pagamento.status === 'confirmado' ? 'bg-green-500/20' : 'bg-amber-500/20'
+                        }`}>
+                          {pagamento.status === 'confirmado' ? (
+                            <Check className="w-5 h-5 text-green-400" />
+                          ) : (
+                            <AlertCircle className="w-5 h-5 text-amber-400" />
+                          )}
+                        </div>
+                        <div>
+                          <p className="text-white font-medium">
+                            R$ {pagamento.valor_pago?.toFixed(2)}
+                          </p>
+                          <p className="text-slate-400 text-sm">
+                            {getMetodoLabel(pagamento.metodo_pagamento)} • {pagamento.mes_referencia}
+                          </p>
+                          {pagamento.observacoes && (
+                            <p className="text-slate-500 text-xs">{pagamento.observacoes}</p>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <div className="text-right">
+                          <p className="text-slate-400 text-sm">
+                            {new Date(pagamento.data_pagamento).toLocaleDateString('pt-BR')}
+                          </p>
+                          {pagamento.registrado_por_nome && (
+                            <p className="text-slate-500 text-xs">por {pagamento.registrado_por_nome}</p>
+                          )}
+                        </div>
+                        <Button
+                          variant="ghost"
+                          size="sm"
+                          onClick={() => {
+                            setPagamentoParaDeletar(pagamento);
+                            setShowDeletePagamentoDialog(true);
+                          }}
+                          className="text-red-400 hover:text-red-300 hover:bg-red-500/10"
+                          title="Excluir pagamento"
+                        >
+                          <Trash2 className="w-4 h-4" />
+                        </Button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
+              )}
+            </div>
+          )}
+          
+          <DialogFooter>
+            <Button onClick={() => setShowHistoricoDialog(false)} className="border-slate-700">
+              Fechar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Confirmar Exclusão de Pagamento */}
+      <Dialog open={showDeletePagamentoDialog} onOpenChange={setShowDeletePagamentoDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="w-5 h-5" />
+              Confirmar Exclusão
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-slate-300">
+              Tem certeza que deseja excluir este pagamento?
+            </p>
+            
+            {pagamentoParaDeletar && (
+              <div className="p-3 bg-slate-800 rounded-lg">
+                <p className="text-white font-medium">
+                  R$ {pagamentoParaDeletar.valor_pago?.toFixed(2)}
+                </p>
+                <p className="text-slate-400 text-sm">
+                  {getMetodoLabel(pagamentoParaDeletar.metodo_pagamento)} • {pagamentoParaDeletar.mes_referencia}
+                </p>
+              </div>
+            )}
+            
+            <p className="text-slate-500 text-sm">
+              Esta ação não pode ser desfeita.
+            </p>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeletePagamentoDialog(false)} 
+              className="border-slate-700"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleDeletarPagamento}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir Pagamento
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+
+      {/* Dialog Confirmar Exclusão de Assinatura */}
+      <Dialog open={showDeleteAssinaturaDialog} onOpenChange={setShowDeleteAssinaturaDialog}>
+        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-red-400">
+              <Trash2 className="w-5 h-5" />
+              Confirmar Exclusão da Assinatura
+            </DialogTitle>
+          </DialogHeader>
+          
+          <div className="space-y-4">
+            <p className="text-slate-300">
+              Tem certeza que deseja excluir esta assinatura permanentemente?
+            </p>
+            
+            {assinaturaParaExcluir && (
+              <div className="p-3 bg-slate-800 rounded-lg space-y-1">
+                <p className="text-white font-medium">{assinaturaParaExcluir.workspace_nome}</p>
+                <p className="text-slate-400 text-sm">Plano: {assinaturaParaExcluir.plano_nome}</p>
+                <p className="text-slate-400 text-sm">Responsável: {assinaturaParaExcluir.responsavel_email}</p>
+                <p className="text-slate-400 text-sm">Valor: R$ {assinaturaParaExcluir.valor?.toFixed(2)}/{assinaturaParaExcluir.ciclo}</p>
+              </div>
+            )}
+            
+            <div className="p-3 bg-red-500/10 border border-red-500/30 rounded-lg">
+              <p className="text-red-400 text-sm font-medium">⚠️ Atenção</p>
+              <p className="text-red-300/80 text-sm mt-1">
+                Todos os pagamentos associados também serão excluídos. Esta ação não pode ser desfeita!
+              </p>
+            </div>
+          </div>
+          
+          <DialogFooter>
+            <Button 
+              variant="outline" 
+              onClick={() => setShowDeleteAssinaturaDialog(false)} 
+              className="border-slate-700"
+            >
+              Cancelar
+            </Button>
+            <Button 
+              onClick={handleExcluirAssinatura}
+              className="bg-red-600 hover:bg-red-700"
+            >
+              Excluir Assinatura
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
+    </div>
+  );
+}
