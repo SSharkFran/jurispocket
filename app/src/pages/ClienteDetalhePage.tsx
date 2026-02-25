@@ -89,7 +89,7 @@ export function ClienteDetalhePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -97,7 +97,7 @@ export function ClienteDetalhePage() {
   if (!cliente) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-400">Cliente não encontrado</p>
+        <p className="text-muted-foreground">Cliente não encontrado</p>
         <Button onClick={() => navigate('/clientes')} className="mt-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar para Clientes
@@ -115,13 +115,13 @@ export function ClienteDetalhePage() {
             variant="outline"
             size="icon"
             onClick={() => navigate('/clientes')}
-            className="border-slate-700 text-slate-400 hover:text-white hover:bg-slate-800"
+            className="border-border text-muted-foreground hover:text-white hover:bg-secondary"
           >
             <ArrowLeft className="w-4 h-4" />
           </Button>
           <div>
             <h1 className="text-3xl font-bold text-white">{cliente.nome}</h1>
-            <p className="text-slate-400 mt-1">
+            <p className="text-muted-foreground mt-1">
               {cliente.cpf_cnpj && `CPF/CNPJ: ${cliente.cpf_cnpj}`}
             </p>
           </div>
@@ -129,12 +129,12 @@ export function ClienteDetalhePage() {
         <div className="flex gap-2">
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="border-slate-700 text-slate-300 hover:text-white hover:bg-slate-800">
+              <Button variant="outline" className="border-border text-foreground hover:text-white hover:bg-secondary">
                 <Edit3 className="w-4 h-4 mr-2" />
                 Editar
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="bg-card border-border text-white max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Editar Cliente</DialogTitle>
               </DialogHeader>
@@ -146,7 +146,7 @@ export function ClienteDetalhePage() {
                       id="nome"
                       value={formData.nome || ''}
                       onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                       required
                     />
                   </div>
@@ -157,7 +157,7 @@ export function ClienteDetalhePage() {
                       type="email"
                       value={formData.email || ''}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -166,7 +166,7 @@ export function ClienteDetalhePage() {
                       id="telefone"
                       value={formData.telefone || ''}
                       onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -175,7 +175,7 @@ export function ClienteDetalhePage() {
                       id="cpf_cnpj"
                       value={formData.cpf_cnpj || ''}
                       onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -184,7 +184,7 @@ export function ClienteDetalhePage() {
                       id="rg_ie"
                       value={formData.rg_ie || ''}
                       onChange={(e) => setFormData({ ...formData, rg_ie: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -194,7 +194,7 @@ export function ClienteDetalhePage() {
                       type="date"
                       value={formData.data_nascimento?.split('T')[0] || ''}
                       onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -203,7 +203,7 @@ export function ClienteDetalhePage() {
                       id="estado_civil"
                       value={formData.estado_civil || ''}
                       onChange={(e) => setFormData({ ...formData, estado_civil: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -212,7 +212,7 @@ export function ClienteDetalhePage() {
                       id="profissao"
                       value={formData.profissao || ''}
                       onChange={(e) => setFormData({ ...formData, profissao: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -222,7 +222,7 @@ export function ClienteDetalhePage() {
                       value={formData.nacionalidade || ''}
                       onChange={(e) => setFormData({ ...formData, nacionalidade: e.target.value })}
                       placeholder="Brasileiro(a)"
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div className="md:col-span-2">
@@ -231,7 +231,7 @@ export function ClienteDetalhePage() {
                       id="endereco"
                       value={formData.endereco || ''}
                       onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -241,7 +241,7 @@ export function ClienteDetalhePage() {
                         id="numero"
                         value={formData.numero || ''}
                         onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
-                        className="bg-slate-800 border-slate-700 text-white"
+                        className="bg-secondary border-border text-white"
                       />
                     </div>
                     <div>
@@ -251,7 +251,7 @@ export function ClienteDetalhePage() {
                         value={formData.complemento || ''}
                         onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
                         placeholder="Apto, Sala, etc"
-                        className="bg-slate-800 border-slate-700 text-white"
+                        className="bg-secondary border-border text-white"
                       />
                     </div>
                   </div>
@@ -261,7 +261,7 @@ export function ClienteDetalhePage() {
                       id="bairro"
                       value={formData.bairro || ''}
                       onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div>
@@ -270,7 +270,7 @@ export function ClienteDetalhePage() {
                       id="cidade"
                       value={formData.cidade || ''}
                       onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                     />
                   </div>
                   <div className="grid grid-cols-2 gap-4">
@@ -280,7 +280,7 @@ export function ClienteDetalhePage() {
                         id="estado"
                         value={formData.estado || ''}
                         onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
-                        className="bg-slate-800 border-slate-700 text-white"
+                        className="bg-secondary border-border text-white"
                       />
                     </div>
                     <div>
@@ -289,7 +289,7 @@ export function ClienteDetalhePage() {
                         id="cep"
                         value={formData.cep || ''}
                         onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
-                        className="bg-slate-800 border-slate-700 text-white"
+                        className="bg-secondary border-border text-white"
                       />
                     </div>
                   </div>
@@ -299,13 +299,13 @@ export function ClienteDetalhePage() {
                       id="observacoes"
                       value={formData.observacoes || ''}
                       onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-white"
                       rows={3}
                     />
                   </div>
                 </div>
                 <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1 bg-cyan-500 hover:bg-cyan-600">
+                  <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90">
                     Salvar Alterações
                   </Button>
                   <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
@@ -328,16 +328,16 @@ export function ClienteDetalhePage() {
 
       {/* Content Tabs */}
       <Tabs defaultValue="info" className="space-y-6">
-        <TabsList className="bg-slate-900/50 border border-slate-800">
-          <TabsTrigger value="info" className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white">
+        <TabsList className="bg-card/50 border border-border">
+          <TabsTrigger value="info" className="data-[state=active]:bg-primary data-[state=active]:text-white">
             <User className="w-4 h-4 mr-2" />
             Informações
           </TabsTrigger>
-          <TabsTrigger value="processos" className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white">
+          <TabsTrigger value="processos" className="data-[state=active]:bg-primary data-[state=active]:text-white">
             <Briefcase className="w-4 h-4 mr-2" />
             Processos ({processosList.length})
           </TabsTrigger>
-          <TabsTrigger value="documentos" className="data-[state=active]:bg-cyan-500 data-[state=active]:text-white">
+          <TabsTrigger value="documentos" className="data-[state=active]:bg-primary data-[state=active]:text-white">
             <FolderOpen className="w-4 h-4 mr-2" />
             Documentos
           </TabsTrigger>
@@ -346,108 +346,108 @@ export function ClienteDetalhePage() {
         <TabsContent value="info" className="space-y-6">
           <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
             {/* Contact Info */}
-            <Card className="bg-slate-900/50 border-slate-800">
+            <Card className="bg-card/50 border-border">
               <CardHeader>
                 <CardTitle className="text-white text-lg flex items-center gap-2">
-                  <Phone className="w-5 h-5 text-cyan-400" />
+                  <Phone className="w-5 h-5 text-primary" />
                   Contato
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-4">
                 {cliente.email && (
                   <div className="flex items-center gap-3">
-                    <Mail className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-300">{cliente.email}</span>
+                    <Mail className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-foreground">{cliente.email}</span>
                   </div>
                 )}
                 {cliente.phone && (
                   <div className="flex items-center gap-3">
-                    <Phone className="w-4 h-4 text-slate-400" />
-                    <span className="text-slate-300">{cliente.phone}</span>
+                    <Phone className="w-4 h-4 text-muted-foreground" />
+                    <span className="text-foreground">{cliente.phone}</span>
                   </div>
                 )}
                 {!cliente.email && !cliente.phone && (
-                  <p className="text-slate-500">Nenhum contato cadastrado</p>
+                  <p className="text-muted-foreground">Nenhum contato cadastrado</p>
                 )}
               </CardContent>
             </Card>
 
             {/* Address */}
-            <Card className="bg-slate-900/50 border-slate-800">
+            <Card className="bg-card/50 border-border">
               <CardHeader>
                 <CardTitle className="text-white text-lg flex items-center gap-2">
-                  <MapPin className="w-5 h-5 text-cyan-400" />
+                  <MapPin className="w-5 h-5 text-primary" />
                   Endereço
                 </CardTitle>
               </CardHeader>
               <CardContent>
                 {cliente.endereco ? (
                   <div className="space-y-1">
-                    <p className="text-slate-300">
+                    <p className="text-foreground">
                       {cliente.endereco}
                       {cliente.numero && `, ${cliente.numero}`}
                       {cliente.complemento && ` - ${cliente.complemento}`}
                     </p>
                     {cliente.bairro && (
-                      <p className="text-slate-400">{cliente.bairro}</p>
+                      <p className="text-muted-foreground">{cliente.bairro}</p>
                     )}
-                    <p className="text-slate-400">
+                    <p className="text-muted-foreground">
                       {cliente.cidade && `${cliente.cidade}, `}
                       {cliente.estado && `${cliente.estado} `}
                       {cliente.cep && `- CEP: ${cliente.cep}`}
                     </p>
                   </div>
                 ) : (
-                  <p className="text-slate-500">Nenhum endereço cadastrado</p>
+                  <p className="text-muted-foreground">Nenhum endereço cadastrado</p>
                 )}
               </CardContent>
             </Card>
 
             {/* Personal Info */}
-            <Card className="bg-slate-900/50 border-slate-800">
+            <Card className="bg-card/50 border-border">
               <CardHeader>
                 <CardTitle className="text-white text-lg flex items-center gap-2">
-                  <FileText className="w-5 h-5 text-cyan-400" />
+                  <FileText className="w-5 h-5 text-primary" />
                   Documentos
                 </CardTitle>
               </CardHeader>
               <CardContent className="space-y-2">
                 {cliente.cpf_cnpj && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">CPF/CNPJ:</span>
-                    <span className="text-slate-300">{cliente.cpf_cnpj}</span>
+                    <span className="text-muted-foreground">CPF/CNPJ:</span>
+                    <span className="text-foreground">{cliente.cpf_cnpj}</span>
                   </div>
                 )}
                 {cliente.rg_ie && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">RG/IE:</span>
-                    <span className="text-slate-300">{cliente.rg_ie}</span>
+                    <span className="text-muted-foreground">RG/IE:</span>
+                    <span className="text-foreground">{cliente.rg_ie}</span>
                   </div>
                 )}
                 {cliente.data_nascimento && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Nascimento:</span>
-                    <span className="text-slate-300">
+                    <span className="text-muted-foreground">Nascimento:</span>
+                    <span className="text-foreground">
                       {new Date(cliente.data_nascimento).toLocaleDateString('pt-BR')}
                     </span>
                   </div>
                 )}
                 {cliente.nacionalidade && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Nacionalidade:</span>
-                    <span className="text-slate-300">{cliente.nacionalidade}</span>
+                    <span className="text-muted-foreground">Nacionalidade:</span>
+                    <span className="text-foreground">{cliente.nacionalidade}</span>
                   </div>
                 )}
                 {cliente.estado_civil && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Estado Civil:</span>
-                    <span className="text-slate-300 capitalize">{cliente.estado_civil}</span>
+                    <span className="text-muted-foreground">Estado Civil:</span>
+                    <span className="text-foreground capitalize">{cliente.estado_civil}</span>
                   </div>
                 )}
                 {cliente.profissao && (
                   <div className="flex justify-between">
-                    <span className="text-slate-400">Profissão:</span>
-                    <span className="text-slate-300">{cliente.profissao}</span>
+                    <span className="text-muted-foreground">Profissão:</span>
+                    <span className="text-foreground">{cliente.profissao}</span>
                   </div>
                 )}
               </CardContent>
@@ -455,12 +455,12 @@ export function ClienteDetalhePage() {
 
             {/* Observations */}
             {cliente.observacoes && (
-              <Card className="bg-slate-900/50 border-slate-800 md:col-span-2">
+              <Card className="bg-card/50 border-border md:col-span-2">
                 <CardHeader>
                   <CardTitle className="text-white text-lg">Observações</CardTitle>
                 </CardHeader>
                 <CardContent>
-                  <p className="text-slate-300 whitespace-pre-wrap">{cliente.observacoes}</p>
+                  <p className="text-foreground whitespace-pre-wrap">{cliente.observacoes}</p>
                 </CardContent>
               </Card>
             )}
@@ -472,7 +472,7 @@ export function ClienteDetalhePage() {
             <h2 className="text-xl font-semibold text-white">Processos do Cliente</h2>
             <Button 
               onClick={() => navigate('/processos', { state: { cliente_id: cliente.id } })}
-              className="bg-cyan-500 hover:bg-cyan-600"
+              className="bg-primary hover:bg-primary/90"
             >
               <Plus className="w-4 h-4 mr-2" />
               Novo Processo
@@ -480,13 +480,13 @@ export function ClienteDetalhePage() {
           </div>
 
           {processosList.length === 0 ? (
-            <Card className="bg-slate-900/50 border-slate-800">
+            <Card className="bg-card/50 border-border">
               <CardContent className="p-8 text-center">
-                <Briefcase className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                <p className="text-slate-400">Nenhum processo cadastrado para este cliente</p>
+                <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                <p className="text-muted-foreground">Nenhum processo cadastrado para este cliente</p>
                 <Button 
                   onClick={() => navigate('/processos', { state: { cliente_id: cliente.id } })}
-                  className="mt-4 bg-cyan-500 hover:bg-cyan-600"
+                  className="mt-4 bg-primary hover:bg-primary/90"
                 >
                   <Plus className="w-4 h-4 mr-2" />
                   Cadastrar Processo
@@ -498,28 +498,28 @@ export function ClienteDetalhePage() {
               {processosList.map((processo) => (
                 <Card 
                   key={processo.id} 
-                  className="bg-slate-900/50 border-slate-800 hover:border-slate-700 transition-colors cursor-pointer"
+                  className="bg-card/50 border-border hover:border-border transition-colors cursor-pointer"
                   onClick={() => navigate(`/processos/${processo.id}`)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">
                       <div>
                         <h3 className="font-medium text-white">{processo.titulo}</h3>
-                        <p className="text-sm text-slate-400">{processo.numero}</p>
+                        <p className="text-sm text-muted-foreground">{processo.numero}</p>
                         <div className="flex items-center gap-2 mt-2">
                           <Badge variant="outline" className={`text-xs ${
                             processo.status === 'ativo' 
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
-                              : 'bg-slate-700 text-slate-300 border-slate-600'
+                              : 'bg-secondary text-foreground border-border'
                           }`}>
                             {processo.status}
                           </Badge>
-                          <span className="text-xs text-slate-500">
+                          <span className="text-xs text-muted-foreground">
                             {processo.fase}
                           </span>
                         </div>
                       </div>
-                      <ExternalLink className="w-4 h-4 text-slate-500" />
+                      <ExternalLink className="w-4 h-4 text-muted-foreground" />
                     </div>
                   </CardContent>
                 </Card>
@@ -529,7 +529,7 @@ export function ClienteDetalhePage() {
         </TabsContent>
 
         <TabsContent value="documentos" className="space-y-6">
-          <Card className="bg-slate-900/50 border-slate-800">
+          <Card className="bg-card/50 border-border">
             <CardContent className="pt-6">
               <DocumentosList clienteId={cliente.id} titulo="Documentos do Cliente" />
             </CardContent>

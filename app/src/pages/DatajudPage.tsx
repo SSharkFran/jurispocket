@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import { Globe, Search, Zap, Activity, Clock, RefreshCw, Check, AlertCircle, Radio, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -11,10 +11,13 @@ interface ProcessoMonitorado {
   numero: string;
   numero_cnj?: string;
   tribunal: string;
+  tribunal_nome?: string;
   status: string;
-  ultimaVerificacao?: string;
+  ultimaVerificacao?: Date;
+  ultimaVerificacaoFormatada: string;
   movimentacoes: number;
   novas: number;
+  ultima_movimentacao?: string;
 }
 
 interface Movimentacao {
@@ -26,12 +29,36 @@ interface Movimentacao {
   lida: boolean;
 }
 
+// Função para extrair tribunal do número CNJ
+const extrairTribunal = (numeroCNJ: string): string => {
+  if (!numeroCNJ) return 'N/A';
+  // Formato CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO
+  // TR = Código do tribunal, OOOO = Código da unidade
+  const partes = numeroCNJ.split('.');
+  if (partes.length >= 4) {
+    const codigoTribunal = partes[3];
+    const tribunais: Record<string, string> = {
+      '01': 'STF', '02': 'STJ', '03': 'TST', '04': 'STM', '05': 'TSE', '06': 'TRF1',
+      '07': 'TRF2', '08': 'TRF3', '09': 'TRF4', '10': 'TRF5', '11': 'TRF6',
+      '12': 'TJAC', '13': 'TJAL', '14': 'TJAP', '15': 'TJAM', '16': 'TJBA',
+      '17': 'TJCE', '18': 'TJDF', '19': 'TJES', '20': 'TJGO', '21': 'TJMA',
+      '22': 'TJMT', '23': 'TJMS', '24': 'TJMG', '25': 'TJPA', '26': 'TJPB',
+      '27': 'TJPR', '28': 'TJPE', '29': 'TJPI', '30': 'TJRJ', '31': 'TJRJ',
+      '32': 'TJRN', '33': 'TJRS', '34': 'TJRO', '35': 'TJRR', '36': 'TJSC',
+      '37': 'TJSE', '38': 'TJSP', '39': 'TJTO'
+    };
+    return tribunais[codigoTribunal] || `TJ${codigoTribunal}`;
+  }
+  return 'N/A';
+};
+
 const DatajudPage = () => {
   const [consultaNumero, setConsultaNumero] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConsultando, setIsConsultando] = useState(false);
   const [processosMonitorados, setProcessosMonitorados] = useState<ProcessoMonitorado[]>([]);
   const [movimentacoesRecentes, setMovimentacoesRecentes] = useState<Movimentacao[]>([]);
+  const [ultimaConsultaGlobal, setUltimaConsultaGlobal] = useState<Date | null>(null);
   const [stats, setStats] = useState({
     monitorados: 0,
     movimentacoesHoje: 0,
@@ -39,48 +66,127 @@ const DatajudPage = () => {
     proximaVerificacao: '--:--',
   });
 
+  // Calcular próxima verificação (a cada 30 minutos, alinhado ao cron)
+  const calcularProximaVerificacao = useCallback(() => {
+    const agora = new Date();
+    const minutos = agora.getMinutes();
+    const proximos30 = Math.ceil(minutos / 30) * 30;
+    const proximaHora = new Date(agora);
+    proximaHora.setMinutes(proximos30);
+    proximaHora.setSeconds(0);
+    proximaHora.setMilliseconds(0);
+    
+    // Se já passou dos 30 ou 60 minutos, vai para a próxima hora
+    if (proximos30 >= 60) {
+      proximaHora.setHours(proximaHora.getHours() + 1);
+      proximaHora.setMinutes(0);
+    }
+    
+    return proximaHora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+  }, []);
+
   // Carregar processos do backend
-  const carregarProcessos = async () => {
+  const carregarProcessos = useCallback(async (showLoading = true) => {
     try {
-      setIsLoading(true);
+      if (showLoading) setIsLoading(true);
       const response = await processos.list({ status: 'ativo' });
       const processosData = response.data.processos || response.data || [];
       
-      const monitorados: ProcessoMonitorado[] = processosData.map((p: any) => ({
-        id: p.id,
-        numero: p.numero_cnj || p.numero,
-        tribunal: p.tribunal || 'TJSP',
-        status: p.status || 'ativo',
-        ultimaVerificacao: p.ultima_consulta_datajud 
-          ? new Date(p.ultima_consulta_datajud).toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
-          : 'Nunca',
-        movimentacoes: p.movimentacoes?.length || 0,
-        novas: p.movimentacoes_novas || 0,
-      }));
+      // Encontrar a última consulta global
+      let ultimaConsulta: Date | null = null;
+      
+      const monitorados: ProcessoMonitorado[] = processosData.map((p: any) => {
+        const numeroCNJ = p.numero_cnj || p.numero;
+        const tribunal = extrairTribunal(numeroCNJ);
+        
+        // Verificar última consulta datajud
+        const dataConsulta = p.ultima_consulta_datajud 
+          ? new Date(p.ultima_consulta_datajud)
+          : null;
+          
+        if (dataConsulta && (!ultimaConsulta || dataConsulta > ultimaConsulta)) {
+          ultimaConsulta = dataConsulta;
+        }
+        
+        // Formatar última movimentação
+        let ultimaMov = 'Nunca';
+        if (p.ultima_movimentacao_datajud?.data_movimento) {
+          const data = new Date(p.ultima_movimentacao_datajud.data_movimento);
+          ultimaMov = data.toLocaleDateString('pt-BR');
+        } else if (p.ultima_movimentacao) {
+          ultimaMov = new Date(p.ultima_movimentacao).toLocaleDateString('pt-BR');
+        }
+        
+        return {
+          id: p.id,
+          numero: numeroCNJ,
+          tribunal: tribunal,
+          tribunal_nome: p.tribunal_nome || tribunal,
+          status: p.status || 'ativo',
+          ultimaVerificacao: dataConsulta,
+          ultimaVerificacaoFormatada: dataConsulta 
+            ? dataConsulta.toLocaleString('pt-BR', { day: '2-digit', month: '2-digit', year: 'numeric', hour: '2-digit', minute: '2-digit' })
+            : 'Nunca',
+          movimentacoes: p.movimentacoes_datajud?.length || p.movimentacoes?.length || 0,
+          novas: p.movimentacoes_novas_count || p.movimentacoes_novas || 0,
+          ultima_movimentacao: ultimaMov,
+        };
+      });
 
       setProcessosMonitorados(monitorados);
-      setStats(prev => ({
-        ...prev,
+      setUltimaConsultaGlobal(ultimaConsulta);
+      
+      // Atualizar stats
+      setStats({
         monitorados: monitorados.length,
-        ultimaVerificacao: monitorados.length > 0 ? monitorados[0].ultimaVerificacao?.split(' ')[1] || '--:--' : '--:--',
-      }));
+        movimentacoesHoje: monitorados.reduce((acc, p) => acc + p.novas, 0),
+        ultimaVerificacao: ultimaConsulta 
+          ? ultimaConsulta.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' })
+          : '--:--',
+        proximaVerificacao: calcularProximaVerificacao(),
+      });
+
+      // Carregar movimentações recentes
+      const movsRecentes: Movimentacao[] = [];
+      processosData.forEach((p: any) => {
+        if (p.movimentacoes_datajud?.length > 0) {
+          p.movimentacoes_datajud.slice(0, 3).forEach((m: any) => {
+            movsRecentes.push({
+              id: m.id,
+              processo: p.numero_cnj || p.numero,
+              movimento: m.nome_movimento,
+              data: new Date(m.data_movimento).toLocaleString('pt-BR'),
+              tribunal: extrairTribunal(p.numero_cnj || p.numero),
+              lida: m.lida || false,
+            });
+          });
+        }
+      });
+      
+      // Ordenar por data mais recente
+      movsRecentes.sort((a, b) => new Date(b.data).getTime() - new Date(a.data).getTime());
+      setMovimentacoesRecentes(movsRecentes.slice(0, 10));
+      
     } catch (error) {
       toast.error('Erro ao carregar processos');
     } finally {
-      setIsLoading(false);
+      if (showLoading) setIsLoading(false);
     }
-  };
+  }, [calcularProximaVerificacao]);
 
   useEffect(() => {
     carregarProcessos();
-    // Calcular próxima verificação (30 minutos após agora)
-    const agora = new Date();
-    agora.setMinutes(agora.getMinutes() + 30);
-    setStats(prev => ({
-      ...prev,
-      proximaVerificacao: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
-    }));
-  }, []);
+    
+    // Atualizar próxima verificação a cada minuto
+    const interval = setInterval(() => {
+      setStats(prev => ({
+        ...prev,
+        proximaVerificacao: calcularProximaVerificacao(),
+      }));
+    }, 60000);
+    
+    return () => clearInterval(interval);
+  }, [carregarProcessos, calcularProximaVerificacao]);
 
   const handleConsulta = async () => {
     if (!consultaNumero.trim()) {
@@ -102,7 +208,7 @@ const DatajudPage = () => {
     try {
       await processos.consultarDatajud(processo.id);
       toast.success('Consulta Datajud realizada com sucesso!');
-      carregarProcessos(); // Recarrega para mostrar novas movimentações
+      await carregarProcessos(false); // Recarrega sem mostrar loading
     } catch (error: any) {
       toast.error(error.response?.data?.message || 'Erro ao consultar Datajud');
     } finally {
@@ -118,8 +224,20 @@ const DatajudPage = () => {
         processos.consultarDatajud(p.id).catch(() => null)
       );
       await Promise.all(promises);
+      
+      // Atualiza a última consulta global
+      const agora = new Date();
+      setUltimaConsultaGlobal(agora);
+      
       toast.success('Consulta em lote realizada!');
-      carregarProcessos();
+      await carregarProcessos(false);
+      
+      // Atualizar stats com o horário atual
+      setStats(prev => ({
+        ...prev,
+        ultimaVerificacao: agora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' }),
+        proximaVerificacao: calcularProximaVerificacao(),
+      }));
     } catch (error) {
       toast.error('Erro na consulta em lote');
     } finally {
@@ -168,14 +286,14 @@ const DatajudPage = () => {
       </motion.div>
 
       {/* Status cards */}
-      <div className="grid gap-4 sm:grid-cols-4">
+      <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
         {[
           { label: 'Processos Monitorados', value: stats.monitorados.toString(), icon: Activity, color: 'text-primary' },
           { label: 'Movimentações Hoje', value: stats.movimentacoesHoje.toString(), icon: Zap, color: 'text-accent' },
           { label: 'Última Verificação', value: stats.ultimaVerificacao, icon: Clock, color: 'text-muted-foreground' },
           { label: 'Próxima Verificação', value: stats.proximaVerificacao, icon: RefreshCw, color: 'text-success' },
         ].map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }}
+          <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }
             transition={{ delay: i * 0.05 }} className="stat-card"
           >
             <s.icon className={`h-5 w-5 mb-2 ${s.color}`} />
@@ -212,12 +330,14 @@ const DatajudPage = () => {
               </p>
             ) : (
               processosMonitorados.map((m, i) => (
-                <motion.div key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
+                <motion.div key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }
                   className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                 >
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-mono truncate">{m.numero}</div>
-                    <div className="text-xs text-muted-foreground">{m.tribunal} · Última: {m.ultimaVerificacao}</div>
+                    <div className="text-xs text-muted-foreground">
+                      {m.tribunal} · Última mov.: {m.ultima_movimentacao}
+                    </div>
                   </div>
                   <div className="flex items-center gap-3 ml-2">
                     {m.novas > 0 && (
@@ -243,11 +363,11 @@ const DatajudPage = () => {
               </p>
             ) : (
               movimentacoesRecentes.map((m, i) => (
-                <motion.div key={i} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
+                <motion.div key={`${m.processo}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }
                   className={`p-3 rounded-lg transition-colors ${!m.lida ? 'bg-primary/5 border border-primary/10' : 'bg-secondary/30 hover:bg-secondary/50'}`}
                 >
                   <div className="flex items-start justify-between">
-                    <div className="min-w-0">
+                    <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium flex items-center gap-2">
                         {!m.lida && <span className="h-2 w-2 rounded-full bg-primary animate-pulse shrink-0" />}
                         <span className="truncate">{m.movimento}</span>

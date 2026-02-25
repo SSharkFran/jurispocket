@@ -363,7 +363,7 @@ export function ProcessoDetalhePage() {
               <p className="font-semibold">{data.erro || 'Erro na consulta'}</p>
               <p className="text-sm">{data.mensagem}</p>
               {data.detalhes && (
-                <div className="text-xs bg-slate-800 p-2 rounded mt-2">
+                <div className="text-xs bg-secondary p-2 rounded mt-2">
                   <p>Número: {data.detalhes.numero_informado}</p>
                   <p>Tamanho: {data.detalhes.tamanho} dígitos (esperado: 20)</p>
                 </div>
@@ -568,7 +568,7 @@ export function ProcessoDetalhePage() {
       case 'ativo':
         return 'bg-green-500/20 text-green-400 border-green-500/30';
       case 'arquivado':
-        return 'bg-slate-500/20 text-slate-400 border-slate-500/30';
+        return 'bg-muted/20 text-muted-foreground border-muted/30';
       case 'suspenso':
         return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
       default:
@@ -602,7 +602,7 @@ export function ProcessoDetalhePage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -610,7 +610,7 @@ export function ProcessoDetalhePage() {
   if (!processo) {
     return (
       <div className="text-center py-12">
-        <p className="text-slate-400">Processo não encontrado</p>
+        <p className="text-muted-foreground">Processo não encontrado</p>
         <Link to="/processos">
           <Button variant="outline" className="mt-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
@@ -626,7 +626,7 @@ export function ProcessoDetalhePage() {
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex items-center gap-4">
           <Link to="/processos">
-            <Button variant="outline" size="icon" className="border-white/10 text-slate-400 hover:text-white">
+            <Button variant="outline" size="icon" className="border-white/10 text-muted-foreground hover:text-white">
               <ArrowLeft className="w-4 h-4" />
             </Button>
           </Link>
@@ -636,7 +636,7 @@ export function ProcessoDetalhePage() {
                 <Input
                   value={editFormData.titulo}
                   onChange={(e) => setEditFormData({...editFormData, titulo: e.target.value})}
-                  className="bg-slate-800 border-white/10 text-white text-lg font-semibold"
+                  className="bg-secondary border-white/10 text-white text-lg font-semibold"
                   placeholder="Título do processo"
                 />
                 <div className="flex gap-2 flex-wrap">
@@ -644,10 +644,10 @@ export function ProcessoDetalhePage() {
                     value={editFormData.status} 
                     onValueChange={(v) => setEditFormData({...editFormData, status: v})}
                   >
-                    <SelectTrigger className="w-[140px] bg-slate-800 border-white/10 text-white">
+                    <SelectTrigger className="w-[140px] bg-secondary border-white/10 text-white">
                       <SelectValue placeholder="Status" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-white/10">
+                    <SelectContent className="bg-secondary border-white/10">
                       <SelectItem value="ativo">Ativo</SelectItem>
                       <SelectItem value="arquivado">Arquivado</SelectItem>
                       <SelectItem value="suspenso">Suspenso</SelectItem>
@@ -657,7 +657,7 @@ export function ProcessoDetalhePage() {
                   <Input
                     value={editFormData.fase}
                     onChange={(e) => setEditFormData({...editFormData, fase: e.target.value})}
-                    className="w-[180px] bg-slate-800 border-white/10 text-white"
+                    className="w-[180px] bg-secondary border-white/10 text-white"
                     placeholder="Fase processual"
                   />
                 </div>
@@ -674,7 +674,7 @@ export function ProcessoDetalhePage() {
                     </Badge>
                   )}
                 </div>
-                <p className="text-slate-400">{processo.numero}</p>
+                <p className="text-muted-foreground">{processo.numero}</p>
               </>
             )}
           </div>
@@ -702,7 +702,7 @@ export function ProcessoDetalhePage() {
                   variant="outline"
                   onClick={abrirConsultaPublicaPJe}
                   disabled={isConsultingPJe}
-                  className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                  className="border-primary/30 text-primary hover:bg-primary/10"
                 >
                   {isConsultingPJe ? (
                     <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -813,7 +813,7 @@ export function ProcessoDetalhePage() {
       </div>
 
       {/* Informações do Processo */}
-      <Card className="bg-slate-900/50 border-white/10">
+      <Card className="bg-card/50 border-white/10">
         <CardHeader>
           <CardTitle className="text-white">Informações do Processo</CardTitle>
         </CardHeader>
@@ -821,32 +821,32 @@ export function ProcessoDetalhePage() {
           {editMode ? (
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div className="md:col-span-2">
-                <label className="text-sm text-slate-400 block mb-1">Descrição</label>
+                <label className="text-sm text-muted-foreground block mb-1">Descrição</label>
                 <textarea
                   value={editFormData.descricao}
                   onChange={(e) => setEditFormData({...editFormData, descricao: e.target.value})}
-                  className="w-full bg-slate-800 border border-white/10 rounded-md p-3 text-white resize-none"
+                  className="w-full bg-secondary border border-white/10 rounded-md p-3 text-white resize-none"
                   rows={3}
                   placeholder="Descrição do processo"
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-400 block mb-1">Tipo</label>
+                <label className="text-sm text-muted-foreground block mb-1">Tipo</label>
                 <Input
                   value={editFormData.tipo}
                   onChange={(e) => setEditFormData({...editFormData, tipo: e.target.value})}
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-white/10 text-white"
                   placeholder="Ex: Cível, Trabalhista, etc"
                 />
               </div>
               <div>
-                <label className="text-sm text-slate-400 block mb-1">Valor da Causa</label>
+                <label className="text-sm text-muted-foreground block mb-1">Valor da Causa</label>
                 <Input
                   type="number"
                   step="0.01"
                   value={editFormData.valor_causa}
                   onChange={(e) => setEditFormData({...editFormData, valor_causa: e.target.value})}
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-white/10 text-white"
                   placeholder="0,00"
                 />
               </div>
@@ -855,19 +855,19 @@ export function ProcessoDetalhePage() {
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               {processo.descricao && (
                 <div className="md:col-span-2">
-                  <p className="text-sm text-slate-400">Descrição</p>
+                  <p className="text-sm text-muted-foreground">Descrição</p>
                   <p className="text-white">{processo.descricao}</p>
                 </div>
               )}
               {processo.tipo && (
                 <div>
-                  <p className="text-sm text-slate-400">Tipo</p>
+                  <p className="text-sm text-muted-foreground">Tipo</p>
                   <p className="text-white font-medium">{processo.tipo}</p>
                 </div>
               )}
               {processo.valor_causa && (
                 <div>
-                  <p className="text-sm text-slate-400">Valor da Causa</p>
+                  <p className="text-sm text-muted-foreground">Valor da Causa</p>
                   <p className="text-white font-medium">
                     {new Intl.NumberFormat('pt-BR', { style: 'currency', currency: 'BRL' }).format(processo.valor_causa)}
                   </p>
@@ -875,7 +875,7 @@ export function ProcessoDetalhePage() {
               )}
               {processo.fase && (
                 <div>
-                  <p className="text-sm text-slate-400">Fase Processual</p>
+                  <p className="text-sm text-muted-foreground">Fase Processual</p>
                   <p className="text-white font-medium">{processo.fase}</p>
                 </div>
               )}
@@ -885,10 +885,10 @@ export function ProcessoDetalhePage() {
       </Card>
 
       {processo.numero_cnj && (
-        <Card className="bg-gradient-to-r from-cyan-500/10 to-blue-500/10 border-cyan-500/30">
+        <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30">
           <CardHeader className="flex flex-row items-center justify-between">
             <CardTitle className="text-white flex items-center gap-2">
-              <Gavel className="w-5 h-5 text-cyan-400" />
+              <Gavel className="w-5 h-5 text-primary" />
               Monitoramento PJe
               {processo.movimentacoes_novas_count ? (
                 <Badge className="bg-red-500 text-white ml-2">
@@ -901,7 +901,7 @@ export function ProcessoDetalhePage() {
                 variant="ghost" 
                 size="sm" 
                 onClick={marcarMovimentacoesLidas}
-                className="text-slate-400 hover:text-white"
+                className="text-muted-foreground hover:text-white"
               >
                 <Check className="w-4 h-4 mr-1" />
                 Marcar como lidas
@@ -911,11 +911,11 @@ export function ProcessoDetalhePage() {
           <CardContent>
             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
               <div>
-                <p className="text-sm text-slate-400">Tribunal</p>
+                <p className="text-sm text-muted-foreground">Tribunal</p>
                 <p className="text-white font-medium">
                   {processo.tribunal_codigo ? (
                     <span className="flex items-center gap-2 flex-wrap">
-                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                      <Badge variant="outline" className="border-primary/30 text-primary">
                         {processo.tribunal_codigo}
                       </Badge>
                       {processo.tribunal_uf && (
@@ -923,7 +923,7 @@ export function ProcessoDetalhePage() {
                           {processo.tribunal_uf}
                         </Badge>
                       )}
-                      <span className="text-sm text-slate-300">{processo.tribunal_nome}</span>
+                      <span className="text-sm text-foreground">{processo.tribunal_nome}</span>
                     </span>
                   ) : (
                     'Não identificado'
@@ -931,7 +931,7 @@ export function ProcessoDetalhePage() {
                 </p>
               </div>
               <div>
-                <p className="text-sm text-slate-400">Status Monitoramento</p>
+                <p className="text-sm text-muted-foreground">Status Monitoramento</p>
                 <p className="text-white font-medium">
                   {processo.monitoramento?.monitorar_datajud ? (
                     <span className="flex items-center gap-1 text-green-400">
@@ -939,7 +939,7 @@ export function ProcessoDetalhePage() {
                       Ativo (Datajud)
                     </span>
                   ) : (
-                    <span className="text-slate-400">Inativo</span>
+                    <span className="text-muted-foreground">Inativo</span>
                   )}
                 </p>
               </div>
@@ -950,7 +950,7 @@ export function ProcessoDetalhePage() {
               <div className={`mt-4 rounded-lg p-4 border ${
                 processo.ultima_movimentacao_nova 
                   ? 'bg-gradient-to-r from-amber-500/20 to-orange-500/20 border-amber-500/50 shadow-lg shadow-amber-500/10' 
-                  : 'bg-slate-800/50 border-slate-700'
+                  : 'bg-secondary/50 border-border'
               }`}>
                 <div className="flex items-start justify-between">
                   <div className="flex-1">
@@ -972,7 +972,7 @@ export function ProcessoDetalhePage() {
                           Última Movimentação
                         </span>
                       )}
-                      <span className="text-slate-500 text-xs">
+                      <span className="text-muted-foreground text-xs">
                         {new Date(processo.ultima_movimentacao_datajud.data_movimento).toLocaleDateString('pt-BR')}
                       </span>
                     </div>
@@ -980,7 +980,7 @@ export function ProcessoDetalhePage() {
                       {processo.ultima_movimentacao_datajud.nome_movimento}
                     </p>
                     {processo.ultima_movimentacao_datajud.complementos && (
-                      <p className="text-slate-400 text-sm mt-1">
+                      <p className="text-muted-foreground text-sm mt-1">
                         {(() => {
                           try {
                             const comps = JSON.parse(processo.ultima_movimentacao_datajud.complementos);
@@ -1017,8 +1017,8 @@ export function ProcessoDetalhePage() {
                 <p className="text-white">{processo.ultima_movimentacao}</p>
               </div>
             ) : (
-              <div className="mt-4 bg-slate-800/50 border border-slate-700 rounded-lg p-3">
-                <p className="text-slate-400 text-sm">
+              <div className="mt-4 bg-secondary/50 border border-border rounded-lg p-3">
+                <p className="text-muted-foreground text-sm">
                   Nenhuma movimentação registrada. Clique em "Consultar Datajud" para buscar atualizações.
                 </p>
               </div>
@@ -1028,17 +1028,17 @@ export function ProcessoDetalhePage() {
       )}
 
       <Tabs defaultValue="prazos">
-        <TabsList className="bg-slate-800 border-white/10">
-          <TabsTrigger value="prazos" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
+        <TabsList className="bg-secondary border-white/10">
+          <TabsTrigger value="prazos" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Prazos ({processo.prazos?.length || 0})
           </TabsTrigger>
-          <TabsTrigger value="tarefas" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
+          <TabsTrigger value="tarefas" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Tarefas ({processo.tarefas?.length || 0})
           </TabsTrigger>
-          <TabsTrigger value="financeiro" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
+          <TabsTrigger value="financeiro" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Financeiro
           </TabsTrigger>
-          <TabsTrigger value="documentos" className="data-[state=active]:bg-cyan-500/20 data-[state=active]:text-cyan-400">
+          <TabsTrigger value="documentos" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <FileText className="w-4 h-4 mr-2" />
             Documentos
           </TabsTrigger>
@@ -1052,10 +1052,10 @@ export function ProcessoDetalhePage() {
         </TabsList>
 
         <TabsContent value="prazos" className="mt-4">
-          <Card className="bg-slate-900/50 border-white/10">
+          <Card className="bg-card/50 border-white/10">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-white">Prazos</CardTitle>
-              <Button size="sm" onClick={() => setPrazoDialogOpen(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white">
+              <Button size="sm" onClick={() => setPrazoDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Prazo
               </Button>
@@ -1064,15 +1064,15 @@ export function ProcessoDetalhePage() {
               <ScrollArea className="h-64">
                 <div className="space-y-3">
                   {processo.prazos?.length === 0 && (
-                    <p className="text-slate-500 text-center py-4">Nenhum prazo cadastrado</p>
+                    <p className="text-muted-foreground text-center py-4">Nenhum prazo cadastrado</p>
                   )}
                   {processo.prazos?.map((prazo) => (
-                    <div key={prazo.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div key={prazo.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                       <div>
                         <p className="text-white font-medium">{prazo.descricao}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge className={getPrioridadeColor(prazo.prioridade)}>{prazo.prioridade}</Badge>
-                          <span className="text-sm text-slate-400">
+                          <span className="text-sm text-muted-foreground">
                             {new Date(prazo.data_final).toLocaleDateString('pt-BR')}
                           </span>
                         </div>
@@ -1100,10 +1100,10 @@ export function ProcessoDetalhePage() {
         </TabsContent>
 
         <TabsContent value="tarefas" className="mt-4">
-          <Card className="bg-slate-900/50 border-white/10">
+          <Card className="bg-card/50 border-white/10">
             <CardHeader className="flex flex-row items-center justify-between">
               <CardTitle className="text-white">Tarefas</CardTitle>
-              <Button size="sm" onClick={() => setTarefaDialogOpen(true)} className="bg-cyan-500 hover:bg-cyan-600 text-white">
+              <Button size="sm" onClick={() => setTarefaDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Tarefa
               </Button>
@@ -1112,10 +1112,10 @@ export function ProcessoDetalhePage() {
               <ScrollArea className="h-64">
                 <div className="space-y-3">
                   {processo.tarefas?.length === 0 && (
-                    <p className="text-slate-500 text-center py-4">Nenhuma tarefa</p>
+                    <p className="text-muted-foreground text-center py-4">Nenhuma tarefa</p>
                   )}
                   {processo.tarefas?.map((tarefa) => (
-                    <div key={tarefa.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div key={tarefa.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                       <div>
                         <p className="text-white font-medium">{tarefa.titulo}</p>
                         <Badge className={getPrioridadeColor(tarefa.prioridade)}>{tarefa.prioridade}</Badge>
@@ -1132,7 +1132,7 @@ export function ProcessoDetalhePage() {
         </TabsContent>
 
         <TabsContent value="financeiro" className="mt-4">
-          <Card className="bg-slate-900/50 border-white/10">
+          <Card className="bg-card/50 border-white/10">
             <CardHeader>
               <CardTitle className="text-white">Transações Financeiras</CardTitle>
             </CardHeader>
@@ -1140,13 +1140,13 @@ export function ProcessoDetalhePage() {
               <ScrollArea className="h-64">
                 <div className="space-y-3">
                   {processo.transacoes?.length === 0 && (
-                    <p className="text-slate-500 text-center py-4">Nenhuma transação</p>
+                    <p className="text-muted-foreground text-center py-4">Nenhuma transação</p>
                   )}
                   {processo.transacoes?.map((trans) => (
-                    <div key={trans.id} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
+                    <div key={trans.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
                       <div>
                         <p className="text-white">{trans.descricao}</p>
-                        <p className="text-sm text-slate-400">{new Date(trans.data_transacao).toLocaleDateString('pt-BR')}</p>
+                        <p className="text-sm text-muted-foreground">{new Date(trans.data_transacao).toLocaleDateString('pt-BR')}</p>
                       </div>
                       <span className={`font-semibold ${trans.tipo === 'entrada' ? 'text-green-400' : 'text-red-400'}`}>
                         {trans.tipo === 'entrada' ? '+' : '-'}{formatCurrency(trans.valor)}
@@ -1160,7 +1160,7 @@ export function ProcessoDetalhePage() {
         </TabsContent>
 
         <TabsContent value="documentos" className="mt-4">
-          <Card className="bg-slate-900/50 border-white/10">
+          <Card className="bg-card/50 border-white/10">
             <CardContent className="pt-6">
               <DocumentosList processoId={Number(id)} titulo="Documentos do Processo" />
             </CardContent>
@@ -1168,14 +1168,14 @@ export function ProcessoDetalhePage() {
         </TabsContent>
 
         <TabsContent value="datajud" className="mt-4">
-          <Card className="bg-slate-900/50 border-white/10">
+          <Card className="bg-card/50 border-white/10">
             <CardHeader className="flex flex-row items-center justify-between">
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
                   <RefreshCw className="w-5 h-5 text-blue-400" />
                   Movimentações Datajud (CNJ)
                 </CardTitle>
-                <p className="text-slate-400 text-sm mt-1">
+                <p className="text-muted-foreground text-sm mt-1">
                   Consulta automática via API pública do CNJ
                 </p>
               </div>
@@ -1185,7 +1185,7 @@ export function ProcessoDetalhePage() {
                     Monitorando
                   </Badge>
                 ) : (
-                  <Badge className="bg-slate-500/20 text-slate-400 border-slate-500/30">
+                  <Badge className="bg-muted/20 text-muted-foreground border-muted/30">
                     Não monitorado
                   </Badge>
                 )}
@@ -1196,9 +1196,9 @@ export function ProcessoDetalhePage() {
                 <div className="space-y-3">
                   {processo.movimentacoes_datajud?.length === 0 ? (
                     <div className="text-center py-8">
-                      <RefreshCw className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-                      <p className="text-slate-400">Nenhuma movimentação encontrada</p>
-                      <p className="text-slate-500 text-sm mt-1">
+                      <RefreshCw className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+                      <p className="text-muted-foreground">Nenhuma movimentação encontrada</p>
+                      <p className="text-muted-foreground text-sm mt-1">
                         Clique em "Consultar Datajud" para buscar movimentações
                       </p>
                     </div>
@@ -1209,7 +1209,7 @@ export function ProcessoDetalhePage() {
                         <div key={mov.id} className={`p-4 rounded-lg border-l-4 transition-all ${
                           isNova 
                             ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500 shadow-sm' 
-                            : 'bg-slate-800/50 border-blue-500'
+                            : 'bg-secondary/50 border-blue-500'
                         }`}>
                           <div className="flex items-start justify-between">
                             <div className="flex-1">
@@ -1224,7 +1224,7 @@ export function ProcessoDetalhePage() {
                                 )}
                               </div>
                               {mov.complementos && (
-                                <p className="text-slate-400 text-sm mt-1">
+                                <p className="text-muted-foreground text-sm mt-1">
                                   {(() => {
                                     try {
                                       const comps = JSON.parse(mov.complementos);
@@ -1237,7 +1237,7 @@ export function ProcessoDetalhePage() {
                                 </p>
                               )}
                             </div>
-                            <span className={`text-sm ml-4 ${isNova ? 'text-amber-400' : 'text-slate-400'}`}>
+                            <span className={`text-sm ml-4 ${isNova ? 'text-amber-400' : 'text-muted-foreground'}`}>
                               {new Date(mov.data_movimento).toLocaleDateString('pt-BR', {
                                 day: '2-digit',
                                 month: '2-digit',
@@ -1255,7 +1255,7 @@ export function ProcessoDetalhePage() {
               </ScrollArea>
               
               {processo.monitoramento?.ultima_verificacao && (
-                <p className="text-slate-500 text-xs mt-4 text-right">
+                <p className="text-muted-foreground text-xs mt-4 text-right">
                   Última verificação: {new Date(processo.monitoramento.ultima_verificacao).toLocaleString('pt-BR')}
                 </p>
               )}
@@ -1266,7 +1266,7 @@ export function ProcessoDetalhePage() {
 
       {/* Dialogs */}
       <Dialog open={whatsappDialogOpen} onOpenChange={setWhatsappDialogOpen}>
-        <DialogContent className="bg-slate-900 border-white/10">
+        <DialogContent className="bg-card border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">Compartilhar via WhatsApp</DialogTitle>
           </DialogHeader>
@@ -1287,7 +1287,7 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog PJe */}
       <Dialog open={pjeDialogOpen} onOpenChange={setPjeDialogOpen}>
-        <DialogContent className="bg-slate-900 border-white/10 max-w-lg">
+        <DialogContent className="bg-card border-white/10 max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">
               Consulta PJe - {pjeConsultaData?.tribunal_nome}
@@ -1295,14 +1295,14 @@ export function ProcessoDetalhePage() {
           </DialogHeader>
           <div className="space-y-4 mt-4">
             {/* Info do Tribunal */}
-            <div className="p-4 bg-slate-800/50 border border-white/10 rounded-lg">
+            <div className="p-4 bg-secondary/50 border border-white/10 rounded-lg">
               <div className="flex items-center gap-3 mb-2">
-                <div className="w-10 h-10 bg-cyan-500/20 rounded-full flex items-center justify-center">
-                  <Gavel className="w-5 h-5 text-cyan-400" />
+                <div className="w-10 h-10 bg-primary/20 rounded-full flex items-center justify-center">
+                  <Gavel className="w-5 h-5 text-primary" />
                 </div>
                 <div>
                   <p className="text-white font-medium">{pjeConsultaData?.tribunal_nome}</p>
-                  <p className="text-slate-400 text-xs">{pjeConsultaData?.numero_processo}</p>
+                  <p className="text-muted-foreground text-xs">{pjeConsultaData?.numero_processo}</p>
                 </div>
               </div>
             </div>
@@ -1325,7 +1325,7 @@ export function ProcessoDetalhePage() {
                 href={pjeConsultaData.url_consulta}
                 target="_blank"
                 rel="noopener noreferrer"
-                className="flex items-center justify-center gap-2 w-full p-4 bg-cyan-500/20 border border-cyan-500/30 rounded-lg text-cyan-400 hover:bg-cyan-500/30 transition-colors"
+                className="flex items-center justify-center gap-2 w-full p-4 bg-primary/20 border border-primary/30 rounded-lg text-primary hover:bg-primary/30 transition-colors"
               >
                 <ExternalLink className="w-5 h-5" />
                 Abrir Consulta Pública PJe
@@ -1335,8 +1335,8 @@ export function ProcessoDetalhePage() {
 
             {/* Dados extraídos automaticamente (se houver) */}
             {pjeConsultaData?.ultima_movimentacao && (
-              <div className="p-4 bg-cyan-500/10 border border-cyan-500/30 rounded-lg">
-                <p className="text-cyan-400 text-sm font-medium mb-2">
+              <div className="p-4 bg-primary/10 border border-primary/30 rounded-lg">
+                <p className="text-primary text-sm font-medium mb-2">
                   <Check className="w-4 h-4 inline mr-1" />
                   Última Movimentação (Automático)
                 </p>
@@ -1374,23 +1374,23 @@ export function ProcessoDetalhePage() {
             {!pjeConsultaData?.ultima_movimentacao && (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm text-slate-400">Última Movimentação (copie do PJe)</label>
+                  <label className="text-sm text-muted-foreground">Última Movimentação (copie do PJe)</label>
                   <textarea
                     value={pjeConsultaData?.ultima_movimentacao_manual || ''}
                     onChange={(e) => setPjeConsultaData({...pjeConsultaData, ultima_movimentacao_manual: e.target.value})}
-                    className="w-full bg-slate-800 border border-white/10 rounded-md p-3 text-white text-sm resize-none"
+                    className="w-full bg-secondary border border-white/10 rounded-md p-3 text-white text-sm resize-none"
                     rows={3}
                     placeholder="Cole aqui a última movimentação..."
                   />
                 </div>
 
                 <div className="space-y-2">
-                  <label className="text-sm text-slate-400">Data da Movimentação</label>
+                  <label className="text-sm text-muted-foreground">Data da Movimentação</label>
                   <Input
                     type="date"
                     value={pjeConsultaData?.data_movimentacao_manual || ''}
                     onChange={(e) => setPjeConsultaData({...pjeConsultaData, data_movimentacao_manual: e.target.value})}
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-white/10 text-white"
                   />
                 </div>
 
@@ -1420,7 +1420,7 @@ export function ProcessoDetalhePage() {
               </>
             )}
             
-            <p className="text-xs text-slate-500 text-center">
+            <p className="text-xs text-muted-foreground text-center">
               Você será redirecionado para o site oficial do tribunal.
             </p>
           </div>
@@ -1429,7 +1429,7 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog Gerar Documento */}
       <Dialog open={gerarDocOpen} onOpenChange={setGerarDocOpen}>
-        <DialogContent className="bg-slate-900 border-white/10 max-w-4xl max-h-[90vh]">
+        <DialogContent className="bg-card border-white/10 max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <FileCode className="w-5 h-5 text-purple-400" />
@@ -1440,17 +1440,17 @@ export function ProcessoDetalhePage() {
             {!documentoGerado ? (
               <>
                 <div className="space-y-2">
-                  <label className="text-sm text-slate-400">Selecione um Template</label>
+                  <label className="text-sm text-muted-foreground">Selecione um Template</label>
                   <Select 
                     value={templateSelecionado?.toString() || ''} 
                     onValueChange={(v) => handleTemplateChange(Number(v))}
                   >
-                    <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                    <SelectTrigger className="bg-secondary border-white/10 text-white">
                       <SelectValue placeholder="Escolha um modelo de documento" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-white/10">
+                    <SelectContent className="bg-secondary border-white/10">
                       {templates.length === 0 ? (
-                        <div className="px-2 py-4 text-sm text-slate-500 text-center">
+                        <div className="px-2 py-4 text-sm text-muted-foreground text-center">
                           Nenhum template cadastrado
                         </div>
                       ) : (
@@ -1460,11 +1460,11 @@ export function ProcessoDetalhePage() {
                               {t.tipo_arquivo === 'docx' ? (
                                 <File className="w-4 h-4 text-blue-400" />
                               ) : (
-                                <FileText className="w-4 h-4 text-cyan-400" />
+                                <FileText className="w-4 h-4 text-primary" />
                               )}
                               <span>{t.nome}</span>
                               {t.categoria && (
-                                <span className="text-slate-500 text-xs">({t.categoria})</span>
+                                <span className="text-muted-foreground text-xs">({t.categoria})</span>
                               )}
                             </div>
                           </SelectItem>
@@ -1498,7 +1498,7 @@ export function ProcessoDetalhePage() {
                   <Button
                     variant="outline"
                     onClick={() => setGerarDocOpen(false)}
-                    className="flex-1 border-white/10 text-slate-400 hover:text-white"
+                    className="flex-1 border-white/10 text-muted-foreground hover:text-white"
                   >
                     Cancelar
                   </Button>
@@ -1525,7 +1525,7 @@ export function ProcessoDetalhePage() {
                   <h3 className="text-lg font-medium text-slate-100 mb-2">
                     Documento Word Gerado!
                   </h3>
-                  <p className="text-slate-400 text-sm mb-4">
+                  <p className="text-muted-foreground text-sm mb-4">
                     O documento <strong>{templateInfo?.nome}</strong> foi gerado com sucesso.
                     <br />
                     Clique no botão abaixo para fazer o download.
@@ -1539,7 +1539,7 @@ export function ProcessoDetalhePage() {
                       setDocumentoTipo(null);
                       setDocumentoDownloadUrl(null);
                     }}
-                    className="border-white/10 text-slate-400 hover:text-white"
+                    className="border-white/10 text-muted-foreground hover:text-white"
                   >
                     Voltar
                   </Button>
@@ -1554,7 +1554,7 @@ export function ProcessoDetalhePage() {
               </>
             ) : (
               <>
-                <div className="bg-slate-800 border border-white/10 rounded-lg p-4 max-h-[50vh] overflow-auto">
+                <div className="bg-secondary border border-white/10 rounded-lg p-4 max-h-[50vh] overflow-auto">
                   <pre className="whitespace-pre-wrap font-mono text-sm text-slate-200">
                     {documentoGerado}
                   </pre>
@@ -1563,14 +1563,14 @@ export function ProcessoDetalhePage() {
                   <Button
                     variant="outline"
                     onClick={() => setDocumentoGerado(null)}
-                    className="border-white/10 text-slate-400 hover:text-white"
+                    className="border-white/10 text-muted-foreground hover:text-white"
                   >
                     Voltar
                   </Button>
                   <Button
                     variant="outline"
                     onClick={copiarDocumento}
-                    className="border-cyan-500/30 text-cyan-400 hover:bg-cyan-500/10"
+                    className="border-primary/30 text-primary hover:bg-primary/10"
                   >
                     <Copy className="w-4 h-4 mr-2" />
                     Copiar
@@ -1598,22 +1598,22 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog Excluir */}
       <Dialog open={deleteDialogOpen} onOpenChange={setDeleteDialogOpen}>
-        <DialogContent className="bg-slate-900 border-white/10">
+        <DialogContent className="bg-card border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">Confirmar Exclusão</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
-            <p className="text-slate-300">
+            <p className="text-foreground">
               Tem certeza que deseja excluir o processo <strong className="text-white">{processo?.titulo}</strong>?
             </p>
-            <p className="text-slate-400 text-sm">
+            <p className="text-muted-foreground text-sm">
               Esta ação não pode ser desfeita. Todos os prazos, tarefas e dados financeiros associados também serão removidos.
             </p>
             <div className="flex gap-3 pt-4">
               <Button
                 variant="outline"
                 onClick={() => setDeleteDialogOpen(false)}
-                className="flex-1 border-white/10 text-slate-400 hover:text-white"
+                className="flex-1 border-white/10 text-muted-foreground hover:text-white"
               >
                 Cancelar
               </Button>
@@ -1639,41 +1639,41 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog Novo Prazo */}
       <Dialog open={prazoDialogOpen} onOpenChange={setPrazoDialogOpen}>
-        <DialogContent className="bg-slate-900 border-white/10">
+        <DialogContent className="bg-card border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">Novo Prazo</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label className="text-slate-400">Descrição</Label>
+              <Label className="text-muted-foreground">Descrição</Label>
               <Input
                 value={novoPrazo.descricao}
                 onChange={(e) => setNovoPrazo({...novoPrazo, descricao: e.target.value})}
-                className="bg-slate-800 border-white/10 text-white"
+                className="bg-secondary border-white/10 text-white"
                 placeholder="Ex: Prazo para manifestação"
               />
             </div>
             
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label className="text-slate-400">Data Final</Label>
+                <Label className="text-muted-foreground">Data Final</Label>
                 <Input
                   type="date"
                   value={novoPrazo.data_final}
                   onChange={(e) => setNovoPrazo({...novoPrazo, data_final: e.target.value})}
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-white/10 text-white"
                 />
               </div>
               <div className="space-y-2">
-                <Label className="text-slate-400">Prioridade</Label>
+                <Label className="text-muted-foreground">Prioridade</Label>
                 <Select 
                   value={novoPrazo.prioridade} 
                   onValueChange={(v) => setNovoPrazo({...novoPrazo, prioridade: v as any})}
                 >
-                  <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                  <SelectTrigger className="bg-secondary border-white/10 text-white">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-white/10">
+                  <SelectContent className="bg-secondary border-white/10">
                     <SelectItem value="baixa">Baixa</SelectItem>
                     <SelectItem value="media">Média</SelectItem>
                     <SelectItem value="alta">Alta</SelectItem>
@@ -1684,15 +1684,15 @@ export function ProcessoDetalhePage() {
             </div>
             
             <div className="space-y-2">
-              <Label className="text-slate-400">Tipo</Label>
+              <Label className="text-muted-foreground">Tipo</Label>
               <Select 
                 value={novoPrazo.tipo} 
                 onValueChange={(v) => setNovoPrazo({...novoPrazo, tipo: v})}
               >
-                <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                <SelectTrigger className="bg-secondary border-white/10 text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-white/10">
+                <SelectContent className="bg-secondary border-white/10">
                   <SelectItem value="audiencia">Audiência</SelectItem>
                   <SelectItem value="pericia">Perícia</SelectItem>
                   <SelectItem value="manifestacao">Manifestação</SelectItem>
@@ -1707,14 +1707,14 @@ export function ProcessoDetalhePage() {
               <Button
                 variant="outline"
                 onClick={() => setPrazoDialogOpen(false)}
-                className="flex-1 border-white/10 text-white hover:bg-slate-800"
+                className="flex-1 border-white/10 text-white hover:bg-secondary"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSalvarPrazo}
                 disabled={salvandoPrazo}
-                className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
+                className="flex-1 bg-primary hover:bg-primary/90 text-white"
               >
                 {salvandoPrazo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
               </Button>
@@ -1725,42 +1725,42 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog Nova Tarefa */}
       <Dialog open={tarefaDialogOpen} onOpenChange={setTarefaDialogOpen}>
-        <DialogContent className="bg-slate-900 border-white/10">
+        <DialogContent className="bg-card border-white/10">
           <DialogHeader>
             <DialogTitle className="text-white">Nova Tarefa</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             <div className="space-y-2">
-              <Label className="text-slate-400">Título</Label>
+              <Label className="text-muted-foreground">Título</Label>
               <Input
                 value={novaTarefa.titulo}
                 onChange={(e) => setNovaTarefa({...novaTarefa, titulo: e.target.value})}
-                className="bg-slate-800 border-white/10 text-white"
+                className="bg-secondary border-white/10 text-white"
                 placeholder="Ex: Preparar petição inicial"
               />
             </div>
             
             <div className="space-y-2">
-              <Label className="text-slate-400">Descrição (opcional)</Label>
+              <Label className="text-muted-foreground">Descrição (opcional)</Label>
               <Textarea
                 value={novaTarefa.descricao}
                 onChange={(e) => setNovaTarefa({...novaTarefa, descricao: e.target.value})}
-                className="bg-slate-800 border-white/10 text-white"
+                className="bg-secondary border-white/10 text-white"
                 placeholder="Detalhes da tarefa..."
                 rows={3}
               />
             </div>
             
             <div className="space-y-2">
-              <Label className="text-slate-400">Prioridade</Label>
+              <Label className="text-muted-foreground">Prioridade</Label>
               <Select 
                 value={novaTarefa.prioridade} 
                 onValueChange={(v) => setNovaTarefa({...novaTarefa, prioridade: v as any})}
               >
-                <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                <SelectTrigger className="bg-secondary border-white/10 text-white">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-white/10">
+                <SelectContent className="bg-secondary border-white/10">
                   <SelectItem value="baixa">Baixa</SelectItem>
                   <SelectItem value="media">Média</SelectItem>
                   <SelectItem value="alta">Alta</SelectItem>
@@ -1773,14 +1773,14 @@ export function ProcessoDetalhePage() {
               <Button
                 variant="outline"
                 onClick={() => setTarefaDialogOpen(false)}
-                className="flex-1 border-white/10 text-white hover:bg-slate-800"
+                className="flex-1 border-white/10 text-white hover:bg-secondary"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSalvarTarefa}
                 disabled={salvandoTarefa}
-                className="flex-1 bg-cyan-500 hover:bg-cyan-600 text-white"
+                className="flex-1 bg-primary hover:bg-primary/90 text-white"
               >
                 {salvandoTarefa ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
               </Button>

@@ -1,5 +1,5 @@
-import { useState } from 'react';
-import { Outlet, Link, useLocation } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
@@ -45,9 +45,11 @@ const navItems = [
 
 const AppLayout = () => {
   const location = useLocation();
+  const navigate = useNavigate();
   const { logout, user } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [searchQuery, setSearchQuery] = useState('');
 
   const isActive = (path: string) => {
     if (path === '/app') return location.pathname === '/app';
@@ -75,12 +77,12 @@ const AppLayout = () => {
       </div>
 
       {/* Nav */}
-      <nav className="flex-1 overflow-y-auto py-4 px-3 space-y-1">
+      <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3 space-y-1">
         {navItems.map((item, i) => {
           if ('divider' in item && item.divider) {
             return !collapsed ? (
               <div key={i} className="pt-4 pb-2 px-3">
-                <span className="text-[10px] uppercase tracking-widest text-muted-foreground/60">{item.label}</span>
+                <span className="text-[10px] uppercase tracking-widest text-muted-foreground/60 whitespace-nowrap">{item.label}</span>
               </div>
             ) : (
               <div key={i} className="my-2 border-t border-border/30" />
@@ -95,12 +97,13 @@ const AppLayout = () => {
               key={item.path}
               to={item.path}
               onClick={() => setMobileOpen(false)}
-              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 ${
+              title={item.label}
+              className={`flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm transition-all duration-200 whitespace-nowrap ${
                 active ? 'nav-active font-medium' : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
               } ${('highlight' in item && item.highlight && !active) ? 'text-primary/70' : ''}`}
             >
               <item.icon className="h-4 w-4 shrink-0" />
-              {!collapsed && <span>{item.label}</span>}
+              {!collapsed && <span className="truncate">{item.label}</span>}
             </Link>
           );
         })}
@@ -189,13 +192,24 @@ const AppLayout = () => {
             >
               <Menu className="h-5 w-5" />
             </Button>
-            <div className="relative hidden sm:block">
+            <form 
+              className="relative hidden sm:block"
+              onSubmit={(e) => {
+                e.preventDefault();
+                if (searchQuery.trim()) {
+                  navigate(`/app/processos?search=${encodeURIComponent(searchQuery.trim())}`);
+                  setSearchQuery('');
+                }
+              }}
+            >
               <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
               <input
-                placeholder="Buscar processos, clientes..."
+                placeholder="Buscar processos..."
                 className="h-9 w-64 rounded-lg bg-secondary border border-border pl-10 pr-4 text-sm text-foreground placeholder:text-muted-foreground focus:outline-none focus:ring-1 focus:ring-primary/50"
+                value={searchQuery}
+                onChange={(e) => setSearchQuery(e.target.value)}
               />
-            </div>
+            </form>
           </div>
 
           <div className="flex items-center gap-2">
