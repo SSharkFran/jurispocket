@@ -14,7 +14,8 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { Plus, Search, Phone, Mail, MapPin, User, MoreHorizontal, Loader2, FileText, Briefcase } from 'lucide-react';
+import { Card, CardContent } from '@/components/ui/card';
+import { Plus, Search, Phone, Mail, MapPin, User, MoreHorizontal, Loader2, FileText, Briefcase, Users, ArrowRight } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Cliente {
@@ -162,10 +163,10 @@ export function ClientesPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold">Clientes</h1>
-          <p className="text-sm text-muted-foreground">{clientesList.length} clientes cadastrados</p>
+          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
+          <p className="text-sm text-muted-foreground">Gerencie seus clientes</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -349,13 +350,13 @@ export function ClientesPage() {
         </Dialog>
       </div>
 
-      <div className="relative max-w-sm">
-        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+      <div className="relative">
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
-          placeholder="Buscar clientes..."
+          placeholder="Buscar clientes por nome, email, telefone ou CPF/CNPJ..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 bg-secondary border-border"
+          className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
         />
       </div>
 
@@ -364,81 +365,70 @@ export function ClientesPage() {
           <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
         </div>
       ) : (
-        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
-          {clientesList.length === 0 ? (
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+          {clientesList.length === 0 && (
             <div className="col-span-full text-center py-12">
+              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
               <p className="text-muted-foreground">Nenhum cliente encontrado</p>
             </div>
-          ) : (
-            clientesList.map((c, i) => (
-              <Link key={c.id} to={`/clientes/${c.id}`}>
-                <motion.div {...fade(i)} className="glass-card-hover p-5">
-                  <div className="flex items-start justify-between mb-3">
-                    <div className="flex items-center gap-3">
-                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
-                        {getInitials(c.nome)}
-                      </div>
-                      <div>
-                        <h3 className="font-semibold text-sm">{c.nome}</h3>
-                        <span className="text-xs text-muted-foreground">{formatCPFCNPJ(c.cpf_cnpj)}</span>
-                      </div>
-                    </div>
-                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
-                      <MoreHorizontal className="h-4 w-4" />
-                    </Button>
-                  </div>
-                  <div className="space-y-2 text-xs text-muted-foreground">
-                    {c.email && (
-                      <div className="flex items-center gap-2">
-                        <Mail className="h-3.5 w-3.5" />
-                        <span className="truncate">{c.email}</span>
-                      </div>
-                    )}
-                    {(c.telefone || c.phone) && (
-                      <div className="flex items-center gap-2">
-                        <Phone className="h-3.5 w-3.5" />
-                        {formatPhone(c.telefone || c.phone)}
-                      </div>
-                    )}
-                    {c.cidade && (
-                      <div className="flex items-center gap-2">
-                        <MapPin className="h-3.5 w-3.5" />
-                        {c.cidade}
-                        {c.estado && `, ${c.estado}`}
-                      </div>
-                    )}
-                  </div>
-                  <div className="mt-4 flex items-center justify-between">
-                    <span className="text-xs text-muted-foreground">{c.processos_count || 0} processo(s)</span>
-                    {c.processos_count ? (
-                      <Badge className="text-[10px] bg-primary/20 text-primary">{c.processos_count}</Badge>
-                    ) : null}
-                  </div>
-                </motion.div>
-              </Link>
-            ))
           )}
+          {clientesList.map((cliente) => (
+            <Link key={cliente.id} to={`/clientes/${cliente.id}`}>
+              <Card className="glass-card-hover hover:border-primary/30 transition-all group h-full">
+                <CardContent className="p-5">
+                  {/* Header */}
+                  <div className="flex items-start justify-between mb-4">
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                      <User className="w-6 h-6" />
+                    </div>
+                    {cliente.processos_count ? (
+                      <Badge className="bg-primary/10 text-primary border-primary/30">
+                        <Briefcase className="w-3 h-3 mr-1" />
+                        {cliente.processos_count} processo(s)
+                      </Badge>
+                    ) : null}
+                    <ArrowRight className="w-5 h-5 text-slate-500 group-hover:text-cyan-400 transition-colors ml-auto" />
+                  </div>
+
+                  {/* Nome */}
+                  <h3 className="text-lg font-semibold text-foreground mb-3">{cliente.nome}</h3>
+
+                  {/* Informações */}
+                  <div className="space-y-2">
+                    {cliente.email && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Mail className="w-4 h-4 shrink-0" />
+                        <span className="truncate">{cliente.email}</span>
+                      </div>
+                    )}
+                    {(cliente.telefone || cliente.phone) && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <Phone className="w-4 h-4 shrink-0" />
+                        <span>{formatPhone(cliente.telefone || cliente.phone)}</span>
+                      </div>
+                    )}
+                    {cliente.cpf_cnpj && (
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
+                        <FileText className="w-4 h-4 shrink-0" />
+                        <span>{formatCPFCNPJ(cliente.cpf_cnpj)}</span>
+                      </div>
+                    )}
+                    {cliente.endereco && (
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
+                        <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
+                        <span className="line-clamp-2">{cliente.endereco}</span>
+                      </div>
+                    )}
+                  </div>
+                </CardContent>
+              </Card>
+            </Link>
+          ))}
         </div>
       )}
     </div>
   );
 }
-    const cleaned = doc.replace(/\D/g, '');
-    if (cleaned.length === 11) {
-      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
-    } else if (cleaned.length === 14) {
-      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
-    }
-    return doc;
-  };
-
-  return (
-    <div className="space-y-6">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
-          <p className="text-sm text-muted-foreground">Gerencie seus clientes</p>
-        </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white">
