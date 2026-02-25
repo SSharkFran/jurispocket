@@ -429,7 +429,6 @@ export function ClientesPage() {
     </div>
   );
 }
-        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
             <Button className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white">
               <Plus className="w-4 h-4 mr-2" />
