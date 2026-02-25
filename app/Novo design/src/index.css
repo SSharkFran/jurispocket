@@ -1,0 +1,209 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    --background: 240 6% 3%;
+    --foreground: 0 0% 95%;
+
+    --card: 240 5% 7%;
+    --card-foreground: 0 0% 95%;
+
+    --popover: 240 5% 9%;
+    --popover-foreground: 0 0% 95%;
+
+    --primary: 160 84% 39%;
+    --primary-foreground: 0 0% 2%;
+
+    --secondary: 240 4% 14%;
+    --secondary-foreground: 0 0% 85%;
+
+    --muted: 240 4% 14%;
+    --muted-foreground: 240 5% 55%;
+
+    --accent: 190 90% 50%;
+    --accent-foreground: 0 0% 2%;
+
+    --destructive: 0 72% 51%;
+    --destructive-foreground: 0 0% 98%;
+
+    --border: 240 4% 16%;
+    --input: 240 4% 16%;
+    --ring: 160 84% 39%;
+
+    --radius: 0.75rem;
+
+    --sidebar-background: 240 6% 5%;
+    --sidebar-foreground: 0 0% 85%;
+    --sidebar-primary: 160 84% 39%;
+    --sidebar-primary-foreground: 0 0% 2%;
+    --sidebar-accent: 240 4% 12%;
+    --sidebar-accent-foreground: 0 0% 90%;
+    --sidebar-border: 240 4% 12%;
+    --sidebar-ring: 160 84% 39%;
+
+    /* Custom tokens */
+    --glass: 240 5% 10%;
+    --glass-border: 0 0% 100% / 0.06;
+    --glow-primary: 160 84% 39%;
+    --glow-accent: 190 90% 50%;
+    --success: 142 71% 45%;
+    --warning: 38 92% 50%;
+    --info: 217 91% 60%;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border;
+  }
+
+  body {
+    @apply bg-background text-foreground antialiased;
+    font-family: 'Inter', system-ui, -apple-system, sans-serif;
+  }
+
+  /* Scrollbar styling */
+  ::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: hsl(var(--muted));
+    border-radius: 3px;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background: hsl(var(--muted-foreground));
+  }
+}
+
+@layer components {
+  /* Glass card effect */
+  .glass-card {
+    @apply rounded-xl border;
+    background: hsl(var(--glass));
+    border-color: hsl(var(--glass-border));
+    backdrop-filter: blur(12px);
+  }
+
+  .glass-card-hover {
+    @apply glass-card transition-all duration-300;
+  }
+  .glass-card-hover:hover {
+    border-color: hsl(var(--primary) / 0.2);
+    box-shadow: 0 0 20px hsl(var(--primary) / 0.05);
+  }
+
+  /* Glow effects */
+  .glow-primary {
+    box-shadow: 0 0 20px hsl(var(--glow-primary) / 0.15),
+                0 0 40px hsl(var(--glow-primary) / 0.05);
+  }
+
+  .glow-accent {
+    box-shadow: 0 0 20px hsl(var(--glow-accent) / 0.15),
+                0 0 40px hsl(var(--glow-accent) / 0.05);
+  }
+
+  .glow-border {
+    position: relative;
+  }
+  .glow-border::after {
+    content: '';
+    position: absolute;
+    inset: -1px;
+    border-radius: inherit;
+    padding: 1px;
+    background: linear-gradient(
+      135deg,
+      hsl(var(--primary) / 0.3),
+      transparent 50%,
+      hsl(var(--accent) / 0.3)
+    );
+    mask: linear-gradient(#fff 0 0) content-box, linear-gradient(#fff 0 0);
+    mask-composite: exclude;
+    -webkit-mask-composite: xor;
+    pointer-events: none;
+  }
+
+  /* Stat card */
+  .stat-card {
+    @apply glass-card p-5;
+  }
+
+  /* Feature badge */
+  .feature-badge {
+    @apply inline-flex items-center gap-1.5 rounded-full px-3 py-1 text-xs font-medium;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+    border: 1px solid hsl(var(--primary) / 0.2);
+  }
+
+  /* Gradient text */
+  .text-gradient {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+    -webkit-background-clip: text;
+    -webkit-text-fill-color: transparent;
+    background-clip: text;
+  }
+
+  /* Gradient background */
+  .bg-gradient-primary {
+    background: linear-gradient(135deg, hsl(var(--primary)), hsl(var(--accent)));
+  }
+
+  /* Navigation active state */
+  .nav-active {
+    @apply relative;
+    background: hsl(var(--primary) / 0.1);
+    color: hsl(var(--primary));
+  }
+  .nav-active::before {
+    content: '';
+    position: absolute;
+    left: 0;
+    top: 25%;
+    bottom: 25%;
+    width: 3px;
+    border-radius: 0 2px 2px 0;
+    background: hsl(var(--primary));
+  }
+
+  /* Priority badges */
+  .badge-alta {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--destructive) / 0.15);
+    color: hsl(var(--destructive));
+  }
+  .badge-media {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--warning) / 0.15);
+    color: hsl(var(--warning));
+  }
+  .badge-baixa {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+  }
+
+  /* Status badges */
+  .badge-ativo {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--success) / 0.15);
+    color: hsl(var(--success));
+  }
+  .badge-pendente {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--warning) / 0.15);
+    color: hsl(var(--warning));
+  }
+  .badge-concluido {
+    @apply rounded-full px-2 py-0.5 text-xs font-medium;
+    background: hsl(var(--info) / 0.15);
+    color: hsl(var(--info));
+  }
+}

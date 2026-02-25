@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Gavel, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Scale, Mail, Lock, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function LoginPage() {
@@ -36,88 +36,97 @@ export function LoginPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Gavel className="w-8 h-8 text-white" />
-          </div>
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 mb-4">
+            <Scale className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold text-gradient">JurisPocket</span>
+          </Link>
+          <h1 className="text-2xl font-bold text-foreground">Bem-vindo de volta</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Entre na sua conta para continuar
+          </p>
         </div>
 
-        <Card className="bg-slate-900/80 backdrop-blur-xl border-white/10">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-white">Bem-vindo ao JurisPocket</CardTitle>
-            <CardDescription className="text-slate-400">
-              Entre com suas credenciais para acessar
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Card className="bg-transparent border-none shadow-none">
+          <CardHeader className="pb-2">
             {errorMessage && (
-              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm text-left">
                 {errorMessage}
               </div>
             )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-300">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={email}
-                  onChange={(e) => setEmail(e.target.value)}
-                  required
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                />
-              </div>
-
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-300">Senha</Label>
-                <div className="relative">
-                  <Input
-                    id="password"
-                    type={showPassword ? 'text' : 'password'}
-                    placeholder="••••••••"
-                    value={password}
-                    onChange={(e) => setPassword(e.target.value)}
-                    required
-                    className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500 pr-10"
-                  />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
+          </CardHeader>
+          <CardContent>
+            <div className="glass-card p-6 sm:p-8">
+              <form onSubmit={handleSubmit} className="space-y-5">
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={email}
+                      onChange={(e) => setEmail(e.target.value)}
+                      required
+                      className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                  </div>
                 </div>
-              </div>
 
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white h-11"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  'Entrar'
-                )}
-              </Button>
-            </form>
+                <div className="space-y-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={password}
+                      onChange={(e) => setPassword(e.target.value)}
+                      required
+                      className="pl-10 pr-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    <>
+                      Entrar
+                    </>
+                  )}
+                </Button>
+              </form>
+            </div>
 
             <div className="mt-6 text-center">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted-foreground">
                 Não tem uma conta?{' '}
-                <Link to="/register" className="text-cyan-400 hover:text-cyan-300">
+                <Link to="/register" className="text-primary hover:underline">
                   Criar conta
                 </Link>
               </p>
             </div>
 
-            <div className="mt-4 p-3 bg-slate-800/50 rounded-lg">
-              <p className="text-xs text-slate-400 text-center">
-                <strong className="text-slate-300">Super Admin:</strong> admin@jurispocket.com / admin123
+            <div className="mt-4 p-3 rounded-lg bg-secondary/60 text-center">
+              <p className="text-xs text-muted-foreground">
+                <strong className="text-foreground">Super Admin:</strong> admin@jurispocket.com / admin123
               </p>
             </div>
           </CardContent>

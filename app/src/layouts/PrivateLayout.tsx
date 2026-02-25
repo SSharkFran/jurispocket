@@ -162,7 +162,7 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
   }
 
   return (
-    <div className="min-h-screen bg-[#0f1217] flex">
+    <div className="min-h-screen bg-background flex">
       {/* Mobile Sidebar Overlay */}
       {sidebarOpen && (
         <div 
@@ -172,21 +172,23 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
       )}
 
       {/* Sidebar */}
-      <aside className={`
+      <aside
+        className={`
         fixed lg:sticky top-0 left-0 z-50 h-screen
-        glass-sidebar w-64 flex-shrink-0
+        w-64 flex-shrink-0 bg-sidebar border-r border-border/50
         transition-transform duration-300
         ${sidebarOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
-      `}>
+      `}
+      >
         <div className="h-full flex flex-col">
           {/* Logo */}
-          <div className="p-6 border-b border-white/5">
+          <div className="p-6 border-b border-border/50">
             <Link to="/dashboard" className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7db2ff] to-[#2d6cdf] flex items-center justify-center">
+              <div className="w-10 h-10 rounded-xl bg-gradient-primary flex items-center justify-center glow-primary">
                 <Scale className="w-5 h-5 text-white" />
               </div>
               <div>
-                <span className="text-lg font-bold text-white">Juris<span className="text-[#7db2ff]">Pocket</span></span>
+                <span className="text-lg font-bold text-gradient">JurisPocket</span>
                 {user && (
                   <p className="text-xs text-slate-400 capitalize">{user.plano}</p>
                 )}
@@ -206,10 +208,10 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
                   to={item.path}
                   onClick={() => setSidebarOpen(false)}
                   className={`
-                    flex items-center gap-3 px-4 py-3 rounded-xl transition-all
+                    flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm transition-all
                     ${active 
-                      ? 'bg-[#7db2ff]/20 text-[#7db2ff]' 
-                      : 'text-slate-400 hover:bg-white/5 hover:text-white'
+                      ? 'nav-active font-medium' 
+                      : 'text-muted-foreground hover:text-foreground hover:bg-secondary/50'
                     }
                   `}
                 >
@@ -222,16 +224,16 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
           </nav>
 
           {/* User & Logout */}
-          <div className="p-4 border-t border-white/5">
+          <div className="p-4 border-t border-border/50">
             {user && (
               <div className="mb-4 px-4">
-                <p className="text-sm font-medium text-white truncate">{user.nome}</p>
-                <p className="text-xs text-slate-400 truncate">{user.email}</p>
+                <p className="text-sm font-medium text-foreground truncate">{user.nome}</p>
+                <p className="text-xs text-muted-foreground truncate">{user.email}</p>
               </div>
             )}
             <button
               onClick={handleLogout}
-              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-slate-400 hover:bg-red-500/10 hover:text-red-400 transition-all"
+              className="w-full flex items-center gap-3 px-4 py-3 rounded-xl text-muted-foreground hover:bg-red-500/10 hover:text-red-400 transition-all"
             >
               <LogOut className="w-5 h-5" />
               <span className="font-medium">Sair</span>
@@ -243,7 +245,7 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
       {/* Main Content */}
       <div className="flex-1 flex flex-col min-w-0">
         {/* Header */}
-        <header className="sticky top-0 z-30 glass-sidebar border-b border-white/5">
+        <header className="sticky top-0 z-30 bg-sidebar/90 backdrop-blur-xl border-b border-border/50">
           <div className="flex items-center justify-between px-4 sm:px-6 py-4">
             <div className="flex items-center gap-4">
               <button

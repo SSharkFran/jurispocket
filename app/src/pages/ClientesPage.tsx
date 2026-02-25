@@ -161,8 +161,8 @@ export function ClientesPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Clientes</h1>
-          <p className="text-slate-400">Gerencie seus clientes</p>
+          <h1 className="text-2xl font-bold text-foreground">Clientes</h1>
+          <p className="text-sm text-muted-foreground">Gerencie seus clientes</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -171,14 +171,14 @@ export function ClientesPage() {
               Novo Cliente
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-slate-900 border-white/10 max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-background border-border max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-white">Novo Cliente</DialogTitle>
+              <DialogTitle className="text-foreground">Novo Cliente</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               {/* Dados Principais */}
               <div className="space-y-2">
-                <Label className="text-slate-300 flex items-center gap-2">
+                <Label className="text-muted-foreground flex items-center gap-2">
                   <User className="w-4 h-4" />
                   Nome Completo <span className="text-red-400">*</span>
                 </Label>
@@ -187,13 +187,13 @@ export function ClientesPage() {
                   onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
                   placeholder="Ex: João da Silva"
                   required
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-border text-foreground"
                 />
               </div>
 
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Mail className="w-4 h-4" />
                     Email
                   </Label>
@@ -202,11 +202,11 @@ export function ClientesPage() {
                     value={formData.email}
                     onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                     placeholder="cliente@email.com"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Phone className="w-4 h-4" />
                     Telefone
                   </Label>
@@ -214,7 +214,7 @@ export function ClientesPage() {
                     value={formData.telefone}
                     onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
                     placeholder="(00) 00000-0000"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
@@ -222,7 +222,7 @@ export function ClientesPage() {
               {/* Documentos */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <FileText className="w-4 h-4" />
                     CPF/CNPJ
                   </Label>
@@ -230,25 +230,25 @@ export function ClientesPage() {
                     value={formData.cpf_cnpj}
                     onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
                     placeholder="000.000.000-00"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300">RG</Label>
+                  <Label className="text-muted-foreground">RG</Label>
                   <Input
                     value={formData.rg_ie}
                     onChange={(e) => setFormData({ ...formData, rg_ie: e.target.value })}
                     placeholder="00.000.000-0"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Data de Nascimento</Label>
+                  <Label className="text-muted-foreground">Data de Nascimento</Label>
                   <Input
                     type="date"
                     value={formData.data_nascimento}
                     onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
@@ -256,25 +256,25 @@ export function ClientesPage() {
               {/* Dados Pessoais */}
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Nacionalidade</Label>
+                  <Label className="text-muted-foreground">Nacionalidade</Label>
                   <Input
                     value={formData.nacionalidade}
                     onChange={(e) => setFormData({ ...formData, nacionalidade: e.target.value })}
                     placeholder="Brasileiro(a)"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Estado Civil</Label>
+                  <Label className="text-muted-foreground">Estado Civil</Label>
                   <Input
                     value={formData.estado_civil}
                     onChange={(e) => setFormData({ ...formData, estado_civil: e.target.value })}
                     placeholder="Solteiro(a), Casado(a)..."
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Briefcase className="w-4 h-4" />
                     Profissão
                   </Label>
@@ -282,14 +282,14 @@ export function ClientesPage() {
                     value={formData.profissao}
                     onChange={(e) => setFormData({ ...formData, profissao: e.target.value })}
                     placeholder="Ex: Advogado, Engenheiro..."
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
 
               {/* Endereço */}
               <div className="space-y-3">
-                <Label className="text-slate-300 flex items-center gap-2">
+                <Label className="text-muted-foreground flex items-center gap-2">
                   <MapPin className="w-4 h-4" />
                   Endereço
                 </Label>
@@ -298,20 +298,20 @@ export function ClientesPage() {
                     value={formData.endereco}
                     onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
                     placeholder="Rua/Avenida"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <Input
                       value={formData.numero}
                       onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
                       placeholder="Número"
-                      className="bg-slate-800 border-white/10 text-white"
+                      className="bg-secondary border-border text-foreground"
                     />
                     <Input
                       value={formData.complemento}
                       onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
                       placeholder="Complemento"
-                      className="bg-slate-800 border-white/10 text-white"
+                      className="bg-secondary border-border text-foreground"
                     />
                   </div>
                 </div>
@@ -320,13 +320,13 @@ export function ClientesPage() {
                     value={formData.bairro}
                     onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
                     placeholder="Bairro"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                   <Input
                     value={formData.cidade}
                     onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
                     placeholder="Cidade"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                   <div className="grid grid-cols-2 gap-4">
                     <Input
@@ -334,33 +334,33 @@ export function ClientesPage() {
                       onChange={(e) => setFormData({ ...formData, estado: e.target.value })}
                       placeholder="UF"
                       maxLength={2}
-                      className="bg-slate-800 border-white/10 text-white uppercase"
+                      className="bg-secondary border-border text-foreground uppercase"
                     />
                     <Input
                       value={formData.cep}
                       onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
                       placeholder="CEP"
-                      className="bg-slate-800 border-white/10 text-white"
+                      className="bg-secondary border-border text-foreground"
                     />
                   </div>
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-slate-300">Observações</Label>
+                <Label className="text-muted-foreground">Observações</Label>
                 <Textarea
                   value={formData.observacoes}
                   onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
                   placeholder="Informações adicionais sobre o cliente..."
                   rows={3}
-                  className="bg-slate-800 border-white/10 text-white resize-none"
+                  className="bg-secondary border-border text-foreground resize-none"
                 />
               </div>
 
               <Button
                 type="submit"
                 disabled={isSubmitting || !formData.nome.trim()}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white disabled:opacity-50"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar Cliente'}
               </Button>
@@ -370,12 +370,12 @@ export function ClientesPage() {
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Buscar clientes por nome, email, telefone ou CPF/CNPJ..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
+          className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
         />
       </div>
 
@@ -387,21 +387,21 @@ export function ClientesPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {clientesList.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <Users className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400">Nenhum cliente encontrado</p>
+              <Users className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Nenhum cliente encontrado</p>
             </div>
           )}
           {clientesList.map((cliente) => (
             <Link key={cliente.id} to={`/clientes/${cliente.id}`}>
-              <Card className="bg-slate-900/50 border-white/10 hover:border-cyan-500/30 transition-all group h-full">
+              <Card className="glass-card-hover hover:border-primary/30 transition-all group h-full">
                 <CardContent className="p-5">
                   {/* Header */}
                   <div className="flex items-start justify-between mb-4">
-                    <div className="w-12 h-12 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
-                      <User className="w-6 h-6 text-white" />
+                    <div className="w-12 h-12 rounded-full bg-primary/10 flex items-center justify-center text-primary">
+                      <User className="w-6 h-6" />
                     </div>
                     {cliente.processos_count ? (
-                      <Badge className="bg-blue-500/20 text-blue-400 border-blue-500/30">
+                      <Badge className="bg-primary/10 text-primary border-primary/30">
                         <Briefcase className="w-3 h-3 mr-1" />
                         {cliente.processos_count} processo(s)
                       </Badge>
@@ -410,30 +410,30 @@ export function ClientesPage() {
                   </div>
 
                   {/* Nome */}
-                  <h3 className="text-lg font-semibold text-white mb-3">{cliente.nome}</h3>
+                  <h3 className="text-lg font-semibold text-foreground mb-3">{cliente.nome}</h3>
 
                   {/* Informações */}
                   <div className="space-y-2">
                     {cliente.email && (
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Mail className="w-4 h-4 shrink-0" />
                         <span className="truncate">{cliente.email}</span>
                       </div>
                     )}
                     {(cliente.telefone || cliente.phone) && (
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <Phone className="w-4 h-4 shrink-0" />
                         <span>{formatPhone(cliente.telefone || cliente.phone)}</span>
                       </div>
                     )}
                     {cliente.cpf_cnpj && (
-                      <div className="flex items-center gap-2 text-sm text-slate-400">
+                      <div className="flex items-center gap-2 text-sm text-muted-foreground">
                         <FileText className="w-4 h-4 shrink-0" />
                         <span>{formatCPFCNPJ(cliente.cpf_cnpj)}</span>
                       </div>
                     )}
                     {cliente.endereco && (
-                      <div className="flex items-start gap-2 text-sm text-slate-400">
+                      <div className="flex items-start gap-2 text-sm text-muted-foreground">
                         <MapPin className="w-4 h-4 shrink-0 mt-0.5" />
                         <span className="line-clamp-2">{cliente.endereco}</span>
                       </div>

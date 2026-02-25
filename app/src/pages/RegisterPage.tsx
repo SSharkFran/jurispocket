@@ -5,7 +5,7 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
-import { Gavel, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Scale, Mail, Lock, User, Phone, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { toast } from 'sonner';
 
 export function RegisterPage() {
@@ -56,121 +56,134 @@ export function RegisterPage() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-950 flex items-center justify-center p-4">
+    <div className="min-h-screen flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-md">
-        <div className="flex justify-center mb-8">
-          <div className="w-16 h-16 rounded-2xl bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center shadow-lg shadow-cyan-500/20">
-            <Gavel className="w-8 h-8 text-white" />
-          </div>
+        <div className="text-center mb-8">
+          <Link to="/" className="inline-flex items-center gap-2 mb-4">
+            <Scale className="h-8 w-8 text-primary" />
+            <span className="text-2xl font-bold text-gradient">JurisPocket</span>
+          </Link>
+          <h1 className="text-2xl font-bold text-foreground">Crie sua conta</h1>
+          <p className="text-sm text-muted-foreground mt-1">
+            Comece a usar o JurisPocket gratuitamente
+          </p>
         </div>
 
-        <Card className="bg-slate-900/80 backdrop-blur-xl border-white/10">
-          <CardHeader className="text-center">
-            <CardTitle className="text-2xl text-white">Criar Conta</CardTitle>
-            <CardDescription className="text-slate-400">
-              Comece a gerenciar seus processos jurídicos
-            </CardDescription>
-          </CardHeader>
-          <CardContent>
+        <Card className="bg-transparent border-none shadow-none">
+          <CardHeader className="pb-2">
             {errorMessage && (
-              <div className="mb-4 p-3 bg-red-500/20 border border-red-500/30 rounded-lg text-red-400 text-sm">
+              <div className="mb-4 p-3 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400 text-sm text-left">
                 {errorMessage}
               </div>
             )}
-            <form onSubmit={handleSubmit} className="space-y-4">
-              <div className="space-y-2">
-                <Label htmlFor="nome" className="text-slate-300">Nome Completo</Label>
-                <Input
-                  id="nome"
-                  name="nome"
-                  placeholder="Seu nome"
-                  value={formData.nome}
-                  onChange={handleChange}
-                  required
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                />
-              </div>
+          </CardHeader>
+          <CardContent>
+            <div className="glass-card p-6 sm:p-8">
+              <form onSubmit={handleSubmit} className="space-y-4">
+                <div className="space-y-2">
+                  <Label htmlFor="nome">Nome completo</Label>
+                  <div className="relative">
+                    <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="nome"
+                      name="nome"
+                      placeholder="Seu nome"
+                      value={formData.nome}
+                      onChange={handleChange}
+                      required
+                      className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="email" className="text-slate-300">Email</Label>
-                <Input
-                  id="email"
-                  name="email"
-                  type="email"
-                  placeholder="seu@email.com"
-                  value={formData.email}
-                  onChange={handleChange}
-                  required
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="email">Email</Label>
+                  <div className="relative">
+                    <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="email"
+                      name="email"
+                      type="email"
+                      placeholder="seu@email.com"
+                      value={formData.email}
+                      onChange={handleChange}
+                      required
+                      className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="phone" className="text-slate-300">Telefone (opcional)</Label>
-                <Input
-                  id="phone"
-                  name="phone"
-                  placeholder="(00) 00000-0000"
-                  value={formData.phone}
-                  onChange={handleChange}
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                />
-              </div>
+                <div className="space-y-2">
+                  <Label htmlFor="phone">Telefone (opcional)</Label>
+                  <div className="relative">
+                    <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="phone"
+                      name="phone"
+                      placeholder="(00) 00000-0000"
+                      value={formData.phone}
+                      onChange={handleChange}
+                      className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                  </div>
+                </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="password" className="text-slate-300">Senha</Label>
-                <div className="relative">
+                <div className="space-y-2">
+                  <Label htmlFor="password">Senha</Label>
+                  <div className="relative">
+                    <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                    <Input
+                      id="password"
+                      name="password"
+                      type={showPassword ? 'text' : 'password'}
+                      placeholder="••••••••"
+                      value={formData.password}
+                      onChange={handleChange}
+                      required
+                      className="pl-10 pr-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
+                    />
+                    <button
+                      type="button"
+                      onClick={() => setShowPassword(!showPassword)}
+                      className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    >
+                      {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                    </button>
+                  </div>
+                </div>
+
+                <div className="space-y-2">
+                  <Label htmlFor="confirmPassword">Confirmar senha</Label>
                   <Input
-                    id="password"
-                    name="password"
-                    type={showPassword ? 'text' : 'password'}
+                    id="confirmPassword"
+                    name="confirmPassword"
+                    type="password"
                     placeholder="••••••••"
-                    value={formData.password}
+                    value={formData.confirmPassword}
                     onChange={handleChange}
                     required
-                    className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500 pr-10"
+                    className="bg-secondary border-border text-foreground placeholder:text-muted-foreground focus-visible:ring-primary"
                   />
-                  <button
-                    type="button"
-                    onClick={() => setShowPassword(!showPassword)}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 hover:text-white"
-                  >
-                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                  </button>
                 </div>
-              </div>
 
-              <div className="space-y-2">
-                <Label htmlFor="confirmPassword" className="text-slate-300">Confirmar Senha</Label>
-                <Input
-                  id="confirmPassword"
-                  name="confirmPassword"
-                  type="password"
-                  placeholder="••••••••"
-                  value={formData.confirmPassword}
-                  onChange={handleChange}
-                  required
-                  className="bg-slate-800 border-white/10 text-white placeholder:text-slate-500 focus-visible:ring-cyan-500"
-                />
-              </div>
-
-              <Button
-                type="submit"
-                disabled={isLoading}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white h-11"
-              >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  'Criar Conta'
-                )}
-              </Button>
-            </form>
+                <Button
+                  type="submit"
+                  disabled={isLoading}
+                  className="w-full h-11 bg-primary text-primary-foreground hover:bg-primary/90"
+                >
+                  {isLoading ? (
+                    <Loader2 className="w-4 h-4 animate-spin" />
+                  ) : (
+                    'Criar conta'
+                  )}
+                </Button>
+              </form>
+            </div>
 
             <div className="mt-6 text-center">
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted-foreground">
                 Já tem uma conta?{' '}
-                <Link to="/login" className="text-cyan-400 hover:text-cyan-300">
+                <Link to="/login" className="text-primary hover:underline">
                   Fazer login
                 </Link>
               </p>

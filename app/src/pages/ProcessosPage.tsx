@@ -214,8 +214,8 @@ export function ProcessosPage() {
     <div className="space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-white">Processos</h1>
-          <p className="text-slate-400">Gerencie seus processos jurídicos</p>
+          <h1 className="text-2xl font-bold text-foreground">Processos</h1>
+          <p className="text-sm text-muted-foreground">Gerencie seus processos jurídicos</p>
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
@@ -224,60 +224,60 @@ export function ProcessosPage() {
               Novo Processo
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-slate-900 border-white/10 max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-background border-border max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
-              <DialogTitle className="text-white">Novo Processo</DialogTitle>
+              <DialogTitle className="text-foreground">Novo Processo</DialogTitle>
             </DialogHeader>
             <form onSubmit={handleSubmit} className="space-y-4 mt-4">
               {/* Dados Principais */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Número do Processo *</Label>
+                  <Label className="text-muted-foreground">Número do Processo *</Label>
                   <Input
                     value={formData.numero}
                     onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
                     placeholder="Ex: 0001234-56.2024.8.26.0100"
                     required
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Número CNJ (PJe)</Label>
+                  <Label className="text-muted-foreground">Número CNJ (PJe)</Label>
                   <Input
                     value={formData.numero_cnj}
                     onChange={(e) => setFormData({ ...formData, numero_cnj: e.target.value })}
                     placeholder="Para consulta automática"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
 
               <div className="space-y-2">
-                <Label className="text-slate-300">Título/Objeto *</Label>
+                <Label className="text-muted-foreground">Título/Objeto *</Label>
                 <Input
                   value={formData.titulo}
                   onChange={(e) => setFormData({ ...formData, titulo: e.target.value })}
                   placeholder="Ex: Ação de Indenização"
                   required
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-border text-foreground"
                 />
               </div>
 
               <div className="space-y-2">
-                <Label className="text-slate-300">Descrição</Label>
+                <Label className="text-muted-foreground">Descrição</Label>
                 <Textarea
                   value={formData.descricao}
                   onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
                   placeholder="Breve descrição do caso"
                   rows={2}
-                  className="bg-slate-800 border-white/10 text-white resize-none"
+                  className="bg-secondary border-border text-foreground resize-none"
                 />
               </div>
 
               {/* Tipo e Status */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Scale className="w-4 h-4" />
                     Tipo de Processo
                   </Label>
@@ -285,10 +285,10 @@ export function ProcessosPage() {
                     value={formData.tipo}
                     onValueChange={(value) => setFormData({ ...formData, tipo: value })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue placeholder="Selecione o tipo" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-white/10">
+                    <SelectContent className="bg-secondary border-border">
                       {tiposProcesso.map((tipo) => (
                         <SelectItem key={tipo.value} value={tipo.value}>
                           {tipo.label}
@@ -298,15 +298,15 @@ export function ProcessosPage() {
                   </Select>
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300">Status</Label>
+                  <Label className="text-muted-foreground">Status</Label>
                   <Select
                     value={formData.status}
                     onValueChange={(value) => setFormData({ ...formData, status: value })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue placeholder="Selecione o status" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-white/10">
+                    <SelectContent className="bg-secondary border-border">
                       {statusProcesso.map((status) => (
                         <SelectItem key={status.value} value={status.value}>
                           {status.label}
@@ -320,7 +320,7 @@ export function ProcessosPage() {
               {/* Comarca e Vara */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <MapPin className="w-4 h-4" />
                     Comarca
                   </Label>
@@ -328,11 +328,11 @@ export function ProcessosPage() {
                     value={formData.comarca}
                     onChange={(e) => setFormData({ ...formData, comarca: e.target.value })}
                     placeholder="Ex: São Paulo/SP"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Building2 className="w-4 h-4" />
                     Vara
                   </Label>
@@ -340,7 +340,7 @@ export function ProcessosPage() {
                     value={formData.vara}
                     onChange={(e) => setFormData({ ...formData, vara: e.target.value })}
                     placeholder="Ex: 15ª Vara Cível"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
@@ -348,7 +348,7 @@ export function ProcessosPage() {
               {/* Valor e Data */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <DollarSign className="w-4 h-4" />
                     Valor da Causa
                   </Label>
@@ -358,11 +358,11 @@ export function ProcessosPage() {
                     value={formData.valor_causa}
                     onChange={(e) => setFormData({ ...formData, valor_causa: e.target.value })}
                     placeholder="0,00"
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
                 <div className="space-y-2">
-                  <Label className="text-slate-300 flex items-center gap-2">
+                  <Label className="text-muted-foreground flex items-center gap-2">
                     <Calendar className="w-4 h-4" />
                     Data de Abertura
                   </Label>
@@ -370,14 +370,14 @@ export function ProcessosPage() {
                     type="date"
                     value={formData.data_abertura}
                     onChange={(e) => setFormData({ ...formData, data_abertura: e.target.value })}
-                    className="bg-slate-800 border-white/10 text-white"
+                    className="bg-secondary border-border text-foreground"
                   />
                 </div>
               </div>
 
               {/* PJe URL */}
               <div className="space-y-2">
-                <Label className="text-slate-300 flex items-center gap-2">
+                <Label className="text-muted-foreground flex items-center gap-2">
                   <ExternalLink className="w-4 h-4" />
                   URL do PJe
                 </Label>
@@ -385,13 +385,13 @@ export function ProcessosPage() {
                   value={formData.pje_url}
                   onChange={(e) => setFormData({ ...formData, pje_url: e.target.value })}
                   placeholder="https://pje.trfX.jus.br/..."
-                  className="bg-slate-800 border-white/10 text-white"
+                  className="bg-secondary border-border text-foreground"
                 />
               </div>
 
               {/* Cliente */}
               <div className="space-y-2">
-                <Label className="text-slate-300 flex items-center gap-2">
+                <Label className="text-muted-foreground flex items-center gap-2">
                   <User className="w-4 h-4" />
                   Cliente <span className="text-red-400">*</span>
                 </Label>
@@ -400,10 +400,10 @@ export function ProcessosPage() {
                   onValueChange={(value) => setFormData({ ...formData, cliente_id: value })}
                   required
                 >
-                  <SelectTrigger className="bg-slate-800 border-white/10 text-white">
+                  <SelectTrigger className="bg-secondary border-border text-foreground">
                     <SelectValue placeholder="Selecione um cliente (obrigatório)" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-white/10 max-h-60">
+                  <SelectContent className="bg-secondary border-border max-h-60">
                     {clientesList.length === 0 && (
                       <SelectItem value="nenhum" disabled>
                         Nenhum cliente cadastrado
@@ -421,7 +421,7 @@ export function ProcessosPage() {
               <Button
                 type="submit"
                 disabled={isSubmitting || !formData.cliente_id || !formData.numero.trim() || !formData.titulo.trim()}
-                className="w-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white disabled:opacity-50"
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90 disabled:opacity-50"
               >
                 {isSubmitting ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Criar Processo'}
               </Button>
@@ -431,12 +431,12 @@ export function ProcessosPage() {
       </div>
 
       <div className="relative">
-        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-500" />
+        <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
         <Input
           placeholder="Buscar processos por número, título ou cliente..."
           value={search}
           onChange={(e) => setSearch(e.target.value)}
-          className="pl-10 bg-slate-800 border-white/10 text-white placeholder:text-slate-500"
+          className="pl-10 bg-secondary border-border text-foreground placeholder:text-muted-foreground"
         />
       </div>
 
@@ -448,13 +448,13 @@ export function ProcessosPage() {
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {processosList.length === 0 && (
             <div className="col-span-full text-center py-12">
-              <Gavel className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400">Nenhum processo encontrado</p>
+              <Gavel className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Nenhum processo encontrado</p>
             </div>
           )}
           {processosList.map((processo) => (
             <Link key={processo.id} to={`/processos/${processo.id}`}>
-              <Card className="bg-slate-900/50 border-white/10 hover:border-cyan-500/30 transition-all group h-full">
+              <Card className="glass-card-hover hover:border-primary/30 transition-all group h-full">
                 <CardContent className="p-5">
                   {/* Header */}
                   <div className="flex items-start justify-between mb-3">
@@ -463,7 +463,7 @@ export function ProcessosPage() {
                         {processo.status}
                       </Badge>
                       {processo.tipo && (
-                        <Badge variant="outline" className="border-slate-600 text-slate-400">
+                        <Badge variant="outline" className="border-border text-muted-foreground">
                           {getTipoLabel(processo.tipo)}
                         </Badge>
                       )}
@@ -472,19 +472,19 @@ export function ProcessosPage() {
                   </div>
 
                   {/* Título */}
-                  <h3 className="text-lg font-semibold text-white mb-1 line-clamp-2">{processo.titulo}</h3>
-                  <p className="text-sm text-slate-400 mb-2 font-mono">{processo.numero}</p>
+                  <h3 className="text-lg font-semibold text-foreground mb-1 line-clamp-2">{processo.titulo}</h3>
+                  <p className="text-sm text-muted-foreground mb-2 font-mono">{processo.numero}</p>
 
                   {/* Cliente */}
                   {processo.cliente_nome && (
-                    <p className="text-sm text-slate-300 mb-3 flex items-center gap-1">
+                    <p className="text-sm text-muted-foreground mb-3 flex items-center gap-1">
                       <User className="w-3 h-3" />
                       {processo.cliente_nome}
                     </p>
                   )}
 
                   {/* Info extras */}
-                  <div className="space-y-1 text-xs text-slate-400">
+                  <div className="space-y-1 text-xs text-muted-foreground">
                     {processo.comarca && (
                       <p className="flex items-center gap-1">
                         <MapPin className="w-3 h-3" />
