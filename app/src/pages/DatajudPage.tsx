@@ -293,9 +293,7 @@ const DatajudPage = () => {
           { label: 'Última Verificação', value: stats.ultimaVerificacao, icon: Clock, color: 'text-muted-foreground' },
           { label: 'Próxima Verificação', value: stats.proximaVerificacao, icon: RefreshCw, color: 'text-success' },
         ].map((s, i) => (
-          <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }
-            transition={{ delay: i * 0.05 }} className="stat-card"
-          >
+          <motion.div key={s.label} initial={{ opacity: 0, y: 20 }} animate={{ opacity: 1, y: 0 }} transition={{ delay: i * 0.05 }} className="stat-card">
             <s.icon className={`h-5 w-5 mb-2 ${s.color}`} />
             <div className="text-2xl font-bold">{s.value}</div>
             <div className="text-xs text-muted-foreground">{s.label}</div>
@@ -330,9 +328,7 @@ const DatajudPage = () => {
               </p>
             ) : (
               processosMonitorados.map((m, i) => (
-                <motion.div key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }
-                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
-                >
+                <motion.div key={m.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
                   <div className="min-w-0 flex-1">
                     <div className="text-sm font-mono truncate">{m.numero}</div>
                     <div className="text-xs text-muted-foreground">
@@ -363,9 +359,7 @@ const DatajudPage = () => {
               </p>
             ) : (
               movimentacoesRecentes.map((m, i) => (
-                <motion.div key={`${m.processo}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }
-                  className={`p-3 rounded-lg transition-colors ${!m.lida ? 'bg-primary/5 border border-primary/10' : 'bg-secondary/30 hover:bg-secondary/50'}`}
-                >
+                <motion.div key={`${m.processo}-${i}`} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }} className={`p-3 rounded-lg transition-colors ${!m.lida ? 'bg-primary/5 border border-primary/10' : 'bg-secondary/30 hover:bg-secondary/50'}`}>
                   <div className="flex items-start justify-between">
                     <div className="min-w-0 flex-1">
                       <div className="text-sm font-medium flex items-center gap-2">
