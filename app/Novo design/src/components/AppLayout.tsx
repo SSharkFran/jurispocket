@@ -2,9 +2,10 @@ import { useState } from "react";
 import { Outlet, Link, useLocation } from "react-router-dom";
 import { motion, AnimatePresence } from "framer-motion";
 import {
-  Scale, LayoutDashboard, Users, FolderOpen, Clock, ListTodo,
+  Scale, LayoutDashboard, Users, FolderOpen, ListTodo,
   DollarSign, FileText, Bot, Globe, MessageSquare, Settings,
-  Bell, Search, ChevronLeft, ChevronRight, LogOut, Shield, Menu
+  Bell, Search, ChevronLeft, ChevronRight, LogOut, Shield, Menu,
+  FileCode
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { useAuth } from "@/contexts/AuthContext";
@@ -13,12 +14,12 @@ const navItems = [
   { path: "/app", icon: LayoutDashboard, label: "Dashboard" },
   { path: "/app/clientes", icon: Users, label: "Clientes" },
   { path: "/app/processos", icon: FolderOpen, label: "Processos" },
-  { path: "/app/prazos", icon: Clock, label: "Prazos" },
-  { path: "/app/tarefas", icon: ListTodo, label: "Tarefas" },
+  { path: "/app/tarefas", icon: ListTodo, label: "Tarefas & Prazos" },
   { path: "/app/financeiro", icon: DollarSign, label: "Financeiro" },
   { path: "/app/documentos", icon: FileText, label: "Documentos" },
   { divider: true, label: "Inteligência" },
   { path: "/app/datajud", icon: Globe, label: "Datajud", highlight: true },
+  { path: "/app/templates", icon: FileCode, label: "Templates", highlight: true },
   { path: "/app/ia", icon: Bot, label: "Copiloto IA", highlight: true },
   { path: "/app/whatsapp", icon: MessageSquare, label: "WhatsApp", highlight: true },
   { divider: true, label: "Sistema" },

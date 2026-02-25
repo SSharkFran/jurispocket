@@ -12,16 +12,17 @@ import Clientes from "./pages/Clientes";
 import Processos from "./pages/Processos";
 import ProcessoDetalhe from "./pages/ProcessoDetalhe";
 import NovoProcesso from "./pages/NovoProcesso";
-import Prazos from "./pages/Prazos";
 import Tarefas from "./pages/Tarefas";
 import Financeiro from "./pages/Financeiro";
 import Documentos from "./pages/Documentos";
+import Templates from "./pages/Templates";
 import Datajud from "./pages/Datajud";
 import CopilotIA from "./pages/CopilotIA";
 import WhatsApp from "./pages/WhatsApp";
 import Equipe from "./pages/Equipe";
 import Configuracoes from "./pages/Configuracoes";
 import SuperAdmin from "./pages/SuperAdmin";
+import ProcessoPublico from "./pages/ProcessoPublico";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -36,16 +37,17 @@ const App = () => (
           <Route path="/" element={<Landing />} />
           <Route path="/login" element={<Login />} />
           <Route path="/register" element={<Register />} />
+          <Route path="/p/:token" element={<ProcessoPublico />} />
           <Route path="/app" element={<AppLayout />}>
             <Route index element={<Dashboard />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="processos" element={<Processos />} />
             <Route path="processos/novo" element={<NovoProcesso />} />
             <Route path="processos/:id" element={<ProcessoDetalhe />} />
-            <Route path="prazos" element={<Prazos />} />
             <Route path="tarefas" element={<Tarefas />} />
             <Route path="financeiro" element={<Financeiro />} />
             <Route path="documentos" element={<Documentos />} />
+            <Route path="templates" element={<Templates />} />
             <Route path="datajud" element={<Datajud />} />
             <Route path="ia" element={<CopilotIA />} />
             <Route path="whatsapp" element={<WhatsApp />} />

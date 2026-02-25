@@ -44,6 +44,8 @@ const Dashboard = () => {
   const [prazosProximos, setPrazosProximos] = useState<PrazoProximo[]>([]);
   const [chartData, setChartData] = useState<any[]>([]);
   const [processosChart, setProcessosChart] = useState<any[]>([]);
+  const [temDadosFinanceiros, setTemDadosFinanceiros] = useState(false);
+  const [temDadosProcessos, setTemDadosProcessos] = useState(false);
 
   const fade = (i: number) => ({
     initial: { opacity: 0, y: 20 },
@@ -131,48 +133,95 @@ const Dashboard = () => {
         }));
       setPrazosProximos(prazosOrdenados);
 
-      // Dados do gráfico financeiro (últimos 6 meses)
+      // === GRÁFICO FINANCEIRO - Apenas meses com dados reais ===
       const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
-      const dadosFinanceiros = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(anoAtual, mesAtual - i, 1);
-        const mes = meses[d.getMonth()];
-        const ano = d.getFullYear();
+      
+      // Agrupar transações por mês/ano
+      const transacoesPorMes: Record<string, { receita: number; despesa: number }> = {};
+      
+      transacoesData.forEach((t: any) => {
+        if (!t.data_transacao) return;
+        const data = new Date(t.data_transacao);
+        const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
         
-        const receita = transacoesData
-          .filter((t: any) => {
-            const dataTransacao = new Date(t.data_transacao);
-            return t.tipo === 'entrada' && 
-                   dataTransacao.getMonth() === d.getMonth() && 
-                   dataTransacao.getFullYear() === ano;
-          })
-          .reduce((sum: number, t: any) => sum + (parseFloat(t.valor) || 0), 0);
+        if (!transacoesPorMes[chave]) {
+          transacoesPorMes[chave] = { receita: 0, despesa: 0 };
+        }
         
-        const despesa = transacoesData
-          .filter((t: any) => {
-            const dataTransacao = new Date(t.data_transacao);
-            return t.tipo === 'saida' && 
-                   dataTransacao.getMonth() === d.getMonth() && 
-                   dataTransacao.getFullYear() === ano;
-          })
-          .reduce((sum: number, t: any) => sum + (parseFloat(t.valor) || 0), 0);
-        
-        dadosFinanceiros.push({ mes: `${mes}/${ano.toString().slice(2)}`, receita, despesa });
-      }
-      setChartData(dadosFinanceiros);
+        const valor = parseFloat(t.valor) || 0;
+        if (t.tipo === 'entrada') {
+          transacoesPorMes[chave].receita += valor;
+        } else if (t.tipo === 'saida') {
+          transacoesPorMes[chave].despesa += valor;
+        }
+      });
 
-      // Dados do gráfico de processos (simulado baseado nos dados reais)
-      // Como não temos histórico de novos/encerrados, vamos distribuir os processos atuais
-      const dadosProcessos = [];
-      for (let i = 5; i >= 0; i--) {
-        const d = new Date(anoAtual, mesAtual - i, 1);
-        const mes = meses[d.getMonth()];
-        // Distribuição proporcional aos processos atuais
-        const novos = Math.floor(processosAtivos / 6) + (i === 0 ? processosAtivos % 6 : 0);
-        const encerrados = Math.floor(novos * 0.3); // Estimativa de 30% encerrados
-        dadosProcessos.push({ mes, novos: i === 0 ? novos : Math.max(0, novos - encerrados), encerrados });
-      }
-      setProcessosChart(dadosProcessos);
+      // Verificar se tem dados financeiros
+      const temFin = Object.values(transacoesPorMes).some(m => m.receita > 0 || m.despesa > 0);
+      setTemDadosFinanceiros(temFin);
+      
+      // Ordenar meses cronologicamente
+      const mesesOrdenados = Object.entries(transacoesPorMes)
+        .filter(([_, valores]) => valores.receita > 0 || valores.despesa > 0)
+        .sort((a, b) => {
+          const [mesA, anoA] = a[0].split('/');
+          const [mesB, anoB] = b[0].split('/');
+          const dateA = new Date(parseInt(anoA), meses.indexOf(mesA));
+          const dateB = new Date(parseInt(anoB), meses.indexOf(mesB));
+          return dateA.getTime() - dateB.getTime();
+        })
+        .slice(-6) // Últimos 6 meses com dados
+        .map(([mes, valores]) => ({
+          mes,
+          receita: valores.receita,
+          despesa: valores.despesa
+        }));
+      
+      setChartData(mesesOrdenados);
+
+      // === GRÁFICO DE PROCESSOS - Baseado nas datas reais de criação ===
+      const processosPorMes: Record<string, { novos: number; encerrados: number }> = {};
+      
+      processosData.forEach((p: any) => {
+        // Usar data de abertura ou data de criação
+        const dataStr = p.data_abertura || p.created_at;
+        if (!dataStr) return;
+        
+        const data = new Date(dataStr);
+        const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
+        
+        if (!processosPorMes[chave]) {
+          processosPorMes[chave] = { novos: 0, encerrados: 0 };
+        }
+        
+        if (p.status === 'encerrado' || p.status === 'arquivado') {
+          processosPorMes[chave].encerrados++;
+        } else {
+          processosPorMes[chave].novos++;
+        }
+      });
+
+      // Verificar se tem dados de processos por mês
+      const temProc = Object.values(processosPorMes).some(m => m.novos > 0 || m.encerrados > 0);
+      setTemDadosProcessos(temProc);
+      
+      // Ordenar meses cronologicamente
+      const processosMesesOrdenados = Object.entries(processosPorMes)
+        .sort((a, b) => {
+          const [mesA, anoA] = a[0].split('/');
+          const [mesB, anoB] = b[0].split('/');
+          const dateA = new Date(parseInt(anoA), meses.indexOf(mesA));
+          const dateB = new Date(parseInt(anoB), meses.indexOf(mesB));
+          return dateA.getTime() - dateB.getTime();
+        })
+        .slice(-6) // Últimos 6 meses com dados
+        .map(([mes, valores]) => ({
+          mes,
+          novos: valores.novos,
+          encerrados: valores.encerrados
+        }));
+      
+      setProcessosChart(processosMesesOrdenados);
 
     } catch (error) {
       console.error('Erro ao carregar dados do dashboard:', error);
@@ -255,8 +304,8 @@ const Dashboard = () => {
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <motion.div {...fade(7)} className="glass-card p-5">
-          <h3 className="font-semibold mb-4 text-sm">Financeiro — Últimos 6 meses</h3>
-          {chartData.length > 0 && chartData.some(d => d.receita > 0 || d.despesa > 0) ? (
+          <h3 className="font-semibold mb-4 text-sm">Financeiro — Histórico</h3>
+          {temDadosFinanceiros ? (
             <ResponsiveContainer width="100%" height={220}>
               <AreaChart data={chartData}>
                 <defs>
@@ -273,15 +322,17 @@ const Dashboard = () => {
               </AreaChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
-              Nenhuma movimentação financeira nos últimos 6 meses
+            <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground text-sm">
+              <DollarSign className="h-10 w-10 mb-2 opacity-30" />
+              <p>Sem movimentações financeiras registradas</p>
+              <p className="text-xs mt-1">Adicione transações no módulo Financeiro</p>
             </div>
           )}
         </motion.div>
 
         <motion.div {...fade(8)} className="glass-card p-5">
           <h3 className="font-semibold mb-4 text-sm">Processos — Novos vs Encerrados</h3>
-          {processosChart.length > 0 ? (
+          {temDadosProcessos ? (
             <ResponsiveContainer width="100%" height={220}>
               <BarChart data={processosChart} barGap={4}>
                 <XAxis dataKey="mes" tick={{ fill: "hsl(240 5% 55%)", fontSize: 12 }} axisLine={false} tickLine={false} />
@@ -292,8 +343,10 @@ const Dashboard = () => {
               </BarChart>
             </ResponsiveContainer>
           ) : (
-            <div className="flex items-center justify-center h-[220px] text-muted-foreground text-sm">
-              Nenhum processo encontrado
+            <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground text-sm">
+              <FolderOpen className="h-10 w-10 mb-2 opacity-30" />
+              <p>Sem histórico de processos</p>
+              <p className="text-xs mt-1">Os processos aparecerão aqui conforme forem cadastrados</p>
             </div>
           )}
         </motion.div>
