@@ -9,7 +9,7 @@ import { auth } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
-const ConfiguracoesPage = () => {
+export function ConfiguracoesPage() {
   const { user, refreshUser } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
@@ -201,4 +201,3 @@ const ConfiguracoesPage = () => {
   );
 };
 
-export default ConfiguracoesPage;

@@ -30,7 +30,7 @@ const statusIcon = (s: string) => {
   return <AlertTriangle className="h-4 w-4 text-warning" />;
 };
 
-const TarefasPage = () => {
+export function TarefasPage() {
   const [listaTarefas, setListaTarefas] = useState<Tarefa[]>([]);
   const [listaPrazos, setListaPrazos] = useState<Prazo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -146,4 +146,3 @@ const TarefasPage = () => {
   );
 };
 
-export default TarefasPage;

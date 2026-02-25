@@ -29,7 +29,7 @@ const statusColors: Record<string, string> = {
   arquivado: 'badge-concluido',
 };
 
-const ProcessosPage = () => {
+export function ProcessosPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
   const [listaProcessos, setListaProcessos] = useState<Processo[]>([]);
@@ -180,4 +180,3 @@ const ProcessosPage = () => {
   );
 };
 
-export default ProcessosPage;

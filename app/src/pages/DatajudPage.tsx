@@ -77,7 +77,7 @@ const extrairTribunal = (numeroCNJ: string): string => {
   return 'N/A';
 };
 
-const DatajudPage = () => {
+export default function DatajudPage() {
   const [consultaNumero, setConsultaNumero] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [isConsultando, setIsConsultando] = useState(false);
@@ -405,4 +405,3 @@ const DatajudPage = () => {
   );
 };
 
-export default DatajudPage;

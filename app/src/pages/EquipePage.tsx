@@ -33,7 +33,7 @@ const roleLabels: Record<string, string> = {
   superadmin: 'Super Admin' 
 };
 
-const EquipePage = () => {
+export function EquipePage() {
   const [membros, setMembros] = useState<Membro[]>([]);
   const [convites, setConvites] = useState<Convite[]>([]);
   const [isLoading, setIsLoading] = useState(true);
@@ -171,4 +171,3 @@ const EquipePage = () => {
   );
 };
 
-export default EquipePage;

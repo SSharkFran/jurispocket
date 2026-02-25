@@ -23,7 +23,7 @@ const templates = [
   { id: 4, nome: 'Recurso Ordinário', categoria: 'Recursos', usos: 15 },
 ];
 
-const DocumentosPage = () => {
+export function DocumentosPage() {
   const [listaDocumentos, setListaDocumentos] = useState<Documento[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
@@ -161,4 +161,3 @@ const DocumentosPage = () => {
   );
 };
 
-export default DocumentosPage;
