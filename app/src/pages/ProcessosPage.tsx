@@ -1,11 +1,24 @@
 import { useEffect, useState } from 'react';
 import { useSearchParams, useNavigate } from 'react-router-dom';
 import { motion } from 'framer-motion';
-import { Plus, Search, Eye, Globe, MoreHorizontal, Loader2 } from 'lucide-react';
+import { Plus, Search, Eye, Globe, MoreHorizontal, Loader2, Link2, Copy, Trash2, Edit, ExternalLink } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { processos } from '@/services/api';
 import { toast } from 'sonner';
+import {
+  DropdownMenu,
+  DropdownMenuContent,
+  DropdownMenuItem,
+  DropdownMenuSeparator,
+  DropdownMenuTrigger,
+} from '@/components/ui/dropdown-menu';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 
 interface Processo {
   id: number;
@@ -20,6 +33,7 @@ interface Processo {
   vara?: string;
   comarca?: string;
   ultima_movimentacao?: string;
+  link_publico?: string;
 }
 
 const statusColors: Record<string, string> = {
@@ -35,6 +49,9 @@ export function ProcessosPage() {
   const [listaProcessos, setListaProcessos] = useState<Processo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
+  const [linkDialogOpen, setLinkDialogOpen] = useState(false);
+  const [linkPublico, setLinkPublico] = useState<string | null>(null);
+  const [processoSelecionado, setProcessoSelecionado] = useState<Processo | null>(null);
 
   const carregarProcessos = async () => {
     try {
@@ -69,6 +86,65 @@ export function ProcessosPage() {
       style: 'currency',
       currency: 'BRL',
     }).format(value);
+  };
+
+  const handleGerarLinkPublico = async (processo: Processo) => {
+    try {
+      const response = await processos.gerarLinkPublico(processo.id);
+      const link = response.data.link_publico;
+      setLinkPublico(link);
+      setProcessoSelecionado(processo);
+      setLinkDialogOpen(true);
+      carregarProcessos();
+      toast.success('Link público gerado com sucesso!');
+    } catch (error: any) {
+      if (error.response?.status === 403) {
+        toast.error('Recurso disponível apenas em planos Pro ou superior');
+      } else {
+        toast.error('Erro ao gerar link público');
+      }
+    }
+  };
+
+  const handleVerLinkPublico = async (processo: Processo) => {
+    try {
+      const response = await processos.getLinkPublico(processo.id);
+      const link = response.data.link_publico;
+      if (link) {
+        setLinkPublico(link);
+        setProcessoSelecionado(processo);
+        setLinkDialogOpen(true);
+      } else {
+        toast.info('Este processo não possui link público ativo');
+      }
+    } catch (error) {
+      toast.error('Erro ao buscar link público');
+    }
+  };
+
+  const handleCopiarLink = () => {
+    if (linkPublico) {
+      navigator.clipboard.writeText(`${window.location.origin}/publico/processo/${linkPublico}`);
+      toast.success('Link copiado para a área de transferência!');
+    }
+  };
+
+  const handleExcluirProcesso = async (id: number) => {
+    if (!confirm('Tem certeza que deseja excluir este processo?')) return;
+    
+    try {
+      await processos.delete(id);
+      toast.success('Processo excluído com sucesso!');
+      carregarProcessos();
+    } catch (error) {
+      toast.error('Erro ao excluir processo');
+    }
+  };
+
+  const handleAbrirLinkPublico = () => {
+    if (linkPublico) {
+      window.open(`${window.location.origin}/publico/processo/${linkPublico}`, '_blank');
+    }
   };
 
   return (
@@ -149,24 +225,48 @@ export function ProcessosPage() {
                           size="icon" 
                           className="h-8 w-8 text-muted-foreground hover:text-foreground"
                           onClick={() => navigate(`/app/processos/${p.id}`)}
+                          title="Ver detalhes"
                         >
                           <Eye className="h-4 w-4" />
                         </Button>
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-primary"
-                          onClick={() => toast.info('Consulta Datajud em desenvolvimento')}
+                          className={`h-8 w-8 ${p.link_publico ? 'text-green-400' : 'text-muted-foreground hover:text-primary'}`}
+                          onClick={() => p.link_publico ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}
+                          title={p.link_publico ? 'Ver link público' : 'Gerar link público'}
                         >
-                          <Globe className="h-4 w-4" />
+                          <Link2 className="h-4 w-4" />
                         </Button>
-                        <Button 
-                          variant="ghost" 
-                          size="icon" 
-                          className="h-8 w-8 text-muted-foreground hover:text-foreground"
-                        >
-                          <MoreHorizontal className="h-4 w-4" />
-                        </Button>
+                        <DropdownMenu>
+                          <DropdownMenuTrigger asChild>
+                            <Button 
+                              variant="ghost" 
+                              size="icon" 
+                              className="h-8 w-8 text-muted-foreground hover:text-foreground"
+                            >
+                              <MoreHorizontal className="h-4 w-4" />
+                            </Button>
+                          </DropdownMenuTrigger>
+                          <DropdownMenuContent align="end" className="bg-card border-border">
+                            <DropdownMenuItem onClick={() => navigate(`/app/processos/${p.id}`)}>
+                              <Eye className="mr-2 h-4 w-4" /> Ver detalhes
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => navigate(`/app/processos/${p.id}`)}>
+                              <Edit className="mr-2 h-4 w-4" /> Editar
+                            </DropdownMenuItem>
+                            <DropdownMenuItem onClick={() => p.link_publico ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}>
+                              <Globe className="mr-2 h-4 w-4" /> {p.link_publico ? 'Ver link público' : 'Gerar link público'}
+                            </DropdownMenuItem>
+                            <DropdownMenuSeparator />
+                            <DropdownMenuItem 
+                              onClick={() => handleExcluirProcesso(p.id)}
+                              className="text-red-400 focus:text-red-400"
+                            >
+                              <Trash2 className="mr-2 h-4 w-4" /> Excluir
+                            </DropdownMenuItem>
+                          </DropdownMenuContent>
+                        </DropdownMenu>
                       </div>
                     </td>
                   </motion.tr>
@@ -176,7 +276,48 @@ export function ProcessosPage() {
           )}
         </div>
       </div>
+
+      {/* Dialog do Link Público */}
+      <Dialog open={linkDialogOpen} onOpenChange={setLinkDialogOpen}>
+        <DialogContent className="bg-card border-border">
+          <DialogHeader>
+            <DialogTitle>Link Público do Processo</DialogTitle>
+          </DialogHeader>
+          <div className="space-y-4">
+            {processoSelecionado && (
+              <div className="text-sm text-muted-foreground">
+                <p><strong>{processoSelecionado.titulo}</strong></p>
+                <p>{processoSelecionado.numero_cnj || processoSelecionado.numero}</p>
+              </div>
+            )}
+            <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
+              <code className="flex-1 text-xs break-all">
+                {`${window.location.origin}/publico/processo/${linkPublico}`}
+              </code>
+              <Button size="sm" variant="ghost" onClick={handleCopiarLink}>
+                <Copy className="h-4 w-4" />
+              </Button>
+            </div>
+            <div className="flex gap-2">
+              <Button 
+                className="flex-1" 
+                onClick={handleAbrirLinkPublico}
+              >
+                <ExternalLink className="mr-2 h-4 w-4" /> Abrir Link
+              </Button>
+              <Button 
+                variant="outline" 
+                onClick={() => setLinkDialogOpen(false)}
+              >
+                Fechar
+              </Button>
+            </div>
+            <p className="text-xs text-muted-foreground text-center">
+              Este link permite que o cliente acompanhe o processo sem precisar fazer login.
+            </p>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
-};
-
+}

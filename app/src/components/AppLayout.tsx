@@ -7,7 +7,6 @@ import {
   LayoutDashboard,
   Users,
   FolderOpen,
-  Clock,
   ListTodo,
   DollarSign,
   FileText,
@@ -25,6 +24,7 @@ import {
   X,
   Check,
   Trash2,
+  FileCode,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -43,12 +43,12 @@ const navItems = [
   { path: '/app', icon: LayoutDashboard, label: 'Dashboard' },
   { path: '/app/clientes', icon: Users, label: 'Clientes' },
   { path: '/app/processos', icon: FolderOpen, label: 'Processos' },
-  { path: '/app/prazos', icon: Clock, label: 'Prazos' },
-  { path: '/app/tarefas', icon: ListTodo, label: 'Tarefas' },
+  { path: '/app/tarefas', icon: ListTodo, label: 'Tarefas & Prazos' },
   { path: '/app/financeiro', icon: DollarSign, label: 'Financeiro' },
   { path: '/app/documentos', icon: FileText, label: 'Documentos' },
   { divider: true, label: 'Inteligência' },
   { path: '/app/datajud', icon: Globe, label: 'Datajud', highlight: true },
+  { path: '/app/templates', icon: FileCode, label: 'Templates', highlight: true },
   { path: '/app/ia', icon: Bot, label: 'Copiloto IA', highlight: true },
   { path: '/app/whatsapp', icon: MessageSquare, label: 'WhatsApp', highlight: true },
   { divider: true, label: 'Sistema' },

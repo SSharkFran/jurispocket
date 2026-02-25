@@ -1,6 +1,6 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
-import { dashboard } from '@/services/api';
+import { dashboard, financeiro, processos } from '@/services/api';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -17,6 +17,7 @@ import {
   Globe,
   MessageSquare,
   RefreshCw,
+  Loader2,
 } from 'lucide-react';
 import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from 'recharts';
 import { motion } from 'framer-motion';
@@ -49,6 +50,8 @@ interface Processo {
   data_ultima_movimentacao?: string;
   cliente_nome?: string;
   tipo?: string;
+  data_abertura?: string;
+  created_at?: string;
 }
 
 interface DashboardData {
@@ -70,14 +73,34 @@ interface DashboardData {
   processos_movimentacao?: Processo[];
 }
 
+interface Transacao {
+  id: number;
+  tipo: 'entrada' | 'saida';
+  valor: number;
+  data_transacao: string;
+  descricao: string;
+}
+
 export function DashboardPage() {
   const [data, setData] = useState<DashboardData | null>(null);
+  const [transacoes, setTransacoes] = useState<Transacao[]>([]);
+  const [processosList, setProcessosList] = useState<Processo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
+  const [temDadosFinanceiros, setTemDadosFinanceiros] = useState(false);
+  const [temDadosProcessos, setTemDadosProcessos] = useState(false);
 
   const loadDashboard = async () => {
     try {
-      const response = await dashboard.get();
-      setData(response.data);
+      setIsLoading(true);
+      const [dashboardRes, financeiroRes, processosRes] = await Promise.all([
+        dashboard.get(),
+        financeiro.list(),
+        processos.list(),
+      ]);
+      
+      setData(dashboardRes.data);
+      setTransacoes(financeiroRes.data || []);
+      setProcessosList(processosRes.data.processos || processosRes.data || []);
     } catch (error) {
       toast.error('Erro ao carregar dashboard');
     } finally {
@@ -116,10 +139,83 @@ export function DashboardPage() {
     }
   };
 
+  // Preparar dados para gráficos
+  // === GRÁFICO FINANCEIRO - Apenas meses com dados reais ===
+  const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
+  
+  const transacoesPorMes: Record<string, { receita: number; despesa: number }> = {};
+  
+  transacoes.forEach((t: Transacao) => {
+    if (!t.data_transacao) return;
+    const data = new Date(t.data_transacao);
+    const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
+    
+    if (!transacoesPorMes[chave]) {
+      transacoesPorMes[chave] = { receita: 0, despesa: 0 };
+    }
+    
+    const valor = parseFloat(String(t.valor)) || 0;
+    if (t.tipo === 'entrada') {
+      transacoesPorMes[chave].receita += valor;
+    } else if (t.tipo === 'saida') {
+      transacoesPorMes[chave].despesa += valor;
+    }
+  });
+
+  const temFin = Object.values(transacoesPorMes).some(m => m.receita > 0 || m.despesa > 0);
+  const chartData = Object.entries(transacoesPorMes)
+    .filter(([_, valores]) => valores.receita > 0 || valores.despesa > 0)
+    .sort((a, b) => {
+      const [mesA, anoA] = a[0].split('/');
+      const [mesB, anoB] = b[0].split('/');
+      return new Date(parseInt(anoA), meses.indexOf(mesA)).getTime() - new Date(parseInt(anoB), meses.indexOf(mesB)).getTime();
+    })
+    .slice(-6)
+    .map(([mes, valores]) => ({
+      mes,
+      receita: valores.receita,
+      despesa: valores.despesa
+    }));
+
+  // === GRÁFICO DE PROCESSOS - Baseado nas datas reais de criação ===
+  const processosPorMes: Record<string, { novos: number; encerrados: number }> = {};
+  
+  processosList.forEach((p: Processo) => {
+    const dataStr = p.data_abertura || p.created_at;
+    if (!dataStr) return;
+    
+    const data = new Date(dataStr);
+    const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
+    
+    if (!processosPorMes[chave]) {
+      processosPorMes[chave] = { novos: 0, encerrados: 0 };
+    }
+    
+    if (p.status === 'encerrado' || p.status === 'arquivado') {
+      processosPorMes[chave].encerrados++;
+    } else {
+      processosPorMes[chave].novos++;
+    }
+  });
+
+  const temProc = Object.values(processosPorMes).some(m => m.novos > 0 || m.encerrados > 0);
+  const processosChart = Object.entries(processosPorMes)
+    .sort((a, b) => {
+      const [mesA, anoA] = a[0].split('/');
+      const [mesB, anoB] = b[0].split('/');
+      return new Date(parseInt(anoA), meses.indexOf(mesA)).getTime() - new Date(parseInt(anoB), meses.indexOf(mesB)).getTime();
+    })
+    .slice(-6)
+    .map(([mes, valores]) => ({
+      mes,
+      novos: valores.novos,
+      encerrados: valores.encerrados
+    }));
+
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <RefreshCw className="w-8 h-8 animate-spin text-cyan-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
       </div>
     );
   }
@@ -134,29 +230,10 @@ export function DashboardPage() {
     minhas_tarefas: data?.estatisticas?.minhas_tarefas ?? data?.tarefas?.pendentes ?? 0,
   };
 
-  const financeiro = data?.financeiro || { receitas_mes: 0, despesas_mes: 0, saldo: 0 };
+  const financeiroData = data?.financeiro || { receitas_mes: 0, despesas_mes: 0, saldo: 0 };
   const proximos_prazos = data?.proximos_prazos || data?.prazos?.lista || [];
   const minhas_tarefas = data?.minhas_tarefas || data?.tarefas?.lista || [];
   const processos_movimentacao = data?.processos_movimentacao || [];
-
-  // Preparar dados para gráficos (usar dados reais se disponíveis)
-  const chartData = [
-    { mes: 'Set', receita: 38000, despesa: 12000 },
-    { mes: 'Out', receita: 42000, despesa: 14000 },
-    { mes: 'Nov', receita: 39000, despesa: 11000 },
-    { mes: 'Dez', receita: 51000, despesa: 15000 },
-    { mes: 'Jan', receita: 44000, despesa: 13000 },
-    { mes: 'Fev', receita: financeiro.receitas_mes || 45800, despesa: financeiro.despesas_mes || 12500 },
-  ];
-
-  const processosChart = [
-    { mes: 'Set', novos: 5, encerrados: 3 },
-    { mes: 'Out', novos: 8, encerrados: 4 },
-    { mes: 'Nov', novos: 6, encerrados: 7 },
-    { mes: 'Dez', novos: 4, encerrados: 2 },
-    { mes: 'Jan', novos: 7, encerrados: 5 },
-    { mes: 'Fev', novos: 3, encerrados: 1 },
-  ];
 
   const fade = (i: number) => ({
     initial: { opacity: 0, y: 20 },
@@ -168,14 +245,14 @@ export function DashboardPage() {
     {
       label: 'Processos Ativos',
       value: stats.processos_ativos,
-      change: `+${Math.max(0, stats.processos_ativos - 0)}`,
+      change: `${stats.total_processos} total`,
       up: true,
       icon: FolderOpen,
     },
     {
       label: 'Clientes',
       value: stats.total_clientes,
-      change: `+${Math.max(0, stats.total_clientes - 0)}`,
+      change: 'cadastrados',
       up: true,
       icon: Users,
     },
@@ -189,8 +266,8 @@ export function DashboardPage() {
     },
     {
       label: 'Receita Mensal',
-      value: formatCurrency(financeiro.receitas_mes),
-      change: '+12%',
+      value: formatCurrency(financeiroData.receitas_mes),
+      change: formatCurrency(financeiroData.despesas_mes) + ' despesas',
       up: true,
       icon: DollarSign,
     },
@@ -200,7 +277,7 @@ export function DashboardPage() {
     <div className="space-y-6">
       {/* Header */}
       <div>
-        <h1 className="text-2xl font-bold">Bom dia 👋</h1>
+        <h1 className="text-2xl font-bold">Dashboard</h1>
         <p className="text-muted-foreground text-sm">Aqui está o resumo do seu escritório hoje.</p>
       </div>
 
@@ -245,35 +322,51 @@ export function DashboardPage() {
       {/* Charts Row */}
       <div className="grid gap-6 lg:grid-cols-2">
         <motion.div {...fade(7)} className="glass-card p-5">
-          <h3 className="font-semibold mb-4 text-sm">Financeiro — Últimos 6 meses</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <AreaChart data={chartData}>
-              <defs>
-                <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="hsl(160 84% 39%)" stopOpacity={0.3} />
-                  <stop offset="100%" stopColor="hsl(160 84% 39%)" stopOpacity={0} />
-                </linearGradient>
-              </defs>
-              <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
-              <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} />
-              <Area type="monotone" dataKey="receita" stroke="hsl(160 84% 39%)" fill="url(#gRec)" strokeWidth={2} />
-              <Area type="monotone" dataKey="despesa" stroke="hsl(0 72% 51%)" fill="transparent" strokeWidth={1.5} strokeDasharray="4 4" />
-            </AreaChart>
-          </ResponsiveContainer>
+          <h3 className="font-semibold mb-4 text-sm">Financeiro — Histórico</h3>
+          {chartData.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <AreaChart data={chartData}>
+                <defs>
+                  <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1">
+                    <stop offset="0%" stopColor="hsl(160 84% 39%)" stopOpacity={0.3} />
+                    <stop offset="100%" stopColor="hsl(160 84% 39%)" stopOpacity={0} />
+                  </linearGradient>
+                </defs>
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
+                <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} formatter={(value: number) => formatCurrency(value)} />
+                <Area type="monotone" dataKey="receita" stroke="hsl(160 84% 39%)" fill="url(#gRec)" strokeWidth={2} />
+                <Area type="monotone" dataKey="despesa" stroke="hsl(0 72% 51%)" fill="transparent" strokeWidth={1.5} strokeDasharray="4 4" />
+              </AreaChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground text-sm">
+              <DollarSign className="h-10 w-10 mb-2 opacity-30" />
+              <p>Sem movimentações financeiras registradas</p>
+              <p className="text-xs mt-1">Adicione transações no módulo Financeiro</p>
+            </div>
+          )}
         </motion.div>
 
         <motion.div {...fade(8)} className="glass-card p-5">
           <h3 className="font-semibold mb-4 text-sm">Processos — Novos vs Encerrados</h3>
-          <ResponsiveContainer width="100%" height={220}>
-            <BarChart data={processosChart} barGap={4}>
-              <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
-              <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} />
-              <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} />
-              <Bar dataKey="novos" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
-              <Bar dataKey="encerrados" fill="hsl(240 4% 25%)" radius={[4, 4, 0, 0]} />
-            </BarChart>
-          </ResponsiveContainer>
+          {processosChart.length > 0 ? (
+            <ResponsiveContainer width="100%" height={220}>
+              <BarChart data={processosChart} barGap={4}>
+                <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
+                <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} />
+                <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} />
+                <Bar dataKey="novos" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
+                <Bar dataKey="encerrados" fill="hsl(240 4% 25%)" radius={[4, 4, 0, 0]} />
+              </BarChart>
+            </ResponsiveContainer>
+          ) : (
+            <div className="flex flex-col items-center justify-center h-[220px] text-muted-foreground text-sm">
+              <FolderOpen className="h-10 w-10 mb-2 opacity-30" />
+              <p>Sem histórico de processos</p>
+              <p className="text-xs mt-1">Os processos aparecerão aqui conforme forem cadastrados</p>
+            </div>
+          )}
         </motion.div>
       </div>
 
