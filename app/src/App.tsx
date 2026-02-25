@@ -3,7 +3,6 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
-import { Toaster as ToasterUI } from '@/components/ui/toaster';
 
 // Pages
 import LandingPage from '@/pages/LandingPage';
@@ -156,7 +155,6 @@ function App() {
           <BrowserRouter>
             <AppRoutes />
             <ConvitesBanner />
-            <ToasterUI />
             <Toaster position="top-right" richColors />
           </BrowserRouter>
         </TooltipProvider>

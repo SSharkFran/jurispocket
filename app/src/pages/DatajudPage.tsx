@@ -32,8 +32,32 @@ interface Movimentacao {
 // Função para extrair tribunal do número CNJ
 const extrairTribunal = (numeroCNJ: string): string => {
   if (!numeroCNJ) return 'N/A';
-  // Formato CNJ: NNNNNNN-DD.AAAA.J.TR.OOOO
-  // TR = Código do tribunal, OOOO = Código da unidade
+  
+  // Remove todos os caracteres não numéricos
+  const numeroLimpo = numeroCNJ.replace(/\D/g, '');
+  
+  // Se tem pelo menos 20 dígitos (formato CNJ completo)
+  if (numeroLimpo.length >= 20) {
+    // Extrai o código do tribunal (posições 13-14 no CNJ, índice 13-15 substring)
+    // Formato CNJ limpo: NNNNNNNNNNNNNNNNNNNN (20 dígitos)
+    // Posições: 0-6 (NNNNNNN), 7-8 (DD), 9-12 (AAAA), 13-14 (TR), 15-18 (OOOO)
+    const codigoTribunal = numeroLimpo.substring(13, 15);
+    
+    const tribunais: Record<string, string> = {
+      '01': 'STF', '02': 'STJ', '03': 'TST', '04': 'STM', '05': 'TSE', '06': 'TRF1',
+      '07': 'TRF2', '08': 'TRF3', '09': 'TRF4', '10': 'TRF5', '11': 'TRF6',
+      '12': 'TJAC', '13': 'TJAL', '14': 'TJAP', '15': 'TJAM', '16': 'TJBA',
+      '17': 'TJCE', '18': 'TJDF', '19': 'TJES', '20': 'TJGO', '21': 'TJMA',
+      '22': 'TJMT', '23': 'TJMS', '24': 'TJMG', '25': 'TJPA', '26': 'TJPB',
+      '27': 'TJPR', '28': 'TJPE', '29': 'TJPI', '30': 'TJRJ', '31': 'TJRJ',
+      '32': 'TJRN', '33': 'TJRS', '34': 'TJRO', '35': 'TJRR', '36': 'TJSC',
+      '37': 'TJSE', '38': 'TJSP', '39': 'TJTO'
+    };
+    
+    return tribunais[codigoTribunal] || `TJ${codigoTribunal}`;
+  }
+  
+  // Se tem pontos, tenta extrair da parte com pontos
   const partes = numeroCNJ.split('.');
   if (partes.length >= 4) {
     const codigoTribunal = partes[3];
@@ -49,6 +73,7 @@ const extrairTribunal = (numeroCNJ: string): string => {
     };
     return tribunais[codigoTribunal] || `TJ${codigoTribunal}`;
   }
+  
   return 'N/A';
 };
 

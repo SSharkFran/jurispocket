@@ -1,44 +1,28 @@
-import { useState, useEffect, useRef } from 'react';
-import { useAuth } from '@/contexts/AuthContext';
-import { auth } from '@/services/api';
+import { useState, useEffect } from 'react';
+import { motion } from 'framer-motion';
+import { User, Mail, Phone, Shield, Bell, Save, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import { auth } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
-import { WhatsAppStatusPanel } from '@/components/whatsapp';
-import { 
-  User, 
-  Bell, 
-  Shield, 
-  Smartphone,
-  Mail,
-  Save,
-  Lock,
-  Loader2,
-  Camera,
-  Trash2
-} from 'lucide-react';
 
-export function ConfiguracoesPage() {
-  const { user, setUser, workspace } = useAuth();
-  const [isLoading] = useState(false);
+const ConfiguracoesPage = () => {
+  const { user, refreshUser } = useAuth();
+  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
-  const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
-  const fileInputRef = useRef<HTMLInputElement>(null);
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     telefone: '',
     oab: '',
-    alerta_email: false,
-    alerta_whatsapp: false,
   });
-  const [passwordData, setPasswordData] = useState({
-    currentPassword: '',
-    newPassword: '',
-    confirmPassword: '',
+  const [notificacoes, setNotificacoes] = useState({
+    email: true,
+    whatsapp: true,
+    resumoDiario: false,
   });
 
   useEffect(() => {
@@ -48,423 +32,173 @@ export function ConfiguracoesPage() {
         email: user.email || '',
         telefone: user.telefone || '',
         oab: user.oab || '',
-        alerta_email: user.alerta_email || false,
-        alerta_whatsapp: user.alerta_whatsapp || false,
+      });
+      setNotificacoes({
+        email: user.alerta_email !== false,
+        whatsapp: user.alerta_whatsapp !== false,
+        resumoDiario: user.resumo_diario || false,
       });
     }
   }, [user]);
 
-  const handleSaveProfile = async (e: React.FormEvent) => {
-    e.preventDefault();
-    setIsSaving(true);
+  const handleSave = async () => {
     try {
-      const response = await auth.updateProfile({
+      setIsSaving(true);
+      await auth.updateProfile({
         nome: formData.nome,
         telefone: formData.telefone,
-        oab: formData.oab,
-        alerta_email: formData.alerta_email,
-        alerta_whatsapp: formData.alerta_whatsapp,
+        alerta_email: notificacoes.email,
+        alerta_whatsapp: notificacoes.whatsapp,
       });
-      // Atualiza o usuário com os dados retornados
-      if (response.data.user) {
-        setUser(response.data.user);
-      }
-      toast.success('Perfil atualizado com sucesso!');
+      await refreshUser();
+      toast.success('Configurações salvas com sucesso!');
     } catch (error) {
-      toast.error('Erro ao atualizar perfil');
+      toast.error('Erro ao salvar configurações');
     } finally {
       setIsSaving(false);
     }
   };
 
-  const handleChangePassword = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (passwordData.newPassword !== passwordData.confirmPassword) {
-      toast.error('As senhas não coincidem');
-      return;
-    }
-    if (passwordData.newPassword.length < 6) {
-      toast.error('A nova senha deve ter pelo menos 6 caracteres');
-      return;
-    }
-    setIsSaving(true);
-    try {
-      // TODO: Implement password change endpoint
-      toast.success('Senha alterada com sucesso!');
-      setPasswordData({
-        currentPassword: '',
-        newPassword: '',
-        confirmPassword: '',
-      });
-    } catch (error) {
-      toast.error('Erro ao alterar senha');
-    } finally {
-      setIsSaving(false);
-    }
-  };
-
-  const handleAvatarClick = () => {
-    fileInputRef.current?.click();
-  };
-
-  const handleAvatarChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
-    const file = e.target.files?.[0];
-    if (!file) return;
-
-    // Validar tipo
-    const allowedTypes = ['image/jpeg', 'image/png', 'image/gif', 'image/webp'];
-    if (!allowedTypes.includes(file.type)) {
-      toast.error('Formato não suportado. Use JPG, PNG, GIF ou WEBP');
-      return;
-    }
-
-    // Validar tamanho (2MB)
-    if (file.size > 2 * 1024 * 1024) {
-      toast.error('Imagem muito grande. Máximo 2MB');
-      return;
-    }
-
-    setIsUploadingAvatar(true);
-    try {
-      const response = await auth.uploadAvatar(file);
-      if (response.data.avatar_url) {
-        setUser({ ...user!, avatar_url: response.data.avatar_url });
-        toast.success('Foto de perfil atualizada!');
-      }
-    } catch (error: any) {
-      toast.error(error.response?.data?.error || 'Erro ao uploadar imagem');
-    } finally {
-      setIsUploadingAvatar(false);
-      // Reset input
-      if (fileInputRef.current) {
-        fileInputRef.current.value = '';
-      }
-    }
-  };
-
-  const handleDeleteAvatar = async () => {
-    if (!confirm('Tem certeza que deseja remover sua foto de perfil?')) return;
-    try {
-      await auth.deleteAvatar();
-      setUser({ ...user!, avatar_url: undefined });
-      toast.success('Foto de perfil removida!');
-    } catch (error) {
-      toast.error('Erro ao remover foto');
-    }
-  };
-
-  if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
-      </div>
-    );
-  }
+  const initials = formData.nome?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
-    <div className="space-y-6">
-      {/* Header */}
-      <div>
-        <h1 className="text-3xl font-bold text-white">Configurações</h1>
-        <p className="text-slate-400 mt-1">Gerencie suas preferências e dados pessoais</p>
-      </div>
+    <div className="space-y-6 max-w-2xl">
+      <h1 className="text-2xl font-bold">Configurações</h1>
 
-      {/* Avatar Settings */}
-      <Card className="bg-slate-900/50 border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <Camera className="w-5 h-5 text-cyan-400" />
-            Foto de Perfil
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Adicione uma foto para personalizar seu perfil
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <div className="flex items-center gap-6">
-            {/* Avatar Preview */}
-            <div className="relative">
-              <div 
-                className="w-24 h-24 rounded-full overflow-hidden bg-gradient-to-br from-cyan-500 to-blue-500 flex items-center justify-center text-white text-3xl font-medium cursor-pointer hover:opacity-90 transition-opacity"
-                onClick={handleAvatarClick}
-              >
-                {isUploadingAvatar ? (
-                  <Loader2 className="w-8 h-8 animate-spin" />
-                ) : user?.avatar_url ? (
-                  <img 
-                    src={`http://localhost:5000${user.avatar_url}`} 
-                    alt="Avatar" 
-                    className="w-full h-full object-cover"
-                  />
-                ) : (
-                  <span>{user?.nome.charAt(0).toUpperCase()}</span>
-                )}
-              </div>
-              {/* Upload Button Overlay */}
-              <button
-                onClick={handleAvatarClick}
-                className="absolute bottom-0 right-0 w-8 h-8 bg-cyan-500 hover:bg-cyan-600 rounded-full flex items-center justify-center text-white shadow-lg transition-colors"
-                disabled={isUploadingAvatar}
-              >
-                <Camera className="w-4 h-4" />
-              </button>
+      {/* Perfil */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        className="glass-card p-6"
+      >
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <User className="h-4 w-4" /> Perfil
+        </h3>
+        <div className="space-y-4">
+          <div className="flex items-center gap-4 mb-6">
+            <div className="h-16 w-16 rounded-full bg-primary/10 flex items-center justify-center text-primary text-xl font-bold">
+              {initials}
             </div>
-
-            {/* Actions */}
-            <div className="flex flex-col gap-2">
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept="image/jpeg,image/png,image/gif,image/webp"
-                onChange={handleAvatarChange}
-                className="hidden"
-              />
-              <div className="text-sm text-slate-400">
-                <p>Formatos suportados: JPG, PNG, GIF, WEBP</p>
-                <p>Tamanho máximo: 2MB</p>
-              </div>
-              {user?.avatar_url && (
-                <Button
-                  variant="outline"
-                  size="sm"
-                  onClick={handleDeleteAvatar}
-                  className="w-fit border-red-500/30 text-red-400 hover:bg-red-500/10 hover:text-red-300"
-                >
-                  <Trash2 className="w-4 h-4 mr-2" />
-                  Remover Foto
-                </Button>
-              )}
-            </div>
+            <Button 
+              variant="outline" 
+              size="sm" 
+              className="border-border text-muted-foreground"
+              onClick={() => toast.info('Alterar foto em desenvolvimento')}
+            >
+              Alterar foto
+            </Button>
           </div>
-        </CardContent>
-      </Card>
-
-      {/* Profile Settings */}
-      <Card className="bg-slate-900/50 border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <User className="w-5 h-5 text-cyan-400" />
-            Dados Pessoais
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Atualize suas informações de perfil
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-              <div>
-                <Label htmlFor="nome">Nome Completo</Label>
-                <Input
-                  id="nome"
-                  value={formData.nome}
-                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-              <div>
-                <Label htmlFor="email">Email</Label>
-                <Input
-                  id="email"
-                  type="email"
+          <div className="grid gap-4 sm:grid-cols-2">
+            <div className="space-y-2">
+              <Label>Nome</Label>
+              <Input 
+                value={formData.nome}
+                onChange={(e) => setFormData({...formData, nome: e.target.value})}
+                className="bg-secondary border-border" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>OAB</Label>
+              <Input 
+                value={formData.oab}
+                onChange={(e) => setFormData({...formData, oab: e.target.value})}
+                className="bg-secondary border-border" 
+              />
+            </div>
+            <div className="space-y-2">
+              <Label>Email</Label>
+              <div className="relative">
+                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
                   value={formData.email}
                   disabled
-                  className="bg-slate-800/50 border-slate-700 text-slate-400"
+                  className="pl-10 bg-secondary border-border" 
                 />
               </div>
-              <div>
-                <Label htmlFor="telefone">Telefone</Label>
-                <Input
-                  id="telefone"
+            </div>
+            <div className="space-y-2">
+              <Label>Telefone</Label>
+              <div className="relative">
+                <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                <Input 
                   value={formData.telefone}
-                  onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                  placeholder="(00) 00000-0000"
+                  onChange={(e) => setFormData({...formData, telefone: e.target.value})}
+                  className="pl-10 bg-secondary border-border" 
                 />
               </div>
-              <div>
-                <Label htmlFor="oab">OAB</Label>
-                <Input
-                  id="oab"
-                  value={formData.oab}
-                  onChange={(e) => setFormData({ ...formData, oab: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                  placeholder="UF000000"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button 
-                type="submit" 
-                className="bg-cyan-500 hover:bg-cyan-600"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Salvar Alterações
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* WhatsApp Integration */}
-      <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
-        <div className="lg:col-span-2">
-          {/* Notification Settings */}
-          <Card className="bg-slate-900/50 border-slate-800 h-full">
-            <CardHeader>
-              <CardTitle className="text-white text-lg flex items-center gap-2">
-                <Bell className="w-5 h-5 text-cyan-400" />
-                Notificações
-              </CardTitle>
-              <CardDescription className="text-slate-400">
-                Configure como deseja receber alertas e notificações
-              </CardDescription>
-            </CardHeader>
-            <CardContent>
-          <form onSubmit={handleSaveProfile} className="space-y-4">
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-blue-500/20">
-                  <Mail className="w-5 h-5 text-blue-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-white">Notificações por Email</p>
-                  <p className="text-sm text-slate-400">Receba alertas sobre prazos e movimentações</p>
-                </div>
-              </div>
-              <Switch
-                checked={formData.alerta_email}
-                onCheckedChange={(checked) => setFormData({ ...formData, alerta_email: checked })}
-              />
-            </div>
-            <div className="flex items-center justify-between p-4 rounded-lg bg-slate-800/50">
-              <div className="flex items-center gap-3">
-                <div className="p-2 rounded-lg bg-green-500/20">
-                  <Smartphone className="w-5 h-5 text-green-400" />
-                </div>
-                <div>
-                  <p className="font-medium text-white">Notificações por WhatsApp</p>
-                  <p className="text-sm text-slate-400">Receba alertas no seu número de celular</p>
-                </div>
-              </div>
-              <Switch
-                checked={formData.alerta_whatsapp}
-                onCheckedChange={(checked) => setFormData({ ...formData, alerta_whatsapp: checked })}
-              />
-            </div>
-            <div className="flex justify-end">
-              <Button 
-                type="submit" 
-                className="bg-cyan-500 hover:bg-cyan-600"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Save className="w-4 h-4 mr-2" />
-                )}
-                Salvar Preferências
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-          </Card>
-        </div>
-        
-        <div className="lg:col-span-1">
-          <WhatsAppStatusPanel />
-        </div>
-      </div>
-
-      {/* Security Settings */}
-      <Card className="bg-slate-900/50 border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <Shield className="w-5 h-5 text-cyan-400" />
-            Segurança
-          </CardTitle>
-          <CardDescription className="text-slate-400">
-            Altere sua senha de acesso
-          </CardDescription>
-        </CardHeader>
-        <CardContent>
-          <form onSubmit={handleChangePassword} className="space-y-4">
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-              <div>
-                <Label htmlFor="currentPassword">Senha Atual</Label>
-                <Input
-                  id="currentPassword"
-                  type="password"
-                  value={passwordData.currentPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, currentPassword: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-              <div>
-                <Label htmlFor="newPassword">Nova Senha</Label>
-                <Input
-                  id="newPassword"
-                  type="password"
-                  value={passwordData.newPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, newPassword: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-              <div>
-                <Label htmlFor="confirmPassword">Confirmar Nova Senha</Label>
-                <Input
-                  id="confirmPassword"
-                  type="password"
-                  value={passwordData.confirmPassword}
-                  onChange={(e) => setPasswordData({ ...passwordData, confirmPassword: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
-                />
-              </div>
-            </div>
-            <div className="flex justify-end">
-              <Button 
-                type="submit" 
-                className="bg-cyan-500 hover:bg-cyan-600"
-                disabled={isSaving}
-              >
-                {isSaving ? (
-                  <Loader2 className="w-4 h-4 mr-2 animate-spin" />
-                ) : (
-                  <Lock className="w-4 h-4 mr-2" />
-                )}
-                Alterar Senha
-              </Button>
-            </div>
-          </form>
-        </CardContent>
-      </Card>
-
-      {/* Workspace Info */}
-      <Card className="bg-slate-900/50 border-slate-800">
-        <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
-            <Shield className="w-5 h-5 text-cyan-400" />
-            Informações do Escritório
-          </CardTitle>
-        </CardHeader>
-        <CardContent>
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <div className="p-4 rounded-lg bg-slate-800/50">
-              <p className="text-sm text-slate-400">Plano Atual</p>
-              <p className="text-lg font-medium text-white capitalize">{workspace?.plano || 'Gratuito'}</p>
-            </div>
-            <div className="p-4 rounded-lg bg-slate-800/50">
-              <p className="text-sm text-slate-400">Função</p>
-              <p className="text-lg font-medium text-white capitalize">{user?.role || 'Usuário'}</p>
             </div>
           </div>
-        </CardContent>
-      </Card>
+        </div>
+      </motion.div>
+
+      {/* Notificações */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ delay: 0.1 }}
+        className="glass-card p-6"
+      >
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <Bell className="h-4 w-4" /> Notificações
+        </h3>
+        <div className="space-y-4">
+          {[
+            { key: 'email', label: 'Alertas por Email', desc: 'Receber notificações de movimentações por email' },
+            { key: 'whatsapp', label: 'Alertas por WhatsApp', desc: 'Receber notificações de prazos por WhatsApp' },
+            { key: 'resumoDiario', label: 'Resumo diário', desc: 'Receber resumo diário das atividades do escritório' },
+          ].map((n) => (
+            <div key={n.key} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30">
+              <div>
+                <div className="text-sm font-medium">{n.label}</div>
+                <div className="text-xs text-muted-foreground">{n.desc}</div>
+              </div>
+              <Switch 
+                checked={notificacoes[n.key as keyof typeof notificacoes]}
+                onCheckedChange={(checked) => 
+                  setNotificacoes(prev => ({...prev, [n.key]: checked}))
+                }
+              />
+            </div>
+          ))}
+        </div>
+      </motion.div>
+
+      {/* Plano */}
+      <motion.div 
+        initial={{ opacity: 0, y: 20 }} 
+        animate={{ opacity: 1, y: 0 }} 
+        transition={{ delay: 0.2 }}
+        className="glass-card p-6"
+      >
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <Shield className="h-4 w-4" /> Plano Atual
+        </h3>
+        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/10">
+          <div>
+            <div className="font-semibold text-primary">Plano Pro</div>
+            <div className="text-sm text-muted-foreground">R$ 97/mês · Renovação: 01/03/2026</div>
+          </div>
+          <Button 
+            variant="outline" 
+            size="sm" 
+            className="border-primary/20 text-primary hover:bg-primary/10"
+            onClick={() => toast.info('Gerenciamento de plano em desenvolvimento')}
+          >
+            Gerenciar Plano
+          </Button>
+        </div>
+      </motion.div>
+
+      <Button 
+        className="bg-primary text-primary-foreground hover:bg-primary/90"
+        onClick={handleSave}
+        disabled={isSaving}
+      >
+        {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+        Salvar Alterações
+      </Button>
     </div>
   );
-}
+};
+
+export default ConfiguracoesPage;
