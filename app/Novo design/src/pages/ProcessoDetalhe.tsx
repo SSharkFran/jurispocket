@@ -148,7 +148,7 @@ const ProcessoDetalhe = () => {
     });
     
     try {
-      const response = await api.post(`/processos/${id}/consultar-datajud`);
+      const response = await api.post(`/processos/${Number(id)}/consultar-datajud`);
       const data = response.data;
       
       toast.dismiss(loadingToast);

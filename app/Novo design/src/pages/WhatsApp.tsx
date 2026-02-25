@@ -1,19 +1,16 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Send, Phone, CheckCheck, Clock, Users, Zap, QrCode, Settings, Loader2, Power, PowerOff } from 'lucide-react';
+import { MessageSquare, Send, Phone, CheckCheck, Users, Zap, QrCode, Settings, Loader2, Power, PowerOff } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { clientes } from '@/services/api';
 import { toast } from 'sonner';
 
-interface Conversa {
+interface Cliente {
   id: number;
-  cliente: string;
-  telefone: string;
-  ultimaMensagem: string;
-  hora: string;
-  lida: boolean;
-  novas: number;
+  nome: string;
+  telefone?: string;
+  email?: string;
 }
 
 interface Automacao {
@@ -34,7 +31,7 @@ const WhatsApp = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [showQRCode, setShowQRCode] = useState(false);
   const [qrCode, setQrCode] = useState<string | null>(null);
-  const [conversas, setConversas] = useState<Conversa[]>([]);
+  const [clientesList, setClientesList] = useState<Cliente[]>([]);
   const [stats, setStats] = useState<Stats>({
     mensagensEnviadas: 0,
     clientesAtivos: 0,
@@ -51,35 +48,26 @@ const WhatsApp = () => {
     { tipo: 'Cobrança', descricao: 'Lembrete de honorários pendentes', ativo: false, enviadas: 0 },
   ]);
 
-  // Carregar clientes para conversas
+  // Carregar clientes
   const carregarClientes = async () => {
     try {
+      setIsLoading(true);
       const response = await clientes.list();
       const clientesData = response.data || [];
+      setClientesList(Array.isArray(clientesData) ? clientesData : []);
       
-      const conversasFormatadas: Conversa[] = clientesData.slice(0, 5).map((c: any, index: number) => ({
-        id: c.id,
-        cliente: c.nome,
-        telefone: c.phone || c.telefone || '(11) 99999-9999',
-        ultimaMensagem: index === 0 ? 'Obrigado pela atualização!' : 
-                        index === 1 ? 'Recebi o link do processo.' :
-                        index === 2 ? 'Quando será a próxima audiência?' :
-                        'Boa tarde, gostaria de saber...',
-        hora: index === 0 ? '14:32' : index === 1 ? '11:20' : index === 2 ? '09:45' : 'Ontem',
-        lida: index > 2,
-        novas: index < 2 ? index + 1 : 0,
-      }));
-
-      setConversas(conversasFormatadas);
       setStats(prev => ({
         ...prev,
         clientesAtivos: clientesData.length,
-        mensagensEnviadas: Math.floor(Math.random() * 500) + 100, // Simulação temporária
-        taxaEntrega: (95 + Math.random() * 4).toFixed(1) + '%',
+        // Estas estatísticas seriam carregadas de uma API real de WhatsApp
+        mensagensEnviadas: 0,
+        taxaEntrega: '0%',
       }));
     } catch (error) {
       console.error('Erro ao carregar clientes:', error);
       toast.error('Erro ao carregar clientes');
+    } finally {
+      setIsLoading(false);
     }
   };
 
@@ -137,6 +125,9 @@ const WhatsApp = () => {
     }
   };
 
+  // Filtra apenas clientes com telefone
+  const clientesComTelefone = clientesList.filter(c => c.telefone || c.phone);
+
   return (
     <div className="space-y-6">
       {/* Header */}
@@ -190,7 +181,7 @@ const WhatsApp = () => {
       <div className="grid gap-4 sm:grid-cols-4">
         {[
           { label: "Mensagens Enviadas", value: stats.mensagensEnviadas.toString(), icon: Send, color: "text-green-400" },
-          { label: "Clientes Ativos", value: stats.clientesAtivos.toString(), icon: Users, color: "text-blue-400" },
+          { label: "Clientes com WhatsApp", value: clientesComTelefone.length.toString(), icon: Users, color: "text-blue-400" },
           { label: "Automações Ativas", value: stats.automacoesAtivas.toString(), icon: Zap, color: "text-purple-400" },
           { label: "Taxa de Entrega", value: stats.taxaEntrega, icon: CheckCheck, color: "text-green-400" },
         ].map((s, i) => (
@@ -205,37 +196,36 @@ const WhatsApp = () => {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-2">
-        {/* Conversas */}
+        {/* Clientes com WhatsApp */}
         <div className="glass-card p-5">
           <h3 className="font-semibold mb-4 text-sm flex items-center gap-2">
-            <Phone className="h-4 w-4 text-muted-foreground" /> Conversas Recentes
+            <Phone className="h-4 w-4 text-muted-foreground" /> Clientes com WhatsApp ({clientesComTelefone.length})
           </h3>
-          <div className="space-y-2">
-            {conversas.length === 0 ? (
+          <div className="space-y-2 max-h-[400px] overflow-y-auto">
+            {isLoading ? (
+              <div className="flex items-center justify-center py-8">
+                <Loader2 className="w-6 h-6 animate-spin text-primary" />
+              </div>
+            ) : clientesComTelefone.length === 0 ? (
               <div className="text-center py-8">
                 <MessageSquare className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
-                <p className="text-muted-foreground">Nenhuma conversa encontrada</p>
+                <p className="text-muted-foreground">Nenhum cliente com telefone cadastrado</p>
+                <p className="text-xs text-muted-foreground mt-1">Cadastre telefones nos perfis dos clientes</p>
               </div>
             ) : (
-              conversas.map((c, i) => (
-                <motion.div key={c.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
-                  className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors cursor-pointer"
+              clientesComTelefone.map((cliente, i) => (
+                <motion.div key={cliente.id} initial={{ opacity: 0 }} animate={{ opacity: 1 }} transition={{ delay: i * 0.05 }}
+                  className="flex items-center gap-3 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
                 >
                   <div className="h-10 w-10 rounded-full bg-green-500/10 flex items-center justify-center text-green-400 font-semibold text-sm shrink-0">
-                    {c.cliente.split(" ").map(n => n[0]).join("").slice(0,2)}
+                    {cliente.nome.split(" ").map(n => n[0]).join("").slice(0,2).toUpperCase()}
                   </div>
                   <div className="flex-1 min-w-0">
                     <div className="flex items-center justify-between">
-                      <span className="text-sm font-medium">{c.cliente}</span>
-                      <span className="text-xs text-muted-foreground">{c.hora}</span>
+                      <span className="text-sm font-medium">{cliente.nome}</span>
                     </div>
                     <div className="flex items-center justify-between mt-0.5">
-                      <span className="text-xs text-muted-foreground truncate pr-4">{c.ultimaMensagem}</span>
-                      {c.novas > 0 && (
-                        <span className="h-5 min-w-[20px] rounded-full bg-green-500 flex items-center justify-center text-[10px] font-bold text-white px-1.5 shrink-0">
-                          {c.novas}
-                        </span>
-                      )}
+                      <span className="text-xs text-muted-foreground">{cliente.telefone || cliente.phone}</span>
                     </div>
                   </div>
                 </motion.div>

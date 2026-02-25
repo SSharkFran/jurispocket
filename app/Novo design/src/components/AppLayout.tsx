@@ -7,6 +7,7 @@ import {
   Bell, Search, ChevronLeft, ChevronRight, LogOut, Shield, Menu
 } from "lucide-react";
 import { Button } from "@/components/ui/button";
+import { useAuth } from "@/contexts/AuthContext";
 
 const navItems = [
   { path: "/app", icon: LayoutDashboard, label: "Dashboard" },
@@ -26,8 +27,28 @@ const navItems = [
   { path: "/app/admin", icon: Shield, label: "Super Admin" },
 ] as const;
 
+// Função para formatar o nome do plano
+const formatarPlano = (plano?: string) => {
+  if (!plano) return 'Free';
+  const planos: Record<string, string> = {
+    'free': 'Free',
+    'basico': 'Básico',
+    'pro': 'Pro',
+    'premium': 'Premium',
+    'enterprise': 'Enterprise'
+  };
+  return planos[plano.toLowerCase()] || plano.charAt(0).toUpperCase() + plano.slice(1);
+};
+
+// Função para obter iniciais do nome
+const getIniciais = (nome?: string) => {
+  if (!nome) return 'U';
+  return nome.split(" ").map(n => n[0]).join("").slice(0, 2).toUpperCase();
+};
+
 const AppLayout = () => {
   const location = useLocation();
+  const { user, workspace, logout } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
 
@@ -79,20 +100,18 @@ const AppLayout = () => {
       <div className="border-t border-border/50 p-4">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm shrink-0">
-            G
+            {getIniciais(user?.nome)}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
-              <p className="text-sm font-medium truncate">Dr. Guto</p>
-              <p className="text-xs text-muted-foreground truncate">guto@jurispocket.com</p>
+              <p className="text-sm font-medium truncate">{user?.nome || 'Usuário'}</p>
+              <p className="text-xs text-muted-foreground truncate">{user?.email || ''}</p>
             </div>
           )}
           {!collapsed && (
-            <Link to="/login">
-              <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground">
-                <LogOut className="h-4 w-4" />
-              </Button>
-            </Link>
+            <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground hover:text-foreground" onClick={logout}>
+              <LogOut className="h-4 w-4" />
+            </Button>
           )}
         </div>
       </div>
@@ -153,7 +172,7 @@ const AppLayout = () => {
               <Bell className="h-4 w-4" />
               <span className="absolute top-1.5 right-1.5 h-2 w-2 rounded-full bg-primary animate-pulse" />
             </Button>
-            <span className="feature-badge text-[10px]">Pro</span>
+            <span className="feature-badge text-[10px]">{formatarPlano(workspace?.plano)}</span>
           </div>
         </header>
 
