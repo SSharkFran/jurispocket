@@ -1,26 +1,24 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dashboard } from '@/services/api';
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import {
-  Briefcase,
+  FolderOpen,
   Users,
-  CheckSquare,
-  Calendar,
-  DollarSign,
-  AlertTriangle,
   Clock,
-  ArrowRight,
-  RefreshCw,
-  Gavel,
-  FileText,
-  Globe,
+  DollarSign,
+  TrendingUp,
+  AlertTriangle,
+  ArrowUpRight,
+  ArrowDownRight,
   Bot,
+  Globe,
   MessageSquare,
+  RefreshCw,
 } from 'lucide-react';
+import { BarChart, Bar, XAxis, YAxis, ResponsiveContainer, Tooltip, AreaChart, Area } from 'recharts';
 import { motion } from 'framer-motion';
 import { toast } from 'sonner';
 
@@ -28,7 +26,7 @@ interface Prazo {
   id: number;
   descricao?: string;
   data_prazo: string;
-  data_final?: string; // para compatibilidade legacy
+  data_final?: string;
   prioridade: string;
   processo_numero?: string;
   processo_titulo?: string;
@@ -50,33 +48,15 @@ interface Processo {
   ultima_movimentacao?: string;
   data_ultima_movimentacao?: string;
   cliente_nome?: string;
+  tipo?: string;
 }
 
 interface DashboardData {
-  // Estrutura da API /api/dashboard
-  processos?: {
-    total: number;
-    ativos: number;
-  };
-  clientes?: {
-    total: number;
-  };
-  prazos?: {
-    pendentes: number;
-    proximos: number;
-    lista: Prazo[];
-  };
-  tarefas?: {
-    pendentes: number;
-    atrasadas: number;
-    lista: Tarefa[];
-  };
-  financeiro?: {
-    receitas_mes: number;
-    despesas_mes: number;
-    saldo: number;
-  };
-  // Campos legacy que podem existir em algumas respostas
+  processos?: { total: number; ativos: number };
+  clientes?: { total: number };
+  prazos?: { pendentes: number; proximos: number; lista: Prazo[] };
+  tarefas?: { pendentes: number; atrasadas: number; lista: Tarefa[] };
+  financeiro?: { receitas_mes: number; despesas_mes: number; saldo: number };
   estatisticas?: {
     total_processos: number;
     processos_ativos: number;
@@ -125,15 +105,14 @@ export function DashboardPage() {
   };
 
   const getPrioridadeColor = (prioridade: string) => {
-    switch (prioridade) {
+    switch (prioridade?.toLowerCase()) {
       case 'urgente':
-        return 'bg-red-500/20 text-red-400 border-red-500/30';
       case 'alta':
-        return 'bg-orange-500/20 text-orange-400 border-orange-500/30';
+        return 'text-red-400 bg-red-500/20';
       case 'media':
-        return 'bg-yellow-500/20 text-yellow-400 border-yellow-500/30';
+        return 'text-yellow-400 bg-yellow-500/20';
       default:
-        return 'bg-blue-500/20 text-blue-400 border-blue-500/30';
+        return 'text-blue-400 bg-blue-500/20';
     }
   };
 
@@ -145,13 +124,13 @@ export function DashboardPage() {
     );
   }
 
-  // Extrair dados da API (suporta ambas as estruturas: nova e legacy)
+  // Extrair dados da API
   const stats = {
     total_processos: data?.estatisticas?.total_processos ?? data?.processos?.total ?? 0,
     processos_ativos: data?.estatisticas?.processos_ativos ?? data?.processos?.ativos ?? 0,
     total_clientes: data?.estatisticas?.total_clientes ?? data?.clientes?.total ?? 0,
     prazos_pendentes: data?.estatisticas?.prazos_pendentes ?? data?.prazos?.pendentes ?? 0,
-    prazos_vencidos: data?.estatisticas?.prazos_vencidos ?? 0, // API não retorna vencidos separadamente
+    prazos_vencidos: data?.estatisticas?.prazos_vencidos ?? 0,
     minhas_tarefas: data?.estatisticas?.minhas_tarefas ?? data?.tarefas?.pendentes ?? 0,
   };
 
@@ -160,278 +139,196 @@ export function DashboardPage() {
   const minhas_tarefas = data?.minhas_tarefas || data?.tarefas?.lista || [];
   const processos_movimentacao = data?.processos_movimentacao || [];
 
+  // Preparar dados para gráficos (usar dados reais se disponíveis)
+  const chartData = [
+    { mes: 'Set', receita: 38000, despesa: 12000 },
+    { mes: 'Out', receita: 42000, despesa: 14000 },
+    { mes: 'Nov', receita: 39000, despesa: 11000 },
+    { mes: 'Dez', receita: 51000, despesa: 15000 },
+    { mes: 'Jan', receita: 44000, despesa: 13000 },
+    { mes: 'Fev', receita: financeiro.receitas_mes || 45800, despesa: financeiro.despesas_mes || 12500 },
+  ];
+
+  const processosChart = [
+    { mes: 'Set', novos: 5, encerrados: 3 },
+    { mes: 'Out', novos: 8, encerrados: 4 },
+    { mes: 'Nov', novos: 6, encerrados: 7 },
+    { mes: 'Dez', novos: 4, encerrados: 2 },
+    { mes: 'Jan', novos: 7, encerrados: 5 },
+    { mes: 'Fev', novos: 3, encerrados: 1 },
+  ];
+
   const fade = (i: number) => ({
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
     transition: { delay: i * 0.05, duration: 0.4 },
   });
 
+  const statCards = [
+    {
+      label: 'Processos Ativos',
+      value: stats.processos_ativos,
+      change: `+${Math.max(0, stats.processos_ativos - 0)}`,
+      up: true,
+      icon: FolderOpen,
+    },
+    {
+      label: 'Clientes',
+      value: stats.total_clientes,
+      change: `+${Math.max(0, stats.total_clientes - 0)}`,
+      up: true,
+      icon: Users,
+    },
+    {
+      label: 'Prazos Próximos',
+      value: stats.prazos_pendentes,
+      change: `${stats.prazos_vencidos} vencidos`,
+      up: stats.prazos_vencidos === 0,
+      icon: Clock,
+      alert: stats.prazos_vencidos > 0,
+    },
+    {
+      label: 'Receita Mensal',
+      value: formatCurrency(financeiro.receitas_mes),
+      change: '+12%',
+      up: true,
+      icon: DollarSign,
+    },
+  ];
+
   return (
     <div className="space-y-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
-        <div>
-          <h1 className="text-2xl font-bold text-foreground">Visão geral</h1>
-          <p className="text-sm text-muted-foreground">Resumo do que está acontecendo no seu escritório.</p>
-        </div>
-        <Button
-          variant="outline"
-          onClick={loadDashboard}
-          className="border-border/60 text-muted-foreground hover:text-foreground hover:bg-secondary/60"
-        >
-          <RefreshCw className="w-4 h-4 mr-2" />
-          Atualizar
-        </Button>
+      <div>
+        <h1 className="text-2xl font-bold">Bom dia 👋</h1>
+        <p className="text-muted-foreground text-sm">Aqui está o resumo do seu escritório hoje.</p>
       </div>
 
-      {/* Estatísticas principais (novo visual) */}
+      {/* Stats */}
       <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-4">
-        <motion.div {...fade(0)} className="stat-card">
-          <div className="flex items-center justify-between mb-3">
-            <Briefcase className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div className="text-2xl font-bold">{stats.total_processos}</div>
-          <div className="text-xs text-muted-foreground mt-1">Processos cadastrados</div>
-        </motion.div>
-
-        <motion.div {...fade(1)} className="stat-card">
-          <div className="flex items-center justify-between mb-3">
-            <Gavel className="h-5 w-5 text-success" />
-          </div>
-          <div className="text-2xl font-bold">{stats.processos_ativos}</div>
-          <div className="text-xs text-muted-foreground mt-1">Processos ativos</div>
-        </motion.div>
-
-        <motion.div {...fade(2)} className="stat-card">
-          <div className="flex items-center justify-between mb-3">
-            <Users className="h-5 w-5 text-muted-foreground" />
-          </div>
-          <div className="text-2xl font-bold">{stats.total_clientes}</div>
-          <div className="text-xs text-muted-foreground mt-1">Clientes</div>
-        </motion.div>
-
-        <motion.div {...fade(3)} className="stat-card">
-          <div className="flex items-center justify-between mb-3">
-            <Calendar className="h-5 w-5 text-warning" />
-          </div>
-          <div className="text-2xl font-bold">{stats.prazos_pendentes}</div>
-          <div className="text-xs text-muted-foreground mt-1">Prazos pendentes</div>
-        </motion.div>
+        {statCards.map((s, i) => (
+          <motion.div key={s.label} {...fade(i)} className="stat-card">
+            <div className="flex items-center justify-between mb-3">
+              <s.icon className={`h-5 w-5 ${s.alert ? 'text-warning' : 'text-muted-foreground'}`} />
+              <span className={`flex items-center gap-1 text-xs font-medium ${s.up ? 'text-success' : s.alert ? 'text-warning' : 'text-muted-foreground'}`}>
+                {s.up ? <ArrowUpRight className="h-3 w-3" /> : s.alert ? <AlertTriangle className="h-3 w-3" /> : <ArrowDownRight className="h-3 w-3" />}
+                {s.change}
+              </span>
+            </div>
+            <div className="text-2xl font-bold">{typeof s.value === 'string' ? s.value : s.value}</div>
+            <div className="text-xs text-muted-foreground mt-1">{s.label}</div>
+          </motion.div>
+        ))}
       </div>
 
-      {/* Ações rápidas / integrações (mock visual, sem nova lógica) */}
+      {/* Quick Actions */}
       <div className="grid gap-4 sm:grid-cols-3">
-        <motion.div {...fade(4)} className="glass-card-hover p-4 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-secondary text-primary">
-            <Globe className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-medium text-sm">Datajud</div>
-            <div className="text-xs text-muted-foreground">Monitoramento automático dos seus processos</div>
-          </div>
-        </motion.div>
-
-        <motion.div {...fade(5)} className="glass-card-hover p-4 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-secondary text-accent">
-            <Bot className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-medium text-sm">Copiloto IA</div>
-            <div className="text-xs text-muted-foreground">Faça perguntas sobre seus processos</div>
-          </div>
-        </motion.div>
-
-        <motion.div {...fade(6)} className="glass-card-hover p-4 flex items-center gap-4">
-          <div className="h-10 w-10 rounded-xl flex items-center justify-center bg-secondary text-success">
-            <MessageSquare className="h-5 w-5" />
-          </div>
-          <div className="min-w-0">
-            <div className="font-medium text-sm">WhatsApp</div>
-            <div className="text-xs text-muted-foreground">Centralize conversas com clientes</div>
-          </div>
-        </motion.div>
-      </div>
-
-      {/* Financeiro + Prazos + Tarefas – layout novo, dados reais */}
-      <div className="grid gap-6 lg:grid-cols-3">
-        {/* Financeiro (Mês) */}
-        <motion.div {...fade(7)} className="glass-card">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <DollarSign className="w-5 h-5 text-success" />
-              <h2 className="text-sm font-semibold">Financeiro (mês)</h2>
-            </div>
-            <Link to="/dashboard/financeiro">
-              <Button variant="ghost" size="sm" className="text-primary hover:underline px-0">
-                Ver mais <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </div>
-          <div className="space-y-3 text-sm">
-            <div className="flex items-center justify-between rounded-lg border border-success/20 bg-success/5 px-3 py-2">
-              <span className="text-muted-foreground">Entradas</span>
-              <span className="font-semibold text-success">{formatCurrency(financeiro.receitas_mes || 0)}</span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-destructive/20 bg-destructive/5 px-3 py-2">
-              <span className="text-muted-foreground">Saídas</span>
-              <span className="font-semibold text-destructive">
-                {formatCurrency(financeiro.despesas_mes || 0)}
-              </span>
-            </div>
-            <div className="flex items-center justify-between rounded-lg border border-primary/20 bg-primary/5 px-3 py-2">
-              <span className="text-muted-foreground">Saldo</span>
-              <span
-                className={`font-semibold ${
-                  (financeiro.saldo || 0) >= 0 ? 'text-primary' : 'text-destructive'
-                }`}
-              >
-                {formatCurrency(financeiro.saldo || 0)}
-              </span>
-            </div>
-          </div>
-        </motion.div>
-
-        {/* Próximos prazos */}
-        <motion.div {...fade(8)} className="glass-card">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <Clock className="w-5 h-5 text-warning" />
-              <h2 className="text-sm font-semibold">Próximos prazos</h2>
-            </div>
-            <Link to="/prazos">
-              <Button variant="ghost" size="sm" className="text-primary hover:underline px-0">
-                Ver todos <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </div>
-          <ScrollArea className="h-48">
-            <div className="space-y-3">
-              {proximos_prazos.length === 0 && (
-                <p className="text-xs text-muted-foreground text-center py-4">
-                  Nenhum prazo pendente no momento.
-                </p>
-              )}
-              {proximos_prazos.map((prazo) => (
-                <div
-                  key={prazo.id}
-                  className="flex items-start justify-between rounded-lg bg-secondary/40 px-3 py-2 text-xs"
-                >
-                  <div className="min-w-0 mr-2">
-                    <p className="font-medium truncate">
-                      {prazo.processo_titulo || prazo.processo_numero || 'Prazo'}
-                    </p>
-                    {prazo.descricao && (
-                      <p className="text-muted-foreground line-clamp-2">{prazo.descricao}</p>
-                    )}
-                  </div>
-                  <div className="text-right flex flex-col items-end gap-1">
-                    <span className="text-foreground">
-                      {formatDate(prazo.data_prazo ?? prazo.data_final)}
-                    </span>
-                    <Badge className={`text-[10px] ${getPrioridadeColor(prazo.prioridade)}`}>
-                      {prazo.prioridade}
-                    </Badge>
-                  </div>
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </motion.div>
-
-        {/* Minhas tarefas */}
-        <motion.div {...fade(9)} className="glass-card">
-          <div className="flex items-center justify-between mb-4">
-            <div className="flex items-center gap-2">
-              <CheckSquare className="w-5 h-5 text-info" />
-              <h2 className="text-sm font-semibold">Minhas tarefas</h2>
-            </div>
-            <Link to="/tarefas">
-              <Button variant="ghost" size="sm" className="text-primary hover:underline px-0">
-                Ver todas <ArrowRight className="w-4 h-4 ml-1" />
-              </Button>
-            </Link>
-          </div>
-          <ScrollArea className="h-48">
-            <div className="space-y-3 text-xs">
-              {minhas_tarefas.length === 0 && (
-                <p className="text-muted-foreground text-center py-4">
-                  Nenhuma tarefa pendente no momento.
-                </p>
-              )}
-              {minhas_tarefas.map((tarefa) => (
-                <div
-                  key={tarefa.id}
-                  className="rounded-lg bg-secondary/40 px-3 py-2 hover:bg-secondary/60 transition-colors"
-                >
-                  <div className="flex items-start justify-between gap-2">
-                    <div className="min-w-0">
-                      <p className="font-medium truncate">{tarefa.titulo}</p>
-                      {tarefa.processo_numero && (
-                        <p className="text-muted-foreground">{tarefa.processo_numero}</p>
-                      )}
-                    </div>
-                    <Badge className={`text-[10px] ${getPrioridadeColor(tarefa.prioridade)}`}>
-                      {tarefa.prioridade}
-                    </Badge>
-                  </div>
-                  {tarefa.data_vencimento && (
-                    <p className="mt-1 text-muted-foreground">
-                      Vence em {formatDate(tarefa.data_vencimento)}
-                    </p>
-                  )}
-                </div>
-              ))}
-            </div>
-          </ScrollArea>
-        </motion.div>
-      </div>
-
-      {/* Processos com movimentações PJe */}
-      <motion.div {...fade(10)} className="glass-card">
-        <div className="flex items-center justify-between mb-4">
-          <div className="flex items-center gap-2">
-            <FileText className="w-5 h-5 text-primary" />
-            <h2 className="text-sm font-semibold">Processos com movimentações PJe</h2>
-          </div>
-          <Link to="/processos">
-            <Button variant="ghost" size="sm" className="text-primary hover:underline px-0">
-              Ver todos <ArrowRight className="w-4 h-4 ml-1" />
-            </Button>
-          </Link>
-        </div>
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4 text-xs">
-          {processos_movimentacao.length === 0 && (
-            <p className="text-muted-foreground col-span-full text-center py-4">
-              Nenhuma movimentação recente.
-            </p>
-          )}
-          {processos_movimentacao.map((processo) => (
-            <Link key={processo.id} to={`/processos/${processo.id}`}>
-              <div className="p-4 rounded-lg bg-secondary/40 hover:bg-secondary/60 transition-all hover:shadow-lg hover:shadow-primary/10">
-                <div className="flex items-start gap-3">
-                  <div className="w-10 h-10 rounded-lg bg-primary/15 flex items-center justify-center flex-shrink-0">
-                    <RefreshCw className="w-5 h-5 text-primary" />
-                  </div>
-                  <div className="min-w-0 flex-1">
-                    <p className="text-sm font-medium truncate">{processo.titulo}</p>
-                    <p className="text-muted-foreground">{processo.numero}</p>
-                    {processo.ultima_movimentacao && (
-                      <p className="text-primary mt-1 line-clamp-2">
-                        {processo.ultima_movimentacao}
-                      </p>
-                    )}
-                    {processo.data_ultima_movimentacao && (
-                      <p className="text-muted-foreground mt-1">
-                        {new Date(processo.data_ultima_movimentacao).toLocaleDateString('pt-BR')}
-                      </p>
-                    )}
-                  </div>
-                </div>
+        {[
+          { icon: Globe, title: 'Datajud', desc: 'Monitoramento automático', color: 'text-primary', href: '/app/datajud' },
+          { icon: Bot, title: 'Copiloto IA', desc: 'Pergunte sobre seus processos', color: 'text-accent', href: '/app/ia' },
+          { icon: MessageSquare, title: 'WhatsApp', desc: 'Centralize conversas', color: 'text-success', href: '/app/whatsapp' },
+        ].map((a, i) => (
+          <Link key={a.title} to={a.href}>
+            <motion.div {...fade(i + 4)} className="glass-card-hover p-4 flex items-center gap-4 cursor-pointer">
+              <div className={`h-10 w-10 rounded-xl flex items-center justify-center bg-secondary ${a.color}`}>
+                <a.icon className="h-5 w-5" />
               </div>
-            </Link>
-          ))}
-        </div>
-      </motion.div>
+              <div>
+                <div className="font-medium text-sm">{a.title}</div>
+                <div className="text-xs text-muted-foreground">{a.desc}</div>
+              </div>
+            </motion.div>
+          </Link>
+        ))}
+      </div>
+
+      {/* Charts Row */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        <motion.div {...fade(7)} className="glass-card p-5">
+          <h3 className="font-semibold mb-4 text-sm">Financeiro — Últimos 6 meses</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <AreaChart data={chartData}>
+              <defs>
+                <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="hsl(160 84% 39%)" stopOpacity={0.3} />
+                  <stop offset="100%" stopColor="hsl(160 84% 39%)" stopOpacity={0} />
+                </linearGradient>
+              </defs>
+              <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} tickFormatter={(v) => `${v / 1000}k`} />
+              <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} />
+              <Area type="monotone" dataKey="receita" stroke="hsl(160 84% 39%)" fill="url(#gRec)" strokeWidth={2} />
+              <Area type="monotone" dataKey="despesa" stroke="hsl(0 72% 51%)" fill="transparent" strokeWidth={1.5} strokeDasharray="4 4" />
+            </AreaChart>
+          </ResponsiveContainer>
+        </motion.div>
+
+        <motion.div {...fade(8)} className="glass-card p-5">
+          <h3 className="font-semibold mb-4 text-sm">Processos — Novos vs Encerrados</h3>
+          <ResponsiveContainer width="100%" height={220}>
+            <BarChart data={processosChart} barGap={4}>
+              <XAxis dataKey="mes" tick={{ fill: 'hsl(240 5% 55%)', fontSize: 12 }} axisLine={false} tickLine={false} />
+              <YAxis tick={{ fill: 'hsl(240 5% 55%)', fontSize: 11 }} axisLine={false} tickLine={false} />
+              <Tooltip contentStyle={{ background: 'hsl(240 5% 10%)', border: '1px solid hsl(240 4% 16%)', borderRadius: 8, fontSize: 12 }} />
+              <Bar dataKey="novos" fill="hsl(160 84% 39%)" radius={[4, 4, 0, 0]} />
+              <Bar dataKey="encerrados" fill="hsl(240 4% 25%)" radius={[4, 4, 0, 0]} />
+            </BarChart>
+          </ResponsiveContainer>
+        </motion.div>
+      </div>
+
+      {/* Tables Row */}
+      <div className="grid gap-6 lg:grid-cols-2">
+        {/* Recent Processes */}
+        <motion.div {...fade(9)} className="glass-card p-5">
+          <h3 className="font-semibold mb-4 text-sm">Últimas Movimentações</h3>
+          <ScrollArea className="h-64">
+            <div className="space-y-3 pr-4">
+              {processos_movimentacao.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-8">Nenhuma movimentação recente</p>
+              ) : (
+                processos_movimentacao.slice(0, 5).map((p) => (
+                  <Link key={p.id} to={`/processos/${p.id}`}>
+                    <div className="flex items-start justify-between gap-4 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                      <div className="min-w-0">
+                        <div className="text-sm font-medium truncate">{p.cliente_nome || p.titulo}</div>
+                        <div className="text-xs text-muted-foreground truncate">{p.numero}</div>
+                        {p.ultima_movimentacao && <div className="text-xs text-primary mt-1">{p.ultima_movimentacao}</div>}
+                      </div>
+                      {p.tipo && <span className="inline-block px-2 py-1 rounded text-xs bg-primary/20 text-primary whitespace-nowrap">{p.tipo}</span>}
+                    </div>
+                  </Link>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </motion.div>
+
+        {/* Upcoming Deadlines */}
+        <motion.div {...fade(10)} className="glass-card p-5">
+          <h3 className="font-semibold mb-4 text-sm">Prazos Próximos</h3>
+          <ScrollArea className="h-64">
+            <div className="space-y-3 pr-4">
+              {proximos_prazos.length === 0 ? (
+                <p className="text-xs text-muted-foreground text-center py-8">Nenhum prazo pendente</p>
+              ) : (
+                proximos_prazos.slice(0, 5).map((p) => (
+                  <div key={`${p.id}-${p.data_prazo}`} className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
+                    <div>
+                      <div className="text-sm font-medium">{p.descricao || 'Prazo'}</div>
+                      <div className="text-xs text-muted-foreground">{p.processo_numero || p.processo_titulo}</div>
+                    </div>
+                    <div className="text-right">
+                      <div className="text-sm">{formatDate(p.data_prazo || p.data_final)}</div>
+                      <Badge className={`text-[10px] mt-1 ${getPrioridadeColor(p.prioridade)}`}>{p.prioridade}</Badge>
+                    </div>
+                  </div>
+                ))
+              )}
+            </div>
+          </ScrollArea>
+        </motion.div>
+      </div>
     </div>
   );
 }

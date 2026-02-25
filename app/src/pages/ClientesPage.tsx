@@ -1,9 +1,9 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { clientes } from '@/services/api';
+import { motion } from 'framer-motion';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
-import { Card, CardContent } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import {
   Dialog,
@@ -14,19 +14,7 @@ import {
 } from '@/components/ui/dialog';
 import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
-import { 
-  Plus, 
-  Search, 
-  User, 
-  Phone, 
-  Mail, 
-  ArrowRight, 
-  Loader2, 
-  Users,
-  MapPin,
-  FileText,
-  Briefcase
-} from 'lucide-react';
+import { Plus, Search, Phone, Mail, MapPin, User, MoreHorizontal, Loader2, FileText, Briefcase } from 'lucide-react';
 import { toast } from 'sonner';
 
 interface Cliente {
@@ -96,36 +84,36 @@ export function ClientesPage() {
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
-    
+
     if (!formData.nome.trim()) {
       toast.error('Nome é obrigatório');
       return;
     }
-    
+
     setIsSubmitting(true);
 
     try {
       await clientes.create(formData);
       toast.success('Cliente criado com sucesso!');
       setIsDialogOpen(false);
-      setFormData({ 
-        nome: '', 
-        email: '', 
-        telefone: '', 
-        cpf_cnpj: '', 
+      setFormData({
+        nome: '',
+        email: '',
+        telefone: '',
+        cpf_cnpj: '',
         rg_ie: '',
         data_nascimento: '',
         nacionalidade: 'Brasileiro(a)',
         estado_civil: '',
         profissao: '',
-        endereco: '', 
+        endereco: '',
         numero: '',
         complemento: '',
         bairro: '',
         cidade: '',
         estado: '',
         cep: '',
-        observacoes: '' 
+        observacoes: '',
       });
       loadClientes();
     } catch (error: any) {
@@ -133,6 +121,15 @@ export function ClientesPage() {
     } finally {
       setIsSubmitting(false);
     }
+  };
+
+  const getInitials = (nome: string) => {
+    return nome
+      .split(' ')
+      .map((n) => n[0])
+      .join('')
+      .slice(0, 2)
+      .toUpperCase();
   };
 
   const formatPhone = (phone?: string) => {
@@ -148,6 +145,284 @@ export function ClientesPage() {
 
   const formatCPFCNPJ = (doc?: string) => {
     if (!doc) return '';
+    const cleaned = doc.replace(/\D/g, '');
+    if (cleaned.length === 11) {
+      return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
+    } else if (cleaned.length === 14) {
+      return cleaned.replace(/(\d{2})(\d{3})(\d{3})(\d{4})(\d{2})/, '$1.$2.$3/$4-$5');
+    }
+    return doc;
+  };
+
+  const fade = (i: number) => ({
+    initial: { opacity: 0, y: 20 },
+    animate: { opacity: 1, y: 0 },
+    transition: { delay: i * 0.05, duration: 0.4 },
+  });
+
+  return (
+    <div className="space-y-6">
+      <div className="flex items-center justify-between">
+        <div>
+          <h1 className="text-2xl font-bold">Clientes</h1>
+          <p className="text-sm text-muted-foreground">{clientesList.length} clientes cadastrados</p>
+        </div>
+        <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
+          <DialogTrigger asChild>
+            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Plus className="mr-2 h-4 w-4" /> Novo Cliente
+            </Button>
+          </DialogTrigger>
+          <DialogContent className="bg-background border-border max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogHeader>
+              <DialogTitle>Novo Cliente</DialogTitle>
+            </DialogHeader>
+            <form onSubmit={handleSubmit} className="space-y-4 mt-4">
+              <div className="space-y-2">
+                <Label>
+                  Nome Completo <span className="text-red-400">*</span>
+                </Label>
+                <Input
+                  value={formData.nome}
+                  onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
+                  placeholder="Ex: João da Silva"
+                  required
+                  className="bg-secondary border-border"
+                />
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div className="space-y-2">
+                  <Label>Email</Label>
+                  <Input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                    placeholder="cliente@email.com"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Telefone</Label>
+                  <Input
+                    value={formData.telefone}
+                    onChange={(e) => setFormData({ ...formData, telefone: e.target.value })}
+                    placeholder="(00) 00000-0000"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>CPF/CNPJ</Label>
+                  <Input
+                    value={formData.cpf_cnpj}
+                    onChange={(e) => setFormData({ ...formData, cpf_cnpj: e.target.value })}
+                    placeholder="000.000.000-00"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>RG/IE</Label>
+                  <Input
+                    value={formData.rg_ie}
+                    onChange={(e) => setFormData({ ...formData, rg_ie: e.target.value })}
+                    placeholder="00.000.000-0"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Data de Nascimento</Label>
+                  <Input
+                    type="date"
+                    value={formData.data_nascimento}
+                    onChange={(e) => setFormData({ ...formData, data_nascimento: e.target.value })}
+                    className="bg-secondary border-border"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                <div className="space-y-2">
+                  <Label>Nacionalidade</Label>
+                  <Input
+                    value={formData.nacionalidade}
+                    onChange={(e) => setFormData({ ...formData, nacionalidade: e.target.value })}
+                    placeholder="Brasileiro(a)"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Estado Civil</Label>
+                  <Input
+                    value={formData.estado_civil}
+                    onChange={(e) => setFormData({ ...formData, estado_civil: e.target.value })}
+                    placeholder="Solteiro(a), Casado(a)..."
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="space-y-2">
+                  <Label>Profissão</Label>
+                  <Input
+                    value={formData.profissao}
+                    onChange={(e) => setFormData({ ...formData, profissao: e.target.value })}
+                    placeholder="Ex: Advogado, Engenheiro..."
+                    className="bg-secondary border-border"
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-3">
+                <Label>Endereço</Label>
+                <Input
+                  value={formData.endereco}
+                  onChange={(e) => setFormData({ ...formData, endereco: e.target.value })}
+                  placeholder="Rua/Avenida"
+                  className="bg-secondary border-border"
+                />
+                <div className="grid grid-cols-2 gap-4">
+                  <Input
+                    value={formData.numero}
+                    onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
+                    placeholder="Número"
+                    className="bg-secondary border-border"
+                  />
+                  <Input
+                    value={formData.complemento}
+                    onChange={(e) => setFormData({ ...formData, complemento: e.target.value })}
+                    placeholder="Complemento"
+                    className="bg-secondary border-border"
+                  />
+                </div>
+                <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
+                  <Input
+                    value={formData.bairro}
+                    onChange={(e) => setFormData({ ...formData, bairro: e.target.value })}
+                    placeholder="Bairro"
+                    className="bg-secondary border-border"
+                  />
+                  <Input
+                    value={formData.cidade}
+                    onChange={(e) => setFormData({ ...formData, cidade: e.target.value })}
+                    placeholder="Cidade"
+                    className="bg-secondary border-border"
+                  />
+                  <div className="grid grid-cols-2 gap-2">
+                    <Input
+                      value={formData.estado}
+                      onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}
+                      placeholder="UF"
+                      maxLength={2}
+                      className="bg-secondary border-border"
+                    />
+                    <Input
+                      value={formData.cep}
+                      onChange={(e) => setFormData({ ...formData, cep: e.target.value })}
+                      placeholder="CEP"
+                      className="bg-secondary border-border"
+                    />
+                  </div>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Observações</Label>
+                <Textarea
+                  value={formData.observacoes}
+                  onChange={(e) => setFormData({ ...formData, observacoes: e.target.value })}
+                  placeholder="Informações adicionais..."
+                  rows={3}
+                  className="bg-secondary border-border resize-none"
+                />
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isSubmitting || !formData.nome.trim()}
+                className="w-full bg-primary text-primary-foreground"
+              >
+                {isSubmitting ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : 'Criar Cliente'}
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      </div>
+
+      <div className="relative max-w-sm">
+        <Search className="absolute left-3 top-2.5 h-4 w-4 text-muted-foreground" />
+        <Input
+          placeholder="Buscar clientes..."
+          value={search}
+          onChange={(e) => setSearch(e.target.value)}
+          className="pl-10 bg-secondary border-border"
+        />
+      </div>
+
+      {isLoading ? (
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        </div>
+      ) : (
+        <div className="grid gap-4 sm:grid-cols-2 lg:grid-cols-3">
+          {clientesList.length === 0 ? (
+            <div className="col-span-full text-center py-12">
+              <p className="text-muted-foreground">Nenhum cliente encontrado</p>
+            </div>
+          ) : (
+            clientesList.map((c, i) => (
+              <Link key={c.id} to={`/clientes/${c.id}`}>
+                <motion.div {...fade(i)} className="glass-card-hover p-5">
+                  <div className="flex items-start justify-between mb-3">
+                    <div className="flex items-center gap-3">
+                      <div className="h-10 w-10 rounded-full bg-primary/10 flex items-center justify-center text-primary font-semibold text-sm">
+                        {getInitials(c.nome)}
+                      </div>
+                      <div>
+                        <h3 className="font-semibold text-sm">{c.nome}</h3>
+                        <span className="text-xs text-muted-foreground">{formatCPFCNPJ(c.cpf_cnpj)}</span>
+                      </div>
+                    </div>
+                    <Button variant="ghost" size="icon" className="h-8 w-8 text-muted-foreground">
+                      <MoreHorizontal className="h-4 w-4" />
+                    </Button>
+                  </div>
+                  <div className="space-y-2 text-xs text-muted-foreground">
+                    {c.email && (
+                      <div className="flex items-center gap-2">
+                        <Mail className="h-3.5 w-3.5" />
+                        <span className="truncate">{c.email}</span>
+                      </div>
+                    )}
+                    {(c.telefone || c.phone) && (
+                      <div className="flex items-center gap-2">
+                        <Phone className="h-3.5 w-3.5" />
+                        {formatPhone(c.telefone || c.phone)}
+                      </div>
+                    )}
+                    {c.cidade && (
+                      <div className="flex items-center gap-2">
+                        <MapPin className="h-3.5 w-3.5" />
+                        {c.cidade}
+                        {c.estado && `, ${c.estado}`}
+                      </div>
+                    )}
+                  </div>
+                  <div className="mt-4 flex items-center justify-between">
+                    <span className="text-xs text-muted-foreground">{c.processos_count || 0} processo(s)</span>
+                    {c.processos_count ? (
+                      <Badge className="text-[10px] bg-primary/20 text-primary">{c.processos_count}</Badge>
+                    ) : null}
+                  </div>
+                </motion.div>
+              </Link>
+            ))
+          )}
+        </div>
+      )}
+    </div>
+  );
+}
     const cleaned = doc.replace(/\D/g, '');
     if (cleaned.length === 11) {
       return cleaned.replace(/(\d{3})(\d{3})(\d{3})(\d{2})/, '$1.$2.$3-$4');
