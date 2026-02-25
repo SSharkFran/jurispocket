@@ -11,6 +11,8 @@ import Dashboard from "./pages/Dashboard";
 import Clientes from "./pages/Clientes";
 import Processos from "./pages/Processos";
 import ProcessoDetalhe from "./pages/ProcessoDetalhe";
+import NovoProcesso from "./pages/NovoProcesso";
+import Prazos from "./pages/Prazos";
 import Tarefas from "./pages/Tarefas";
 import Financeiro from "./pages/Financeiro";
 import Documentos from "./pages/Documentos";
@@ -38,8 +40,9 @@ const App = () => (
             <Route index element={<Dashboard />} />
             <Route path="clientes" element={<Clientes />} />
             <Route path="processos" element={<Processos />} />
+            <Route path="processos/novo" element={<NovoProcesso />} />
             <Route path="processos/:id" element={<ProcessoDetalhe />} />
-            <Route path="prazos" element={<Tarefas />} />
+            <Route path="prazos" element={<Prazos />} />
             <Route path="tarefas" element={<Tarefas />} />
             <Route path="financeiro" element={<Financeiro />} />
             <Route path="documentos" element={<Documentos />} />
