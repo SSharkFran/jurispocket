@@ -1,4 +1,5 @@
 import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
+import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -23,13 +24,20 @@ import { TemplatesPage } from '@/pages/TemplatesPage';
 import { AdminDashboardPage } from '@/pages/AdminDashboardPage';
 import { PublicoProcessoPage } from '@/pages/PublicoProcessoPage';
 
+// Novas páginas do design
+import DatajudPage from '@/pages/DatajudPage';
+import CopilotIAPage from '@/pages/CopilotIAPage';
+import WhatsAppPage from '@/pages/WhatsAppPage';
+import NotFoundPage from '@/pages/NotFoundPage';
+
 // Layout
 import { DashboardLayout } from '@/components/layout/DashboardLayout';
 import AppLayout from '@/components/AppLayout';
 
 // Components
-import { ChatbotIA } from '@/components/ChatbotIA';
 import { ConvitesBanner } from '@/components/ConvitesBanner';
+
+const queryClient = new QueryClient();
 
 function RedirectToDashboardProcesso() {
   const { id } = useParams<{ id: string }>();
@@ -47,7 +55,7 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-screen bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -77,18 +85,22 @@ function AppRoutes() {
         }
       >
         <Route index element={<DashboardPage />} />
-        <Route path="processos" element={<ProcessosPage />} />
-        <Route path="processos/:id" element={<ProcessoDetalhePage />} />
         <Route path="clientes" element={<ClientesPage />} />
         <Route path="clientes/:id" element={<ClienteDetalhePage />} />
-        <Route path="tarefas" element={<TarefasPage />} />
+        <Route path="processos" element={<ProcessosPage />} />
+        <Route path="processos/:id" element={<ProcessoDetalhePage />} />
         <Route path="prazos" element={<PrazosPage />} />
+        <Route path="tarefas" element={<TarefasPage />} />
         <Route path="financeiro" element={<FinanceiroPage />} />
-        <Route path="equipe" element={<EquipePage />} />
         <Route path="documentos" element={<DocumentosPage />} />
         <Route path="templates" element={<TemplatesPage />} />
+        <Route path="equipe" element={<EquipePage />} />
         <Route path="configuracoes" element={<ConfiguracoesPage />} />
         <Route path="admin" element={<AdminDashboardPage />} />
+        {/* Novas rotas do design */}
+        <Route path="datajud" element={<DatajudPage />} />
+        <Route path="ia" element={<CopilotIAPage />} />
+        <Route path="whatsapp" element={<WhatsAppPage />} />
       </Route>
 
       {/* Dashboard Layout - Compatibilidade com rotas antigas */}
@@ -131,24 +143,25 @@ function AppRoutes() {
       <Route path="/publico/processo/:token" element={<PublicoProcessoPage />} />
 
       {/* Catch-all para rotas indefinidas */}
-      <Route path="*" element={<Navigate to="/" replace />} />
+      <Route path="*" element={<NotFoundPage />} />
     </Routes>
   );
 }
 
 function App() {
   return (
-    <AuthProvider>
-      <TooltipProvider>
-        <BrowserRouter>
-          <AppRoutes />
-          <ConvitesBanner />
-          <ChatbotIA />
-          <ToasterUI />
-          <Toaster position="top-right" richColors />
-        </BrowserRouter>
-      </TooltipProvider>
-    </AuthProvider>
+    <QueryClientProvider client={queryClient}>
+      <AuthProvider>
+        <TooltipProvider>
+          <BrowserRouter>
+            <AppRoutes />
+            <ConvitesBanner />
+            <ToasterUI />
+            <Toaster position="top-right" richColors />
+          </BrowserRouter>
+        </TooltipProvider>
+      </AuthProvider>
+    </QueryClientProvider>
   );
 }
 

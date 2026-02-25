@@ -58,6 +58,10 @@ const AppLayout = () => {
     logout();
   };
 
+  const userInitials = user?.nome 
+    ? user.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
+    : 'U';
+
   const SidebarContent = () => (
     <>
       {/* Logo */}
@@ -106,7 +110,7 @@ const AppLayout = () => {
       <div className="border-t border-border/50 p-4">
         <div className="flex items-center gap-3">
           <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm shrink-0">
-            {user?.nome?.charAt(0).toUpperCase() || 'U'}
+            {userInitials}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">
@@ -120,6 +124,7 @@ const AppLayout = () => {
               size="icon"
               className="h-8 w-8 text-muted-foreground hover:text-foreground"
               onClick={handleLogout}
+              title="Sair"
             >
               <LogOut className="h-4 w-4" />
             </Button>
