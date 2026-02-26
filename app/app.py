@@ -8143,6 +8143,8 @@ import os
 STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
 
 @app.route('/api/health')
+@app.route('/health')
+@app.route('/healthz')
 def health_check():
     """Health check endpoint - rápido e leve para o Railway"""
     try:
