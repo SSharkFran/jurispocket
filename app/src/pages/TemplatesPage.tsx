@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { api } from '@/services/api';
+import { api, templates as templatesApi } from '@/services/api';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
@@ -139,7 +139,7 @@ export function TemplatesPage() {
   const carregarTemplates = async () => {
     try {
       setLoading(true);
-      const response = await api.get('/templates');
+      const response = await templatesApi.list();
       console.log('Templates carregados:', response.data);
       setTemplates(response.data);
     } catch (error) {
@@ -171,7 +171,7 @@ export function TemplatesPage() {
         uploadData.append('descricao', formData.descricao);
         uploadData.append('categoria', formData.categoria);
         
-        await api.post('/templates/upload', uploadData, {
+        // Upload de arquivo não implementado na API helper
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
@@ -193,7 +193,7 @@ export function TemplatesPage() {
       }
       
       try {
-        await api.post('/templates', formData);
+        await templatesApi.create(formData);
         toast.success('Template criado com sucesso!');
         setIsCreateOpen(false);
         resetForm();
@@ -209,7 +209,7 @@ export function TemplatesPage() {
     if (!selectedTemplate) return;
     
     try {
-      await api.put(`/templates/${selectedTemplate.id}`, formData);
+      await templatesApi.update(selectedTemplate.id, formData);
       toast.success('Template atualizado com sucesso!');
       setIsEditOpen(false);
       setSelectedTemplate(null);
@@ -224,7 +224,7 @@ export function TemplatesPage() {
     if (!confirm('Tem certeza que deseja excluir este template?')) return;
 
     try {
-      await api.delete(`/templates/${id}`);
+      await templatesApi.delete(id);
       toast.success('Template excluído com sucesso!');
       carregarTemplates();
     } catch (error) {

@@ -223,5 +223,17 @@ export const admin = {
   workspaces: () => api.get('/admin/workspaces'),
 };
 
+export const templates = {
+  list: () => api.get('/templates'),
+  get: (id: number) => api.get(`/templates/${id}`),
+  create: (data: { nome: string; descricao?: string; conteudo: string; tipo_arquivo: 'texto' | 'docx'; variaveis?: string[] }) =>
+    api.post('/templates', data),
+  update: (id: number, data: Partial<{ nome?: string; descricao?: string; conteudo?: string; tipo_arquivo?: 'texto' | 'docx'; variaveis?: string[] }>) =>
+    api.put(`/templates/${id}`, data),
+  delete: (id: number) => api.delete(`/templates/${id}`),
+  gerar: (id: number, data: { processo_id: number; formato?: 'json' | 'download' }) =>
+    api.post(`/templates/${id}/gerar`, data, { responseType: 'blob' }),
+};
+
 export { api };
 export default api;

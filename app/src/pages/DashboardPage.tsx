@@ -52,6 +52,7 @@ interface Processo {
   tipo?: string;
   data_abertura?: string;
   created_at?: string;
+  status?: string;
 }
 
 interface DashboardData {
@@ -86,23 +87,51 @@ export function DashboardPage() {
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [processosList, setProcessosList] = useState<Processo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [temDadosFinanceiros, setTemDadosFinanceiros] = useState(false);
-  const [temDadosProcessos, setTemDadosProcessos] = useState(false);
+  const [debugInfo, setDebugInfo] = useState<string>('');
 
   const loadDashboard = async () => {
     try {
       setIsLoading(true);
+      setDebugInfo('Iniciando carregamento...');
+      
+      console.log('[Dashboard] Iniciando requisições...');
+      
       const [dashboardRes, financeiroRes, processosRes] = await Promise.all([
-        dashboard.get(),
-        financeiro.list(),
-        processos.list(),
+        dashboard.get().catch(e => {
+          console.error('[Dashboard] Erro ao carregar dashboard:', e);
+          return { data: null };
+        }),
+        financeiro.listTransacoes().catch(e => {
+          console.error('[Dashboard] Erro ao carregar financeiro:', e);
+          return { data: [] };
+        }),
+        processos.list().catch(e => {
+          console.error('[Dashboard] Erro ao carregar processos:', e);
+          return { data: { processos: [] } };
+        }),
       ]);
       
+      console.log('[Dashboard] Dashboard response:', dashboardRes.data);
+      console.log('[Dashboard] Financeiro response:', financeiroRes.data);
+      console.log('[Dashboard] Processos response:', processosRes.data);
+      
       setData(dashboardRes.data);
-      setTransacoes(financeiroRes.data || []);
-      setProcessosList(processosRes.data.processos || processosRes.data || []);
-    } catch (error) {
-      toast.error('Erro ao carregar dashboard');
+      
+      // Extrair transações da resposta
+      const transacoesData = financeiroRes.data?.transacoes || financeiroRes.data || [];
+      console.log('[Dashboard] Transações extraídas:', transacoesData);
+      setTransacoes(Array.isArray(transacoesData) ? transacoesData : []);
+      
+      // Extrair processos da resposta
+      const processosData = processosRes.data?.processos || processosRes.data || [];
+      console.log('[Dashboard] Processos extraídos:', processosData);
+      setProcessosList(Array.isArray(processosData) ? processosData : []);
+      
+      setDebugInfo(`Carregado: ${transacoesData.length} transações, ${processosData.length} processos`);
+    } catch (error: any) {
+      console.error('[Dashboard] Erro geral:', error);
+      setDebugInfo(`Erro: ${error.message}`);
+      toast.error('Erro ao carregar dashboard: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setIsLoading(false);
     }
@@ -140,35 +169,49 @@ export function DashboardPage() {
   };
 
   // Preparar dados para gráficos
-  // === GRÁFICO FINANCEIRO - Apenas meses com dados reais ===
   const meses = ['Jan', 'Fev', 'Mar', 'Abr', 'Mai', 'Jun', 'Jul', 'Ago', 'Set', 'Out', 'Nov', 'Dez'];
   
+  // Agrupar transações por mês/ano
   const transacoesPorMes: Record<string, { receita: number; despesa: number }> = {};
   
   transacoes.forEach((t: Transacao) => {
     if (!t.data_transacao) return;
-    const data = new Date(t.data_transacao);
-    const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
     
-    if (!transacoesPorMes[chave]) {
-      transacoesPorMes[chave] = { receita: 0, despesa: 0 };
-    }
-    
-    const valor = parseFloat(String(t.valor)) || 0;
-    if (t.tipo === 'entrada') {
-      transacoesPorMes[chave].receita += valor;
-    } else if (t.tipo === 'saida') {
-      transacoesPorMes[chave].despesa += valor;
+    try {
+      const data = new Date(t.data_transacao);
+      if (isNaN(data.getTime())) return;
+      
+      const mes = meses[data.getMonth()];
+      const ano = data.getFullYear();
+      const chave = `${mes}/${ano}`;
+      
+      if (!transacoesPorMes[chave]) {
+        transacoesPorMes[chave] = { receita: 0, despesa: 0 };
+      }
+      
+      const valor = Number(t.valor) || 0;
+      if (t.tipo === 'entrada') {
+        transacoesPorMes[chave].receita += valor;
+      } else if (t.tipo === 'saida') {
+        transacoesPorMes[chave].despesa += valor;
+      }
+    } catch (e) {
+      console.error('[Dashboard] Erro ao processar transação:', t, e);
     }
   });
 
-  const temFin = Object.values(transacoesPorMes).some(m => m.receita > 0 || m.despesa > 0);
+  console.log('[Dashboard] Transações por mês:', transacoesPorMes);
+  
+  // Ordenar meses cronologicamente
   const chartData = Object.entries(transacoesPorMes)
     .filter(([_, valores]) => valores.receita > 0 || valores.despesa > 0)
     .sort((a, b) => {
       const [mesA, anoA] = a[0].split('/');
       const [mesB, anoB] = b[0].split('/');
-      return new Date(parseInt(anoA), meses.indexOf(mesA)).getTime() - new Date(parseInt(anoB), meses.indexOf(mesB)).getTime();
+      const idxA = meses.indexOf(mesA);
+      const idxB = meses.indexOf(mesB);
+      if (anoA !== anoB) return parseInt(anoA) - parseInt(anoB);
+      return idxA - idxB;
     })
     .slice(-6)
     .map(([mes, valores]) => ({
@@ -177,33 +220,47 @@ export function DashboardPage() {
       despesa: valores.despesa
     }));
 
-  // === GRÁFICO DE PROCESSOS - Baseado nas datas reais de criação ===
+  console.log('[Dashboard] Chart data (financeiro):', chartData);
+
+  // Agrupar processos por mês
   const processosPorMes: Record<string, { novos: number; encerrados: number }> = {};
   
   processosList.forEach((p: Processo) => {
     const dataStr = p.data_abertura || p.created_at;
     if (!dataStr) return;
     
-    const data = new Date(dataStr);
-    const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
-    
-    if (!processosPorMes[chave]) {
-      processosPorMes[chave] = { novos: 0, encerrados: 0 };
-    }
-    
-    if (p.status === 'encerrado' || p.status === 'arquivado') {
-      processosPorMes[chave].encerrados++;
-    } else {
-      processosPorMes[chave].novos++;
+    try {
+      const data = new Date(dataStr);
+      if (isNaN(data.getTime())) return;
+      
+      const chave = `${meses[data.getMonth()]}/${data.getFullYear()}`;
+      
+      if (!processosPorMes[chave]) {
+        processosPorMes[chave] = { novos: 0, encerrados: 0 };
+      }
+      
+      if (p.status === 'encerrado' || p.status === 'arquivado') {
+        processosPorMes[chave].encerrados++;
+      } else {
+        processosPorMes[chave].novos++;
+      }
+    } catch (e) {
+      console.error('[Dashboard] Erro ao processar processo:', p, e);
     }
   });
 
-  const temProc = Object.values(processosPorMes).some(m => m.novos > 0 || m.encerrados > 0);
+  console.log('[Dashboard] Processos por mês:', processosPorMes);
+  
+  // Ordenar meses cronologicamente
   const processosChart = Object.entries(processosPorMes)
+    .filter(([_, valores]) => valores.novos > 0 || valores.encerrados > 0)
     .sort((a, b) => {
       const [mesA, anoA] = a[0].split('/');
       const [mesB, anoB] = b[0].split('/');
-      return new Date(parseInt(anoA), meses.indexOf(mesA)).getTime() - new Date(parseInt(anoB), meses.indexOf(mesB)).getTime();
+      const idxA = meses.indexOf(mesA);
+      const idxB = meses.indexOf(mesB);
+      if (anoA !== anoB) return parseInt(anoA) - parseInt(anoB);
+      return idxA - idxB;
     })
     .slice(-6)
     .map(([mes, valores]) => ({
@@ -211,6 +268,8 @@ export function DashboardPage() {
       novos: valores.novos,
       encerrados: valores.encerrados
     }));
+
+  console.log('[Dashboard] Chart data (processos):', processosChart);
 
   if (isLoading) {
     return (
@@ -275,6 +334,14 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
+      {/* Debug info - remover depois */}
+      {debugInfo && (
+        <div className="text-xs text-muted-foreground bg-secondary p-2 rounded">
+          Debug: {debugInfo} | Transações: {transacoes.length} | Processos: {processosList.length} | 
+          Dados financeiros: {chartData.length} meses | Dados processos: {processosChart.length} meses
+        </div>
+      )}
+      
       {/* Header */}
       <div>
         <h1 className="text-2xl font-bold">Dashboard</h1>

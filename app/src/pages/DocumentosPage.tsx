@@ -119,7 +119,7 @@ export function DocumentosPage() {
       if (uploadForm.categoria) formData.append('categoria', uploadForm.categoria);
       if (uploadForm.processo_id) formData.append('processo_id', uploadForm.processo_id);
 
-      await documentosApi.create(formData);
+      await documentosApi.upload(formData);
       
       toast.success('Documento enviado com sucesso!');
       setIsUploadDialogOpen(false);
