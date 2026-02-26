@@ -55,8 +55,8 @@ export function PublicoProcessoPage() {
   const carregarProcesso = async () => {
     try {
       // Usa URL completa para acessar o backend (sem /api, rota pública)
-      const apiUrl = 'http://localhost:5000';
-      const url = `${apiUrl}/publico/processo/${token}`;
+      const apiBase = (import.meta.env.VITE_API_URL || '/api').replace(/\/$/, '');
+      const url = `${apiBase}/publico/processo/${token}`;
       console.log('[Publico] Buscando:', url);
       
       const response = await axios.get(url);

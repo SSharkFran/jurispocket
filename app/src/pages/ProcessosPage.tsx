@@ -34,6 +34,8 @@ interface Processo {
   comarca?: string;
   ultima_movimentacao?: string;
   link_publico?: string;
+  public_token?: string;
+  public_link_enabled?: boolean;
 }
 
 const statusColors: Record<string, string> = {
@@ -51,7 +53,15 @@ export function ProcessosPage() {
   const [searchQuery, setSearchQuery] = useState(searchParams.get('search') || '');
   const [linkDialogOpen, setLinkDialogOpen] = useState(false);
   const [linkPublico, setLinkPublico] = useState<string | null>(null);
+  const [linkPublicoUrl, setLinkPublicoUrl] = useState<string | null>(null);
   const [processoSelecionado, setProcessoSelecionado] = useState<Processo | null>(null);
+
+  const montarUrlPublica = (token?: string | null, urlCompleta?: string | null) => {
+    const tokenViaUrl = urlCompleta?.split('/publico/processo/')[1]?.split(/[?#]/)[0];
+    const tokenFinal = token || tokenViaUrl;
+    if (!tokenFinal) return null;
+    return `${window.location.origin}/publico/processo/${tokenFinal}`;
+  };
 
   const carregarProcessos = async () => {
     try {
@@ -91,8 +101,10 @@ export function ProcessosPage() {
   const handleGerarLinkPublico = async (processo: Processo) => {
     try {
       const response = await processos.gerarLinkPublico(processo.id);
-      const link = response.data.link_publico;
-      setLinkPublico(link);
+      const token = response.data.token || response.data.link_publico;
+      const url = montarUrlPublica(token, response.data.url);
+      setLinkPublico(token || null);
+      setLinkPublicoUrl(url);
       setProcessoSelecionado(processo);
       setLinkDialogOpen(true);
       carregarProcessos();
@@ -109,9 +121,11 @@ export function ProcessosPage() {
   const handleVerLinkPublico = async (processo: Processo) => {
     try {
       const response = await processos.getLinkPublico(processo.id);
-      const link = response.data.link_publico;
-      if (link) {
-        setLinkPublico(link);
+      const token = response.data.token || response.data.link_publico;
+      if (response.data.ativo && token) {
+        const url = montarUrlPublica(token, response.data.url);
+        setLinkPublico(token);
+        setLinkPublicoUrl(url);
         setProcessoSelecionado(processo);
         setLinkDialogOpen(true);
       } else {
@@ -123,8 +137,8 @@ export function ProcessosPage() {
   };
 
   const handleCopiarLink = () => {
-    if (linkPublico) {
-      navigator.clipboard.writeText(`${window.location.origin}/publico/processo/${linkPublico}`);
+    if (linkPublicoUrl) {
+      navigator.clipboard.writeText(linkPublicoUrl);
       toast.success('Link copiado para a área de transferência!');
     }
   };
@@ -142,8 +156,8 @@ export function ProcessosPage() {
   };
 
   const handleAbrirLinkPublico = () => {
-    if (linkPublico) {
-      window.open(`${window.location.origin}/publico/processo/${linkPublico}`, '_blank');
+    if (linkPublicoUrl) {
+      window.open(linkPublicoUrl, '_blank');
     }
   };
 
@@ -232,9 +246,9 @@ export function ProcessosPage() {
                         <Button 
                           variant="ghost" 
                           size="icon" 
-                          className={`h-8 w-8 ${p.link_publico ? 'text-green-400' : 'text-muted-foreground hover:text-primary'}`}
-                          onClick={() => p.link_publico ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}
-                          title={p.link_publico ? 'Ver link público' : 'Gerar link público'}
+                          className={`h-8 w-8 ${p.public_link_enabled ? 'text-green-400' : 'text-muted-foreground hover:text-primary'}`}
+                          onClick={() => p.public_link_enabled ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}
+                          title={p.public_link_enabled ? 'Ver link público' : 'Gerar link público'}
                         >
                           <Link2 className="h-4 w-4" />
                         </Button>
@@ -255,8 +269,8 @@ export function ProcessosPage() {
                             <DropdownMenuItem onClick={() => navigate(`/app/processos/${p.id}`)}>
                               <Edit className="mr-2 h-4 w-4" /> Editar
                             </DropdownMenuItem>
-                            <DropdownMenuItem onClick={() => p.link_publico ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}>
-                              <Globe className="mr-2 h-4 w-4" /> {p.link_publico ? 'Ver link público' : 'Gerar link público'}
+                            <DropdownMenuItem onClick={() => p.public_link_enabled ? handleVerLinkPublico(p) : handleGerarLinkPublico(p)}>
+                              <Globe className="mr-2 h-4 w-4" /> {p.public_link_enabled ? 'Ver link público' : 'Gerar link público'}
                             </DropdownMenuItem>
                             <DropdownMenuSeparator />
                             <DropdownMenuItem 
@@ -292,7 +306,7 @@ export function ProcessosPage() {
             )}
             <div className="flex items-center gap-2 p-3 bg-secondary rounded-lg">
               <code className="flex-1 text-xs break-all">
-                {`${window.location.origin}/publico/processo/${linkPublico}`}
+                {linkPublicoUrl || '-'}
               </code>
               <Button size="sm" variant="ghost" onClick={handleCopiarLink}>
                 <Copy className="h-4 w-4" />
@@ -321,3 +335,4 @@ export function ProcessosPage() {
     </div>
   );
 }
+

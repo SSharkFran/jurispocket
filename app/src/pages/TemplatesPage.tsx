@@ -307,8 +307,8 @@ export function TemplatesPage() {
       {/* Header */}
       <div className="flex items-center justify-between">
         <div>
-          <h1 className="text-3xl font-bold text-slate-100">Templates de Documentos</h1>
-          <p className="text-slate-400 mt-1">
+          <h1 className="text-3xl font-bold text-foreground">Templates de Documentos</h1>
+          <p className="text-muted-foreground mt-1">
             Crie modelos com variáveis para gerar documentos automaticamente
           </p>
         </div>
@@ -316,12 +316,12 @@ export function TemplatesPage() {
           <Button 
             variant="outline" 
             onClick={handleDownloadModelo}
-            className="border-slate-600"
+            className="border-border"
           >
             <Download className="w-4 h-4 mr-2" />
             Guia de Variáveis
           </Button>
-          <Button onClick={() => setIsCreateOpen(true)} className="bg-cyan-600 hover:bg-cyan-700">
+          <Button onClick={() => setIsCreateOpen(true)} className="bg-primary hover:bg-primary/90">
             <Plus className="w-4 h-4 mr-2" />
             Novo Template
           </Button>
@@ -331,16 +331,16 @@ export function TemplatesPage() {
       {/* Filtros */}
       <div className="flex gap-4 flex-wrap">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar templates..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="pl-10 bg-slate-800 border-slate-700"
+            className="pl-10 bg-secondary border-border"
           />
         </div>
         <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
-          <SelectTrigger className="w-48 bg-slate-800 border-slate-700">
+          <SelectTrigger className="w-48 bg-secondary border-border">
             <SelectValue placeholder="Todas categorias" />
           </SelectTrigger>
           <SelectContent>
@@ -351,7 +351,7 @@ export function TemplatesPage() {
           </SelectContent>
         </Select>
         <Select value={tipoFiltro} onValueChange={(v) => setTipoFiltro(v as any)}>
-          <SelectTrigger className="w-40 bg-slate-800 border-slate-700">
+          <SelectTrigger className="w-40 bg-secondary border-border">
             <SelectValue placeholder="Todos tipos" />
           </SelectTrigger>
           <SelectContent>
@@ -365,16 +365,16 @@ export function TemplatesPage() {
       {/* Lista de Templates */}
       {loading ? (
         <div className="flex items-center justify-center h-64">
-          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500" />
+          <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary" />
         </div>
       ) : filteredTemplates.length === 0 ? (
-        <Card className="bg-slate-800 border-slate-700">
+        <Card className="bg-secondary border-border">
           <CardContent className="flex flex-col items-center justify-center py-12">
-            <FileCode className="w-12 h-12 text-slate-500 mb-4" />
-            <p className="text-slate-400">Nenhum template encontrado</p>
+            <FileCode className="w-12 h-12 text-muted-foreground mb-4" />
+            <p className="text-muted-foreground">Nenhum template encontrado</p>
             <Button 
               variant="outline" 
-              className="mt-4 border-slate-600"
+              className="mt-4 border-border"
               onClick={() => setIsCreateOpen(true)}
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -385,7 +385,7 @@ export function TemplatesPage() {
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
           {filteredTemplates.map(template => (
-            <Card key={template.id} className="bg-slate-800 border-slate-700 hover:border-slate-600 transition-colors">
+            <Card key={template.id} className="bg-secondary border-border hover:border-border transition-colors">
               <CardHeader className="pb-3">
                 <div className="flex items-start justify-between">
                   <div className="flex-1 min-w-0">
@@ -393,18 +393,18 @@ export function TemplatesPage() {
                       {template.tipo_arquivo === 'docx' ? (
                         <File className="w-5 h-5 text-blue-400" />
                       ) : (
-                        <FileText className="w-5 h-5 text-cyan-400" />
+                        <FileText className="w-5 h-5 text-primary" />
                       )}
-                      <CardTitle className="text-lg text-slate-100 truncate">
+                      <CardTitle className="text-lg text-foreground truncate">
                         {template.nome}
                       </CardTitle>
                     </div>
-                    <CardDescription className="text-slate-400 text-sm mt-1">
+                    <CardDescription className="text-muted-foreground text-sm mt-1">
                       {template.descricao || 'Sem descrição'}
                     </CardDescription>
                   </div>
                   <div className="flex flex-col gap-1">
-                    <Badge variant="outline" className="border-slate-600 text-xs">
+                    <Badge variant="outline" className="border-border text-xs">
                       {getCategoriaLabel(template.categoria)}
                     </Badge>
                     <Badge 
@@ -417,7 +417,7 @@ export function TemplatesPage() {
                 </div>
               </CardHeader>
               <CardContent>
-                <div className="text-xs text-slate-500 mb-4">
+                <div className="text-xs text-muted-foreground mb-4">
                   Criado por {template.criado_por_nome || 'Desconhecido'} em{' '}
                   {new Date(template.created_at).toLocaleDateString('pt-BR')}
                 </div>
@@ -426,7 +426,7 @@ export function TemplatesPage() {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handlePreview(template)}
-                    className="text-slate-400 hover:text-slate-100"
+                    className="text-muted-foreground hover:text-foreground"
                   >
                     <Eye className="w-4 h-4 mr-1" />
                     Ver
@@ -436,7 +436,7 @@ export function TemplatesPage() {
                       variant="ghost" 
                       size="sm" 
                       onClick={() => handleEdit(template)}
-                      className="text-slate-400 hover:text-cyan-400"
+                      className="text-muted-foreground hover:text-primary"
                     >
                       <Edit2 className="w-4 h-4 mr-1" />
                       Editar
@@ -446,7 +446,7 @@ export function TemplatesPage() {
                     variant="ghost" 
                     size="sm" 
                     onClick={() => handleDelete(template.id)}
-                    className="text-slate-400 hover:text-red-400"
+                    className="text-muted-foreground hover:text-red-400"
                   >
                     <Trash2 className="w-4 h-4" />
                   </Button>
@@ -459,10 +459,10 @@ export function TemplatesPage() {
 
       {/* Dialog Criar Template */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] bg-slate-800 border-slate-700 text-slate-100 overflow-y-auto">
+        <DialogContent className="max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-cyan-500" />
+              <FileText className="w-5 h-5 text-primary" />
               Novo Template de Documento
             </DialogTitle>
           </DialogHeader>
@@ -490,7 +490,7 @@ export function TemplatesPage() {
                 </Label>
               </div>
             </RadioGroup>
-            <p className="text-xs text-slate-500 mt-2">
+            <p className="text-xs text-muted-foreground mt-2">
               {formData.tipo_arquivo === 'texto' 
                 ? 'Crie o template usando o editor de texto com variáveis.'
                 : 'Faça upload de um arquivo Word (.docx) com as variáveis já inseridas.'}
@@ -529,10 +529,10 @@ export function TemplatesPage() {
 
       {/* Dialog Editar Template */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] bg-slate-800 border-slate-700 text-slate-100">
+        <DialogContent className="max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Edit2 className="w-5 h-5 text-cyan-500" />
+              <Edit2 className="w-5 h-5 text-primary" />
               Editar Template
             </DialogTitle>
           </DialogHeader>
@@ -553,13 +553,13 @@ export function TemplatesPage() {
 
       {/* Dialog Preview */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] bg-slate-800 border-slate-700 text-slate-100">
+        <DialogContent className="max-w-3xl max-h-[90vh] bg-secondary border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedTemplate?.tipo_arquivo === 'docx' ? (
                 <File className="w-5 h-5 text-blue-400" />
               ) : (
-                <FileText className="w-5 h-5 text-cyan-400" />
+                <FileText className="w-5 h-5 text-primary" />
               )}
               {selectedTemplate?.nome}
             </DialogTitle>
@@ -567,37 +567,37 @@ export function TemplatesPage() {
           
           {selectedTemplate?.tipo_arquivo === 'docx' ? (
             <div className="space-y-4">
-              <div className="bg-blue-900/30 border border-blue-700/50 rounded-lg p-4">
+              <div className="bg-accent/10 border border-accent/40 rounded-lg p-4">
                 <div className="flex items-center gap-3">
                   <File className="w-10 h-10 text-blue-400" />
                   <div>
-                    <p className="font-medium text-slate-100">Template Word (.docx)</p>
-                    <p className="text-sm text-slate-400">
+                    <p className="font-medium text-foreground">Template Word (.docx)</p>
+                    <p className="text-sm text-muted-foreground">
                       Este é um template Word. O documento será gerado no formato .docx mantendo toda a formatação.
                     </p>
                   </div>
                 </div>
               </div>
               
-              <div className="bg-slate-900 p-4 rounded-lg">
-                <p className="text-sm text-slate-400 mb-2">Variáveis disponíveis neste template:</p>
+              <div className="bg-card p-4 rounded-lg">
+                <p className="text-sm text-muted-foreground mb-2">Variáveis disponíveis neste template:</p>
                 <div className="flex flex-wrap gap-2">
                   {Object.values(VARIAVEIS_DISPONIVEIS).flat().slice(0, 10).map((v) => (
-                    <code key={v.var} className="text-xs bg-slate-800 px-2 py-1 rounded text-cyan-400">
+                    <code key={v.var} className="text-xs bg-secondary px-2 py-1 rounded text-primary">
                       {v.var}
                     </code>
                   ))}
-                  <span className="text-xs text-slate-500">...e mais</span>
+                  <span className="text-xs text-muted-foreground">...e mais</span>
                 </div>
               </div>
               
-              <p className="text-sm text-slate-400">
+              <p className="text-sm text-muted-foreground">
                 Para usar este template, vá até um processo e clique em "Gerar Documento".
               </p>
             </div>
           ) : (
             <ScrollArea className="h-[60vh]">
-              <div className="bg-slate-900 p-6 rounded-lg whitespace-pre-wrap font-mono text-sm text-slate-300">
+              <div className="bg-card p-6 rounded-lg whitespace-pre-wrap font-mono text-sm text-foreground">
                 {selectedTemplate?.conteudo}
               </div>
             </ScrollArea>
@@ -607,7 +607,7 @@ export function TemplatesPage() {
             <Button 
               variant="outline" 
               onClick={() => setIsPreviewOpen(false)}
-              className="border-slate-600"
+              className="border-border"
             >
               Fechar
             </Button>
@@ -619,7 +619,7 @@ export function TemplatesPage() {
                     toast.success('Conteúdo copiado!');
                   }
                 }}
-                className="bg-cyan-600 hover:bg-cyan-700"
+                className="bg-primary hover:bg-primary/90"
               >
                 <Copy className="w-4 h-4 mr-2" />
                 Copiar Texto
@@ -659,7 +659,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
             value={formData.nome}
             onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             placeholder="Ex: Procuração Ad Judicia"
-            className="bg-slate-900 border-slate-700 mt-1"
+            className="bg-card border-border mt-1"
           />
         </div>
         <div>
@@ -668,7 +668,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
             value={formData.categoria} 
             onValueChange={(v) => setFormData({ ...formData, categoria: v })}
           >
-            <SelectTrigger className="bg-slate-900 border-slate-700 mt-1">
+            <SelectTrigger className="bg-card border-border mt-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -687,7 +687,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
           value={formData.descricao}
           onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
           placeholder="Breve descrição do template"
-          className="bg-slate-900 border-slate-700 mt-1"
+          className="bg-card border-border mt-1"
         />
       </div>
 
@@ -696,7 +696,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
         <div className="flex-1 flex flex-col">
           <Label htmlFor="conteudo" className="mb-1">
             Conteúdo do Documento *
-            <span className="text-xs text-slate-500 ml-2">
+            <span className="text-xs text-muted-foreground ml-2">
               Use {'{{variavel}}'} para campos dinâmicos
             </span>
           </Label>
@@ -705,21 +705,21 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
             value={formData.conteudo}
             onChange={(e) => setFormData({ ...formData, conteudo: e.target.value })}
             placeholder="Digite o conteúdo do documento aqui...&#10;&#10;Ex:&#10;Eu, {{cliente_nome}}, portador do CPF {{cliente_cpf}},..."
-            className="flex-1 bg-slate-900 border-slate-700 font-mono text-sm resize-none"
+            className="flex-1 bg-card border-border font-mono text-sm resize-none"
           />
         </div>
 
         {/* Painel de Variáveis */}
-        <div className="w-64 bg-slate-900 rounded-lg border border-slate-700 flex flex-col max-h-[500px]">
-          <div className="p-3 border-b border-slate-700 flex items-center gap-2 shrink-0">
-            <HelpCircle className="w-4 h-4 text-cyan-500" />
+        <div className="w-64 bg-card rounded-lg border border-border flex flex-col max-h-[500px]">
+          <div className="p-3 border-b border-border flex items-center gap-2 shrink-0">
+            <HelpCircle className="w-4 h-4 text-primary" />
             <span className="font-medium text-sm">Variáveis Disponíveis</span>
           </div>
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="p-2 space-y-4">
               {Object.entries(VARIAVEIS_DISPONIVEIS).map(([grupo, vars]) => (
                 <div key={grupo}>
-                  <h4 className="text-xs font-semibold text-slate-500 uppercase tracking-wider mb-2 px-1">
+                  <h4 className="text-xs font-semibold text-muted-foreground uppercase tracking-wider mb-2 px-1">
                     {grupo}
                   </h4>
                   <div className="space-y-1">
@@ -727,11 +727,11 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
                       <button
                         key={v.var}
                         onClick={() => onInsertVar(v.var)}
-                        className="w-full text-left px-2 py-1.5 rounded hover:bg-slate-800 transition-colors group"
+                        className="w-full text-left px-2 py-1.5 rounded hover:bg-secondary transition-colors group"
                         title={v.desc}
                       >
-                        <code className="text-xs text-cyan-400 font-mono">{v.var}</code>
-                        <p className="text-xs text-slate-500 truncate">{v.desc}</p>
+                        <code className="text-xs text-primary font-mono">{v.var}</code>
+                        <p className="text-xs text-muted-foreground truncate">{v.desc}</p>
                       </button>
                     ))}
                   </div>
@@ -739,17 +739,17 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
               ))}
             </div>
           </ScrollArea>
-          <div className="p-3 border-t border-slate-700 text-xs text-slate-500 shrink-0">
+          <div className="p-3 border-t border-border text-xs text-muted-foreground shrink-0">
             Clique para inserir no texto
           </div>
         </div>
       </div>
 
       <DialogFooter className="mt-4">
-        <Button variant="outline" onClick={onCancel} className="border-slate-600">
+        <Button variant="outline" onClick={onCancel} className="border-border">
           Cancelar
         </Button>
-        <Button onClick={onSubmit} className="bg-cyan-600 hover:bg-cyan-700">
+        <Button onClick={onSubmit} className="bg-primary hover:bg-primary/90">
           {submitLabel}
         </Button>
       </DialogFooter>
@@ -793,7 +793,7 @@ function WordUploadForm({
             value={formData.nome}
             onChange={(e) => setFormData({ ...formData, nome: e.target.value })}
             placeholder="Ex: Procuração Ad Judicia"
-            className="bg-slate-900 border-slate-700 mt-1"
+            className="bg-card border-border mt-1"
           />
         </div>
         <div>
@@ -802,7 +802,7 @@ function WordUploadForm({
             value={formData.categoria} 
             onValueChange={(v) => setFormData({ ...formData, categoria: v })}
           >
-            <SelectTrigger className="bg-slate-900 border-slate-700 mt-1">
+            <SelectTrigger className="bg-card border-border mt-1">
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
@@ -821,7 +821,7 @@ function WordUploadForm({
           value={formData.descricao}
           onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
           placeholder="Breve descrição do template"
-          className="bg-slate-900 border-slate-700 mt-1"
+          className="bg-card border-border mt-1"
         />
       </div>
 
@@ -830,7 +830,7 @@ function WordUploadForm({
         <div className="flex-1 flex flex-col">
           <Label className="mb-2">Arquivo Word (.docx) *</Label>
           <div 
-            className="flex-1 border-2 border-dashed border-slate-700 rounded-lg flex flex-col items-center justify-center p-8 hover:border-slate-500 transition-colors cursor-pointer bg-slate-900/50"
+            className="flex-1 border-2 border-dashed border-border rounded-lg flex flex-col items-center justify-center p-8 hover:border-primary/40 transition-colors cursor-pointer bg-secondary/30"
             onClick={() => fileInputRef.current?.click()}
           >
             <input
@@ -844,8 +844,8 @@ function WordUploadForm({
             {arquivoWord ? (
               <div className="text-center">
                 <File className="w-12 h-12 text-blue-400 mx-auto mb-3" />
-                <p className="text-slate-200 font-medium">{arquivoWord.name}</p>
-                <p className="text-slate-500 text-sm">
+                <p className="text-foreground font-medium">{arquivoWord.name}</p>
+                <p className="text-muted-foreground text-sm">
                   {(arquivoWord.size / 1024).toFixed(1)} KB
                 </p>
                 <Button 
@@ -862,53 +862,53 @@ function WordUploadForm({
               </div>
             ) : (
               <>
-                <Upload className="w-12 h-12 text-slate-500 mb-3" />
-                <p className="text-slate-300 font-medium">Clique para selecionar arquivo</p>
-                <p className="text-slate-500 text-sm mt-1">Apenas arquivos .docx</p>
+                <Upload className="w-12 h-12 text-muted-foreground mb-3" />
+                <p className="text-foreground font-medium">Clique para selecionar arquivo</p>
+                <p className="text-muted-foreground text-sm mt-1">Apenas arquivos .docx</p>
               </>
             )}
           </div>
         </div>
 
         {/* Painel de Instruções */}
-        <div className="w-72 bg-slate-900 rounded-lg border border-slate-700 flex flex-col max-h-[400px]">
-          <div className="p-3 border-b border-slate-700 flex items-center gap-2 shrink-0">
-            <HelpCircle className="w-4 h-4 text-cyan-500" />
+        <div className="w-72 bg-card rounded-lg border border-border flex flex-col max-h-[400px]">
+          <div className="p-3 border-b border-border flex items-center gap-2 shrink-0">
+            <HelpCircle className="w-4 h-4 text-primary" />
             <span className="font-medium text-sm">Como usar</span>
           </div>
           <ScrollArea className="flex-1 overflow-y-auto">
             <div className="p-4 space-y-4 text-sm">
               <div>
-                <p className="text-slate-300 font-medium mb-1">1. Crie no Word</p>
-                <p className="text-slate-500">
+                <p className="text-foreground font-medium mb-1">1. Crie no Word</p>
+                <p className="text-muted-foreground">
                   Crie seu documento no Microsoft Word com toda a formatação desejada (logos, timbre, rodapé, etc).
                 </p>
               </div>
               
               <div>
-                <p className="text-slate-300 font-medium mb-1">2. Insira variáveis</p>
-                <p className="text-slate-500 mb-2">
+                <p className="text-foreground font-medium mb-1">2. Insira variáveis</p>
+                <p className="text-muted-foreground mb-2">
                   Use variáveis no formato {'{{nome}}'} onde deseja preencher dados:
                 </p>
-                <div className="bg-slate-800 p-2 rounded text-xs space-y-1">
-                  <code className="text-cyan-400">{'{{cliente_nome}}'}</code>
+                <div className="bg-secondary p-2 rounded text-xs space-y-1">
+                  <code className="text-primary">{'{{cliente_nome}}'}</code>
                   <br />
-                  <code className="text-cyan-400">{'{{cliente_cpf}}'}</code>
+                  <code className="text-primary">{'{{cliente_cpf}}'}</code>
                   <br />
-                  <code className="text-cyan-400">{'{{processo_numero}}'}</code>
+                  <code className="text-primary">{'{{processo_numero}}'}</code>
                 </div>
               </div>
               
               <div>
-                <p className="text-slate-300 font-medium mb-1">3. Salve e envie</p>
-                <p className="text-slate-500">
+                <p className="text-foreground font-medium mb-1">3. Salve e envie</p>
+                <p className="text-muted-foreground">
                   Salve como .docx e faça o upload aqui. O sistema manterá toda a formatação original.
                 </p>
               </div>
 
-              <div className="pt-2 border-t border-slate-700">
-                <p className="text-xs text-slate-500">
-                  <strong className="text-slate-400">Dica:</strong> Você também pode usar notação de objeto: {'{{ cliente.nome }}'}
+              <div className="pt-2 border-t border-border">
+                <p className="text-xs text-muted-foreground">
+                  <strong className="text-muted-foreground">Dica:</strong> Você também pode usar notação de objeto: {'{{ cliente.nome }}'}
                 </p>
               </div>
             </div>
@@ -917,12 +917,12 @@ function WordUploadForm({
       </div>
 
       <DialogFooter className="mt-4">
-        <Button variant="outline" onClick={onCancel} className="border-slate-600">
+        <Button variant="outline" onClick={onCancel} className="border-border">
           Cancelar
         </Button>
         <Button 
           onClick={onSubmit} 
-          className="bg-cyan-600 hover:bg-cyan-700"
+          className="bg-primary hover:bg-primary/90"
           disabled={uploading || !arquivoWord}
         >
           {uploading ? (
@@ -941,3 +941,5 @@ function WordUploadForm({
     </div>
   );
 }
+
+

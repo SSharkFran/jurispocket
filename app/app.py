@@ -3938,6 +3938,14 @@ def gerar_token_publico():
     # Gera um token de 32 caracteres (alfanumérico)
     return ''.join(secrets.choice(string.ascii_letters + string.digits) for _ in range(32))
 
+def get_public_frontend_base_url():
+    """Retorna a base pública do frontend para construção dos links compartilháveis."""
+    frontend_url = os.environ.get('FRONTEND_URL') or os.environ.get('PUBLIC_APP_URL')
+    if frontend_url:
+        return frontend_url.rstrip('/')
+    return request.host_url.rstrip('/')
+
+
 @app.route('/api/processos/<int:id>/link-publico', methods=['POST'])
 @require_auth
 def gerar_link_publico(id):
@@ -3980,14 +3988,15 @@ def gerar_link_publico(id):
     )
     db.commit()
     
-    # Monta a URL completa
-    base_url = request.host_url.rstrip('/')
+    # Monta a URL pública (preferencialmente do frontend)
+    base_url = get_public_frontend_base_url()
     url_publica = f"{base_url}/publico/processo/{token}"
     
     return jsonify({
         'sucesso': True,
         'token': token,
         'url': url_publica,
+        'link_publico': token,
         'ativo': True
     })
 
@@ -4041,16 +4050,18 @@ def obter_link_publico(id):
             'mensagem': 'Link público não ativado'
         })
     
-    base_url = request.host_url.rstrip('/')
+    base_url = get_public_frontend_base_url()
     url_publica = f"{base_url}/publico/processo/{processo['public_token']}"
     
     return jsonify({
         'sucesso': True,
         'token': processo['public_token'],
         'url': url_publica,
+        'link_publico': processo['public_token'],
         'ativo': True
     })
 
+@app.route('/api/publico/processo/<token>', methods=['GET'])
 @app.route('/publico/processo/<token>', methods=['GET'])
 def acessar_processo_publico(token):
     """
@@ -4058,6 +4069,15 @@ def acessar_processo_publico(token):
     Não requer autenticação
     """
     try:
+        # Quando acessado no navegador, entregar a interface React (SPA),
+        # evitando retorno bruto de JSON na URL pública.
+        if request.path.startswith('/publico/processo/'):
+            aceita_json = request.accept_mimetypes.best == 'application/json' if request.accept_mimetypes else False
+            if not aceita_json:
+                index_path = os.path.join(STATIC_FOLDER, 'index.html')
+                if os.path.exists(index_path):
+                    return send_from_directory(STATIC_FOLDER, 'index.html')
+
         db = get_db()
         
         # Busca o processo pelo token
@@ -4115,10 +4135,10 @@ def acessar_processo_publico(token):
         # Busca prazos
         try:
             prazos = db.execute(
-                '''SELECT descricao, data_final, status, prioridade 
+                '''SELECT descricao, data_prazo as data_final, status, 'media' as prioridade
                    FROM prazos 
                    WHERE processo_id = ? AND status = 'pendente'
-                   ORDER BY data_final''',
+                   ORDER BY data_prazo''',
                 (processo_dict['id'],)
             ).fetchall()
             resultado['prazos'] = [dict(p) for p in prazos]
@@ -4241,7 +4261,15 @@ def list_prazos():
     query += ' ORDER BY p.data_prazo'
     
     rows = db.execute(query, params).fetchall()
-    return jsonify([dict(r) for r in rows])
+    result = []
+    for row in rows:
+        prazo = dict(row)
+        # Compatibilidade com frontend legado (data_final)
+        prazo['data_final'] = prazo.get('data_prazo')
+        if 'prioridade' not in prazo or not prazo.get('prioridade'):
+            prazo['prioridade'] = 'media'
+        result.append(prazo)
+    return jsonify(result)
 
 @app.route('/api/prazos', methods=['POST'])
 @require_auth
@@ -4250,10 +4278,14 @@ def create_prazo():
     data = request.get_json()
     db = get_db()
     
+    data_prazo = data.get('data_prazo') or data.get('data_final')
+    if not data_prazo:
+        return jsonify({'error': 'Data do prazo é obrigatória'}), 400
+
     cursor = db.execute(
         'INSERT INTO prazos (workspace_id, processo_id, tipo, data_prazo, descricao, status) VALUES (?, ?, ?, ?, ?, ?)',
         (g.auth['workspace_id'], data.get('processo_id'), data.get('tipo'),
-         data.get('data_prazo'), data.get('descricao'), data.get('status', 'pendente'))
+         data_prazo, data.get('descricao'), data.get('status', 'pendente'))
     )
     db.commit()
     
@@ -4266,7 +4298,7 @@ def create_prazo():
     processo_numero = processo['numero'] if processo else 'N/A'
     
     tipo_prazo = data.get('tipo', 'Prazo')
-    data_formatada = data.get('data_prazo', 'sem data')
+    data_formatada = data_prazo or 'sem data'
     
     # Busca todos os usuários do workspace
     usuarios = db.execute(
@@ -4285,7 +4317,11 @@ def create_prazo():
         )
     db.commit()
     
-    return jsonify(dict(prazo)), 201
+    prazo_dict = dict(prazo)
+    prazo_dict['data_final'] = prazo_dict.get('data_prazo')
+    if 'prioridade' not in prazo_dict or not prazo_dict.get('prioridade'):
+        prazo_dict['prioridade'] = 'media'
+    return jsonify(prazo_dict), 201
 
 @app.route('/api/prazos/<int:id>', methods=['PUT'])
 @require_auth
@@ -4294,15 +4330,21 @@ def update_prazo(id):
     data = request.get_json()
     db = get_db()
     
+    data_prazo = data.get('data_prazo') or data.get('data_final')
+
     db.execute(
         'UPDATE prazos SET tipo = ?, data_prazo = ?, descricao = ?, status = ? WHERE id = ? AND workspace_id = ?',
-        (data.get('tipo'), data.get('data_prazo'), data.get('descricao'),
+        (data.get('tipo'), data_prazo, data.get('descricao'),
          data.get('status'), id, g.auth['workspace_id'])
     )
     db.commit()
     
     prazo = db.execute('SELECT * FROM prazos WHERE id = ?', (id,)).fetchone()
-    return jsonify(dict(prazo))
+    prazo_dict = dict(prazo)
+    prazo_dict['data_final'] = prazo_dict.get('data_prazo')
+    if 'prioridade' not in prazo_dict or not prazo_dict.get('prioridade'):
+        prazo_dict['prioridade'] = 'media'
+    return jsonify(prazo_dict)
 
 @app.route('/api/prazos/<int:id>', methods=['DELETE'])
 @require_auth
@@ -7761,39 +7803,66 @@ def email_notificar_movimentacao():
 @require_auth
 def whatsapp_status():
     """
-    Retorna status da conexão com WhatsApp
+    Retorna status da conexao com WhatsApp
     """
-    status = whatsapp_service.get_connection_status()
+    status = whatsapp_service.get_connection_status() or {}
+    connected = status.get('connected')
+    if connected is None:
+        connected = status.get('conectado', False)
+
+    state = status.get('state') or status.get('estado')
+    error = status.get('error') or status.get('erro')
+
     return jsonify({
         'configurado': whatsapp_service.is_configured(),
         'provider': whatsapp_service.provider,
-        **status
+        **status,
+        'connected': connected,
+        'state': state,
+        'error': error
     })
 
 @app.route('/api/whatsapp/qrcode', methods=['GET'])
 @require_auth
 def whatsapp_qrcode():
     """
-    Gera QR code para conexão (apenas Evolution API)
+    Gera QR code para conexao (apenas Evolution API)
     """
     if whatsapp_service.provider != 'evolution':
         return jsonify({
             'sucesso': False,
-            'erro': 'QR code apenas disponível para Evolution API'
+            'erro': 'QR code apenas disponivel para Evolution API'
         }), 400
-    
-    qrcode = whatsapp_service.generate_qr_code()
-    
-    if qrcode:
+
+    resultado = whatsapp_service.generate_qr_code() or {}
+
+    if resultado.get('success') and resultado.get('qrcode'):
         return jsonify({
             'sucesso': True,
-            'qrcode': qrcode
+            'qrcode': resultado.get('qrcode'),
+            'pairing_code': resultado.get('pairingCode')
         })
-    else:
-        return jsonify({
-            'sucesso': False,
-            'erro': 'Não foi possível gerar QR code. Verifique se a instância está configurada.'
-        }), 500
+
+    return jsonify({
+        'sucesso': False,
+        'erro': resultado.get('error') or 'Nao foi possivel gerar QR code. Verifique se a instancia esta configurada.'
+    }), 500
+
+@app.route('/api/whatsapp/desconectar', methods=['POST'])
+@require_auth
+def whatsapp_desconectar():
+    """
+    Desconecta a instancia do WhatsApp
+    """
+    resultado = whatsapp_service.logout() or {}
+
+    if resultado.get('success') or resultado.get('sucesso'):
+        return jsonify({'sucesso': True})
+
+    return jsonify({
+        'sucesso': False,
+        'erro': resultado.get('error') or resultado.get('erro') or 'Nao foi possivel desconectar a instancia.'
+    }), 400
 
 @app.route('/api/whatsapp/enviar', methods=['POST'])
 @require_auth
@@ -8091,3 +8160,5 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     app.run(debug=debug, host='0.0.0.0', port=port)
+
+

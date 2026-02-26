@@ -68,6 +68,12 @@ const AppLayout = () => {
   const [listaNotificacoes, setListaNotificacoes] = useState<Notificacao[]>([]);
   const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0);
 
+  const availableNavItems = navItems.filter((item) => {
+    if (!('path' in item)) return true;
+    if (item.path === '/app/admin') return user?.role === 'superadmin';
+    return true;
+  });
+
   const isActive = (path: string) => {
     if (path === '/app') return location.pathname === '/app';
     return location.pathname.startsWith(path);
@@ -148,7 +154,7 @@ const AppLayout = () => {
 
       {/* Nav */}
       <nav className="flex-1 overflow-y-auto overflow-x-hidden py-4 px-3 space-y-1 min-w-0">
-        {navItems.map((item, i) => {
+        {availableNavItems.map((item, i) => {
           if ('divider' in item && item.divider) {
             return !collapsed ? (
               <div key={i} className="pt-4 pb-2 px-3">

@@ -220,6 +220,25 @@ export function DashboardPage() {
       despesa: valores.despesa
     }));
 
+  const chartDataComBase = (() => {
+    if (chartData.length !== 1) return chartData;
+
+    const [mesAtual, anoAtual] = chartData[0].mes.split('/');
+    const indiceMesAtual = meses.indexOf(mesAtual);
+    const anoNumerico = parseInt(anoAtual || '', 10);
+
+    if (indiceMesAtual < 0 || Number.isNaN(anoNumerico)) return chartData;
+
+    const indiceMesAnterior = (indiceMesAtual + 11) % 12;
+    const anoMesAnterior = indiceMesAtual === 0 ? anoNumerico - 1 : anoNumerico;
+    const labelMesAnterior = `${meses[indiceMesAnterior]}/${anoMesAnterior}`;
+
+    return [
+      { mes: labelMesAnterior, receita: 0, despesa: 0 },
+      chartData[0],
+    ];
+  })();
+
   console.log('[Dashboard] Chart data (financeiro):', chartData);
 
   // Agrupar processos por mês
@@ -338,7 +357,7 @@ export function DashboardPage() {
       {debugInfo && (
         <div className="text-xs text-muted-foreground bg-secondary p-2 rounded">
           Debug: {debugInfo} | Transações: {transacoes.length} | Processos: {processosList.length} | 
-          Dados financeiros: {chartData.length} meses | Dados processos: {processosChart.length} meses
+          Dados financeiros: {chartDataComBase.length} meses | Dados processos: {processosChart.length} meses
         </div>
       )}
       
@@ -390,9 +409,9 @@ export function DashboardPage() {
       <div className="grid gap-6 lg:grid-cols-2">
         <motion.div {...fade(7)} className="glass-card p-5">
           <h3 className="font-semibold mb-4 text-sm">Financeiro — Histórico</h3>
-          {chartData.length > 0 ? (
+          {chartDataComBase.length > 0 ? (
             <ResponsiveContainer width="100%" height={220}>
-              <AreaChart data={chartData}>
+              <AreaChart data={chartDataComBase}>
                 <defs>
                   <linearGradient id="gRec" x1="0" y1="0" x2="0" y2="1">
                     <stop offset="0%" stopColor="hsl(160 84% 39%)" stopOpacity={0.3} />

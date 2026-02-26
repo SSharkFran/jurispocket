@@ -10,8 +10,7 @@ import {
   Loader2,
   File,
   Image as ImageIcon,
-  FileSpreadsheet,
-  X
+  FileSpreadsheet
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
@@ -42,6 +41,11 @@ interface Processo {
   titulo: string;
 }
 
+interface CategoriaDocumento {
+  id: string;
+  nome: string;
+}
+
 const getFileIcon = (tipo?: string) => {
   if (!tipo) return <File className="h-5 w-5 text-muted-foreground" />;
   const tipoLower = tipo.toLowerCase();
@@ -59,7 +63,19 @@ const formatFileSize = (bytes?: number) => {
   return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
 };
 
-const categorias = ['Contrato', 'Petição', 'Procuração', 'Comprovante', 'Parecer', 'Outro'];
+
+const CATEGORIAS_FALLBACK: CategoriaDocumento[] = [
+  { id: 'identidade', nome: 'Documento de Identidade' },
+  { id: 'endereco', nome: 'Comprovante de Endereco' },
+  { id: 'contrato', nome: 'Contrato' },
+  { id: 'procuracao', nome: 'Procuracao' },
+  { id: 'peticao', nome: 'Peticao' },
+  { id: 'sentenca', nome: 'Sentenca/Decisao' },
+  { id: 'comprovante', nome: 'Comprovante de Pagamento' },
+  { id: 'laudo', nome: 'Laudo Tecnico' },
+  { id: 'correspondencia', nome: 'Correspondencia' },
+  { id: 'outro', nome: 'Outro' },
+];
 
 export function DocumentosPage() {
   const [documentosList, setDocumentosList] = useState<Documento[]>([]);
@@ -67,6 +83,7 @@ export function DocumentosPage() {
   const [isLoading, setIsLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
   const [categoriaFilter, setCategoriaFilter] = useState<string>('todas');
+  const [categoriasDisponiveis, setCategoriasDisponiveis] = useState<CategoriaDocumento[]>([]);
   
   // Dialog states
   const [isUploadDialogOpen, setIsUploadDialogOpen] = useState(false);
@@ -85,13 +102,37 @@ export function DocumentosPage() {
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [docsRes, procRes] = await Promise.all([
+      const [docsRes, procRes, categoriasRes] = await Promise.all([
         documentosApi.list(),
         processos.list(),
+        documentosApi.getCategorias().catch(() => ({ data: [] })),
       ]);
       
-      setDocumentosList(docsRes.data.documentos || docsRes.data || []);
+      const documentosData = docsRes.data.documentos || docsRes.data || [];
+      setDocumentosList(documentosData);
       setProcessosList(procRes.data.processos || procRes.data || []);
+
+      const categoriasData = Array.isArray(categoriasRes.data) ? categoriasRes.data : [];
+      const categoriasDaApi: CategoriaDocumento[] = categoriasData
+        .filter((c: any) => c?.id && c?.nome)
+        .map((c: any) => ({ id: String(c.id), nome: String(c.nome) }));
+
+      const categoriasDosDocumentos: CategoriaDocumento[] = documentosData
+        .map((doc: any) => doc?.categoria)
+        .filter((categoria: string | undefined) => !!categoria)
+        .map((categoria: string) => ({ id: categoria, nome: categoria }));
+
+      const categoriasMescladas = [...categoriasDaApi, ...categoriasDosDocumentos];
+      const categoriasUnicas = categoriasMescladas.filter(
+        (categoria, index, lista) =>
+          lista.findIndex(
+            (item) =>
+              item.id.toLowerCase() === categoria.id.toLowerCase() ||
+              item.nome.toLowerCase() === categoria.nome.toLowerCase()
+          ) === index
+      );
+
+      setCategoriasDisponiveis(categoriasUnicas.length > 0 ? categoriasUnicas : CATEGORIAS_FALLBACK);
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar documentos');
@@ -114,7 +155,7 @@ export function DocumentosPage() {
     setIsUploading(true);
     try {
       const formData = new FormData();
-      formData.append('arquivo', uploadForm.arquivo);
+      formData.append('documento', uploadForm.arquivo);
       formData.append('nome', uploadForm.nome || uploadForm.arquivo.name);
       if (uploadForm.categoria) formData.append('categoria', uploadForm.categoria);
       if (uploadForm.processo_id) formData.append('processo_id', uploadForm.processo_id);
@@ -184,7 +225,13 @@ export function DocumentosPage() {
       (doc.cliente_nome && doc.cliente_nome.toLowerCase().includes(searchQuery.toLowerCase())) ||
       (doc.processo_numero && doc.processo_numero.toLowerCase().includes(searchQuery.toLowerCase()));
     
-    const matchesCategoria = categoriaFilter === 'todas' || doc.categoria === categoriaFilter;
+    const categoriaSelecionada = categoriasDisponiveis.find((cat) => cat.id === categoriaFilter);
+    const matchesCategoria =
+      categoriaFilter === 'todas' ||
+      doc.categoria === categoriaFilter ||
+      (!!categoriaSelecionada &&
+        !!doc.categoria &&
+        doc.categoria.toLowerCase() === categoriaSelecionada.nome.toLowerCase());
     
     return matchesSearch && matchesCategoria;
   });
@@ -224,8 +271,8 @@ export function DocumentosPage() {
           </SelectTrigger>
           <SelectContent className="bg-secondary border-border">
             <SelectItem value="todas">Todas as categorias</SelectItem>
-            {categorias.map((cat) => (
-              <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+            {categoriasDisponiveis.map((cat) => (
+              <SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>
             ))}
           </SelectContent>
         </Select>
@@ -358,8 +405,8 @@ export function DocumentosPage() {
                   <SelectValue placeholder="Selecione uma categoria" />
                 </SelectTrigger>
                 <SelectContent>
-                  {categorias.map((cat) => (
-                    <SelectItem key={cat} value={cat}>{cat}</SelectItem>
+                  {categoriasDisponiveis.map((cat) => (
+                    <SelectItem key={cat.id} value={cat.id}>{cat.nome}</SelectItem>
                   ))}
                 </SelectContent>
               </Select>
@@ -466,3 +513,5 @@ export function DocumentosPage() {
     </div>
   );
 }
+
+

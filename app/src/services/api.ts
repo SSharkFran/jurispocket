@@ -85,10 +85,27 @@ export const processos = {
 };
 
 export const prazos = {
+  normalize: (prazo: any) => ({
+    ...prazo,
+    data_final: prazo?.data_final || prazo?.data_prazo,
+    data_prazo: prazo?.data_prazo || prazo?.data_final,
+    prioridade: prazo?.prioridade || 'media',
+  }),
   list: (params?: { status?: string; processo_id?: number }) =>
-    api.get('/prazos', { params }),
+    api.get('/prazos', { params }).then((response) => ({
+      ...response,
+      data: Array.isArray(response.data)
+        ? response.data.map((prazo) => prazos.normalize(prazo))
+        : response.data,
+    })),
   create: (data: { processo_id: number; descricao: string; data_final: string; prioridade: 'baixa' | 'media' | 'alta' | 'urgente'; tipo?: string }) =>
-    api.post('/prazos', data),
+    api.post('/prazos', {
+      ...data,
+      data_prazo: data.data_final,
+    }).then((response) => ({
+      ...response,
+      data: prazos.normalize(response.data),
+    })),
   marcarCumprido: (id: number) => api.put(`/prazos/${id}/cumprido`),
 };
 

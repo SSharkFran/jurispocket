@@ -11,7 +11,6 @@ import { toast } from 'sonner';
 
 export function ConfiguracoesPage() {
   const { user, refreshUser } = useAuth();
-  const [isLoading, setIsLoading] = useState(false);
   const [isSaving, setIsSaving] = useState(false);
   const [formData, setFormData] = useState({
     nome: '',
@@ -62,14 +61,14 @@ export function ConfiguracoesPage() {
   const initials = formData.nome?.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase() || '?';
 
   return (
-    <div className="space-y-6 max-w-2xl">
+    <div className="space-y-6 w-full max-w-6xl">
       <h1 className="text-2xl font-bold">Configurações</h1>
 
       {/* Perfil */}
       <motion.div 
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
-        className="glass-card p-6"
+        className="glass-card p-6 lg:p-8"
       >
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <User className="h-4 w-4" /> Perfil
@@ -136,7 +135,7 @@ export function ConfiguracoesPage() {
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ delay: 0.1 }}
-        className="glass-card p-6"
+        className="glass-card p-6 lg:p-8"
       >
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Bell className="h-4 w-4" /> Notificações
@@ -168,12 +167,12 @@ export function ConfiguracoesPage() {
         initial={{ opacity: 0, y: 20 }} 
         animate={{ opacity: 1, y: 0 }} 
         transition={{ delay: 0.2 }}
-        className="glass-card p-6"
+        className="glass-card p-6 lg:p-8"
       >
         <h3 className="font-semibold mb-4 flex items-center gap-2">
           <Shield className="h-4 w-4" /> Plano Atual
         </h3>
-        <div className="flex items-center justify-between p-4 rounded-lg bg-primary/5 border border-primary/10">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between p-4 rounded-lg bg-primary/5 border border-primary/10">
           <div>
             <div className="font-semibold text-primary">Plano Pro</div>
             <div className="text-sm text-muted-foreground">R$ 97/mês · Renovação: 01/03/2026</div>
@@ -200,4 +199,5 @@ export function ConfiguracoesPage() {
     </div>
   );
 };
+
 

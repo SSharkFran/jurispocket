@@ -323,7 +323,7 @@ export function FinanceiroPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -333,26 +333,26 @@ export function FinanceiroPage() {
       {/* Header */}
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-3xl font-bold text-white">Financeiro</h1>
-          <p className="text-slate-400 mt-1">Controle de entradas e saídas</p>
+          <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>
+          <p className="text-muted-foreground mt-1">Controle de entradas e saídas</p>
         </div>
         <div className="flex gap-2">
           <Button 
             variant="outline" 
             onClick={() => setIsExtratoOpen(true)}
-            className="border-slate-700 text-slate-300 hover:bg-slate-800"
+            className="border-border text-foreground hover:bg-secondary"
           >
             <FileText className="w-4 h-4 mr-2" />
             Extrato Mensal
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600">
+              <Button className="bg-primary hover:bg-primary/90">
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Transação
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+            <DialogContent className="bg-card border-border text-foreground max-w-lg">
               <DialogHeader>
                 <DialogTitle>Nova Transação</DialogTitle>
               </DialogHeader>
@@ -363,10 +363,10 @@ export function FinanceiroPage() {
                     value={formData.tipo}
                     onValueChange={(v) => setFormData({ ...formData, tipo: v as 'entrada' | 'saida', categoria: '' })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectContent className="bg-secondary border-border">
                       <SelectItem value="entrada">Entrada</SelectItem>
                       <SelectItem value="saida">Saída</SelectItem>
                     </SelectContent>
@@ -378,10 +378,10 @@ export function FinanceiroPage() {
                     value={formData.categoria}
                     onValueChange={(v) => setFormData({ ...formData, categoria: v })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue placeholder="Selecione uma categoria" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectContent className="bg-secondary border-border">
                       {(formData.tipo === 'entrada' ? categoriaEntradas : categoriaSaidas).map((cat) => (
                         <SelectItem key={cat} value={cat}>
                           {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -396,7 +396,7 @@ export function FinanceiroPage() {
                     id="descricao"
                     value={formData.descricao}
                     onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                    className="bg-slate-800 border-slate-700 text-white"
+                    className="bg-secondary border-border text-foreground"
                     placeholder="Ex: Honorários processo XYZ"
                     required
                   />
@@ -411,7 +411,7 @@ export function FinanceiroPage() {
                       min="0"
                       value={formData.valor}
                       onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-foreground"
                       required
                     />
                   </div>
@@ -422,7 +422,7 @@ export function FinanceiroPage() {
                       type="date"
                       value={formData.data_transacao}
                       onChange={(e) => setFormData({ ...formData, data_transacao: e.target.value })}
-                      className="bg-slate-800 border-slate-700 text-white"
+                      className="bg-secondary border-border text-foreground"
                       required
                     />
                   </div>
@@ -433,10 +433,10 @@ export function FinanceiroPage() {
                     value={formData.processo_id}
                     onValueChange={(v) => setFormData({ ...formData, processo_id: v })}
                   >
-                    <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                    <SelectTrigger className="bg-secondary border-border text-foreground">
                       <SelectValue placeholder="Selecione um processo" />
                     </SelectTrigger>
-                    <SelectContent className="bg-slate-800 border-slate-700">
+                    <SelectContent className="bg-secondary border-border">
                       {processosList.map((processo) => (
                         <SelectItem key={processo.id} value={processo.id.toString()}>
                           {processo.numero} - {processo.titulo}
@@ -445,7 +445,7 @@ export function FinanceiroPage() {
                     </SelectContent>
                   </Select>
                 </div>
-                <Button type="submit" className="w-full bg-cyan-500 hover:bg-cyan-600">
+                <Button type="submit" className="w-full bg-primary hover:bg-primary">
                   Criar Transação
                 </Button>
               </form>
@@ -456,11 +456,11 @@ export function FinanceiroPage() {
 
       {/* Stats Cards */}
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-        <Card className="bg-slate-900/50 border-slate-800">
+        <Card className="bg-secondary/30 border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm">Entradas</p>
+                <p className="text-muted-foreground text-sm">Entradas</p>
                 <p className="text-2xl font-bold text-emerald-400">{formatCurrency(resumo.entradas)}</p>
               </div>
               <div className="p-3 rounded-lg bg-emerald-500/20">
@@ -469,11 +469,11 @@ export function FinanceiroPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900/50 border-slate-800">
+        <Card className="bg-secondary/30 border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm">Saídas</p>
+                <p className="text-muted-foreground text-sm">Saídas</p>
                 <p className="text-2xl font-bold text-red-400">{formatCurrency(resumo.saidas)}</p>
               </div>
               <div className="p-3 rounded-lg bg-red-500/20">
@@ -482,17 +482,17 @@ export function FinanceiroPage() {
             </div>
           </CardContent>
         </Card>
-        <Card className="bg-slate-900/50 border-slate-800">
+        <Card className="bg-secondary/30 border-border/50">
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-slate-400 text-sm">Saldo</p>
-                <p className={`text-2xl font-bold ${resumo.saldo >= 0 ? 'text-cyan-400' : 'text-red-400'}`}>
+                <p className="text-muted-foreground text-sm">Saldo</p>
+                <p className={`text-2xl font-bold ${resumo.saldo >= 0 ? 'text-primary' : 'text-red-400'}`}>
                   {formatCurrency(resumo.saldo)}
                 </p>
               </div>
-              <div className="p-3 rounded-lg bg-cyan-500/20">
-                <Wallet className="w-6 h-6 text-cyan-400" />
+              <div className="p-3 rounded-lg bg-primary/20">
+                <Wallet className="w-6 h-6 text-primary" />
               </div>
             </div>
           </CardContent>
@@ -502,19 +502,19 @@ export function FinanceiroPage() {
       {/* Filters */}
       <div className="flex flex-col sm:flex-row gap-4">
         <div className="relative flex-1">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar transações..."
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
-            className="pl-10 bg-slate-900/50 border-slate-700 text-white"
+            className="pl-10 bg-secondary/30 border-border text-foreground"
           />
         </div>
-        <Select value={tipoFilter || 'todos'} onValueChange={(v) => setTipoFilter(v === 'todos' ? '' : v)}>
-          <SelectTrigger className="w-full sm:w-48 bg-slate-900/50 border-slate-700 text-white">
+        <Select value={tipoFilter} onValueChange={(v) => setTipoFilter(v)}>
+          <SelectTrigger className="w-full sm:w-48 bg-secondary/30 border-border text-foreground">
             <SelectValue placeholder="Filtrar por tipo" />
           </SelectTrigger>
-          <SelectContent className="bg-slate-800 border-slate-700">
+          <SelectContent className="bg-secondary border-border">
             <SelectItem value="todos">Todos os tipos</SelectItem>
             <SelectItem value="entrada">Entradas</SelectItem>
             <SelectItem value="saida">Saídas</SelectItem>
@@ -523,22 +523,22 @@ export function FinanceiroPage() {
       </div>
 
       {/* Transactions List */}
-      <Card className="bg-slate-900/50 border-slate-800">
+      <Card className="bg-secondary/30 border-border/50">
         <CardHeader>
-          <CardTitle className="text-white text-lg">Transações</CardTitle>
+          <CardTitle className="text-foreground text-lg">Transações</CardTitle>
         </CardHeader>
         <CardContent>
           {filteredTransacoes.length === 0 ? (
             <div className="text-center py-8">
-              <DollarSign className="w-12 h-12 text-slate-600 mx-auto mb-4" />
-              <p className="text-slate-400">Nenhuma transação encontrada</p>
+              <DollarSign className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
+              <p className="text-muted-foreground">Nenhuma transação encontrada</p>
             </div>
           ) : (
             <div className="space-y-3">
               {filteredTransacoes.map((transacao) => (
                 <div
                   key={transacao.id}
-                  className="rounded-lg bg-slate-800/50 hover:bg-slate-800 transition-colors overflow-hidden"
+                  className="rounded-lg bg-secondary/40 hover:bg-secondary transition-colors overflow-hidden"
                 >
                   <div 
                     className="flex items-center justify-between p-4 cursor-pointer"
@@ -555,7 +555,7 @@ export function FinanceiroPage() {
                         )}
                       </div>
                       <div>
-                        <p className="font-medium text-white">{transacao.descricao || 'Sem descrição'}</p>
+                        <p className="font-medium text-foreground">{transacao.descricao || 'Sem descrição'}</p>
                         <div className="flex items-center gap-2 mt-1">
                           <Badge variant="outline" className={`text-xs ${
                             transacao.tipo === 'entrada' 
@@ -564,11 +564,11 @@ export function FinanceiroPage() {
                           }`}>
                             {transacao.tipo === 'entrada' ? 'Entrada' : 'Saída'}
                           </Badge>
-                          <Badge variant="outline" className="text-xs bg-slate-700 text-slate-300 border-slate-600 capitalize">
+                          <Badge variant="outline" className="text-xs bg-secondary/70 text-foreground border-border capitalize">
                             {(transacao.categoria || 'outro').replace(/_/g, ' ')}
                           </Badge>
                           {transacao.processo_numero && (
-                            <span className="text-xs text-slate-500">{transacao.processo_numero}</span>
+                            <span className="text-xs text-muted-foreground">{transacao.processo_numero}</span>
                           )}
                           {transacao.documentos && transacao.documentos.length > 0 && (
                             <Badge variant="outline" className="text-xs bg-blue-500/10 text-blue-400 border-blue-500/30">
@@ -586,16 +586,16 @@ export function FinanceiroPage() {
                         }`}>
                           {transacao.tipo === 'entrada' ? '+' : '-'}{formatCurrency(transacao.valor)}
                         </p>
-                        <p className="text-xs text-slate-500 flex items-center gap-1 justify-end">
+                        <p className="text-xs text-muted-foreground flex items-center gap-1 justify-end">
                           <Calendar className="w-3 h-3" />
                           {transacao.data_transacao ? new Date(transacao.data_transacao).toLocaleDateString('pt-BR') : '-'}
                         </p>
                       </div>
                       <div className="flex items-center gap-1">
                         {expandedTransacao === transacao.id ? (
-                          <ChevronUp className="w-4 h-4 text-slate-400" />
+                          <ChevronUp className="w-4 h-4 text-muted-foreground" />
                         ) : (
-                          <ChevronDown className="w-4 h-4 text-slate-400" />
+                          <ChevronDown className="w-4 h-4 text-muted-foreground" />
                         )}
                       </div>
                     </div>
@@ -603,12 +603,12 @@ export function FinanceiroPage() {
                   
                   {/* Expanded Details */}
                   {expandedTransacao === transacao.id && (
-                    <div className="px-4 pb-4 border-t border-slate-700/50 pt-3">
+                    <div className="px-4 pb-4 border-t border-border/50 pt-3">
                       <div className="flex flex-col gap-3">
                         {/* Documentos */}
                         <div>
                           <div className="flex items-center justify-between mb-2">
-                            <p className="text-sm text-slate-400">Documentos Anexados</p>
+                            <p className="text-sm text-muted-foreground">Documentos Anexados</p>
                             <div className="flex gap-2">
                               <input
                                 ref={(el) => { fileInputRefs.current[transacao.id] = el; }}
@@ -625,7 +625,7 @@ export function FinanceiroPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => fileInputRefs.current[transacao.id]?.click()}
-                                className="border-slate-700 text-slate-300 hover:bg-slate-800"
+                                className="border-border text-foreground hover:bg-secondary"
                               >
                                 <Upload className="w-3 h-3 mr-1" />
                                 Anexar
@@ -634,7 +634,7 @@ export function FinanceiroPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => openEditDialog(transacao)}
-                                className="text-slate-400 hover:text-cyan-400"
+                                className="text-muted-foreground hover:text-primary"
                               >
                                 <Edit3 className="w-3 h-3 mr-1" />
                                 Editar
@@ -643,7 +643,7 @@ export function FinanceiroPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDelete(transacao.id)}
-                                className="text-slate-400 hover:text-red-400"
+                                className="text-muted-foreground hover:text-red-400"
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />
                                 Excluir
@@ -656,23 +656,23 @@ export function FinanceiroPage() {
                               {transacao.documentos.map((doc) => (
                                 <div 
                                   key={doc.id} 
-                                  className="flex items-center justify-between p-2 rounded bg-slate-900/50"
+                                  className="flex items-center justify-between p-2 rounded bg-secondary/30"
                                 >
                                   <div className="flex items-center gap-2">
-                                    <FileText className="w-4 h-4 text-slate-400" />
+                                    <FileText className="w-4 h-4 text-muted-foreground" />
                                     <div>
-                                      <p className="text-sm text-white">{doc.nome}</p>
+                                      <p className="text-sm text-foreground">{doc.nome}</p>
                                       {doc.descricao && (
-                                        <p className="text-xs text-slate-500">{doc.descricao}</p>
+                                        <p className="text-xs text-muted-foreground">{doc.descricao}</p>
                                       )}
-                                      <p className="text-xs text-slate-500">{formatFileSize(doc.file_size)} • {doc.uploaded_by_nome || 'Sistema'}</p>
+                                      <p className="text-xs text-muted-foreground">{formatFileSize(doc.file_size)} • {doc.uploaded_by_nome || 'Sistema'}</p>
                                     </div>
                                   </div>
                                   <div className="flex gap-1">
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-8 w-8 text-slate-400 hover:text-cyan-400"
+                                      className="h-8 w-8 text-muted-foreground hover:text-primary"
                                       onClick={() => handleDownloadDocumento(transacao.id, doc.id, doc.nome)}
                                       title="Baixar"
                                     >
@@ -681,7 +681,7 @@ export function FinanceiroPage() {
                                     <Button
                                       variant="ghost"
                                       size="icon"
-                                      className="h-8 w-8 text-slate-400 hover:text-red-400"
+                                      className="h-8 w-8 text-muted-foreground hover:text-red-400"
                                       onClick={() => handleDeleteDocumento(transacao.id, doc.id)}
                                     >
                                       <X className="w-4 h-4" />
@@ -691,7 +691,7 @@ export function FinanceiroPage() {
                               ))}
                             </div>
                           ) : (
-                            <p className="text-sm text-slate-500 italic">Nenhum documento anexado</p>
+                            <p className="text-sm text-muted-foreground italic">Nenhum documento anexado</p>
                           )}
                         </div>
                       </div>
@@ -706,10 +706,10 @@ export function FinanceiroPage() {
 
       {/* Dialog Extrato Mensal */}
       <Dialog open={isExtratoOpen} onOpenChange={setIsExtratoOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <FileText className="w-5 h-5 text-cyan-400" />
+              <FileText className="w-5 h-5 text-primary" />
               Extrato Mensal
             </DialogTitle>
           </DialogHeader>
@@ -722,7 +722,7 @@ export function FinanceiroPage() {
                 type="month"
                 value={mesSelecionado}
                 onChange={(e) => setMesSelecionado(e.target.value)}
-                className="bg-slate-800 border-slate-700 text-white w-48"
+                className="bg-secondary border-border text-foreground w-48"
               />
             </div>
             
@@ -736,9 +736,9 @@ export function FinanceiroPage() {
                 <p className="text-sm text-red-400">Saídas</p>
                 <p className="text-xl font-bold text-red-400">{formatCurrency(resumoMes.saidas)}</p>
               </div>
-              <div className="p-4 rounded-lg bg-cyan-500/10 border border-cyan-500/30">
-                <p className="text-sm text-cyan-400">Saldo</p>
-                <p className="text-xl font-bold text-cyan-400">{formatCurrency(resumoMes.entradas - resumoMes.saidas)}</p>
+              <div className="p-4 rounded-lg bg-primary/10 border border-primary/30">
+                <p className="text-sm text-primary">Saldo</p>
+                <p className="text-xl font-bold text-primary">{formatCurrency(resumoMes.entradas - resumoMes.saidas)}</p>
               </div>
             </div>
             
@@ -748,7 +748,7 @@ export function FinanceiroPage() {
                 <div className="flex items-center justify-between">
                   <div>
                     <p className="text-sm text-blue-400">Comprovantes de Saída</p>
-                    <p className="text-xs text-slate-400">{resumoMes.totalComprovantes} documento(s) anexado(s)</p>
+                    <p className="text-xs text-muted-foreground">{resumoMes.totalComprovantes} documento(s) anexado(s)</p>
                   </div>
                   <Button
                     onClick={handleDownloadComprovantesMes}
@@ -763,13 +763,13 @@ export function FinanceiroPage() {
             
             {/* Lista de Transações do Mês */}
             <div>
-              <h4 className="text-white font-medium mb-3">Transações do Mês</h4>
+              <h4 className="text-foreground font-medium mb-3">Transações do Mês</h4>
               {transacoesMes.length === 0 ? (
-                <p className="text-slate-400 text-center py-4">Nenhuma transação neste mês</p>
+                <p className="text-muted-foreground text-center py-4">Nenhuma transação neste mês</p>
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {transacoesMes.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between p-3 rounded bg-slate-800/50">
+                    <div key={t.id} className="flex items-center justify-between p-3 rounded bg-secondary/40">
                       <div className="flex items-center gap-2">
                         {t.tipo === 'entrada' ? (
                           <ArrowUpRight className="w-4 h-4 text-emerald-400" />
@@ -777,8 +777,8 @@ export function FinanceiroPage() {
                           <ArrowDownRight className="w-4 h-4 text-red-400" />
                         )}
                         <div>
-                          <p className="text-sm text-white">{t.descricao}</p>
-                          <p className="text-xs text-slate-500">{new Date(t.data_transacao!).toLocaleDateString('pt-BR')}</p>
+                          <p className="text-sm text-foreground">{t.descricao}</p>
+                          <p className="text-xs text-muted-foreground">{new Date(t.data_transacao!).toLocaleDateString('pt-BR')}</p>
                         </div>
                       </div>
                       <div className="flex items-center gap-2">
@@ -800,7 +800,7 @@ export function FinanceiroPage() {
 
       {/* Dialog Editar Transação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+        <DialogContent className="bg-card border-border text-foreground max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Transação</DialogTitle>
           </DialogHeader>
@@ -811,7 +811,7 @@ export function FinanceiroPage() {
                 id="edit_descricao"
                 value={formData.descricao}
                 onChange={(e) => setFormData({ ...formData, descricao: e.target.value })}
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-secondary border-border text-foreground"
                 required
               />
             </div>
@@ -821,10 +821,10 @@ export function FinanceiroPage() {
                 value={formData.categoria}
                 onValueChange={(v) => setFormData({ ...formData, categoria: v })}
               >
-                <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                <SelectTrigger className="bg-secondary border-border text-foreground">
                   <SelectValue />
                 </SelectTrigger>
-                <SelectContent className="bg-slate-800 border-slate-700">
+                <SelectContent className="bg-secondary border-border">
                   {(formData.tipo === 'entrada' ? categoriaEntradas : categoriaSaidas).map((cat) => (
                     <SelectItem key={cat} value={cat}>
                       {cat.replace('_', ' ').replace(/\b\w/g, l => l.toUpperCase())}
@@ -843,7 +843,7 @@ export function FinanceiroPage() {
                   min="0"
                   value={formData.valor}
                   onChange={(e) => setFormData({ ...formData, valor: e.target.value })}
-                  className="bg-slate-800 border-slate-700 text-white"
+                  className="bg-secondary border-border text-foreground"
                   required
                 />
               </div>
@@ -853,10 +853,10 @@ export function FinanceiroPage() {
                   value={formData.status}
                   onValueChange={(v) => setFormData({ ...formData, status: v })}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 text-white">
+                  <SelectTrigger className="bg-secondary border-border text-foreground">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="pendente">Pendente</SelectItem>
                     <SelectItem value="pago">Pago</SelectItem>
                     <SelectItem value="recebido">Recebido</SelectItem>
@@ -865,7 +865,7 @@ export function FinanceiroPage() {
               </div>
             </div>
             <div className="flex gap-2 pt-4">
-              <Button type="submit" className="flex-1 bg-cyan-500 hover:bg-cyan-600">
+              <Button type="submit" className="flex-1 bg-primary hover:bg-primary">
                 Salvar Alterações
               </Button>
               <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
@@ -878,16 +878,16 @@ export function FinanceiroPage() {
 
       {/* Dialog de Upload de Documento */}
       <Dialog open={uploadDialogOpen} onOpenChange={setUploadDialogOpen}>
-        <DialogContent className="bg-slate-900 border-slate-700 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle>Anexar Documento</DialogTitle>
           </DialogHeader>
           <div className="space-y-4 mt-4">
             {uploadFile && (
-              <div className="p-3 bg-slate-800 rounded-lg">
-                <p className="text-sm text-slate-400">Arquivo selecionado:</p>
-                <p className="text-white font-medium">{uploadFile.name}</p>
-                <p className="text-xs text-slate-500">{formatFileSize(uploadFile.size)}</p>
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-sm text-muted-foreground">Arquivo selecionado:</p>
+                <p className="text-foreground font-medium">{uploadFile.name}</p>
+                <p className="text-xs text-muted-foreground">{formatFileSize(uploadFile.size)}</p>
               </div>
             )}
             <div>
@@ -897,9 +897,9 @@ export function FinanceiroPage() {
                 value={uploadNome}
                 onChange={(e) => setUploadNome(e.target.value)}
                 placeholder="Ex: Comprovante de Pagamento - Cliente XYZ"
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-secondary border-border text-foreground"
               />
-              <p className="text-xs text-slate-500 mt-1">
+              <p className="text-xs text-muted-foreground mt-1">
                 Dê um nome descritivo para identificar este documento
               </p>
             </div>
@@ -910,14 +910,14 @@ export function FinanceiroPage() {
                 value={uploadDescricao}
                 onChange={(e) => setUploadDescricao(e.target.value)}
                 placeholder="Informações adicionais sobre o documento"
-                className="bg-slate-800 border-slate-700 text-white"
+                className="bg-secondary border-border text-foreground"
               />
             </div>
             <div className="flex gap-2 pt-4">
               <Button 
                 onClick={handleUploadDocumento} 
                 disabled={isUploading || !uploadNome.trim()}
-                className="flex-1 bg-cyan-500 hover:bg-cyan-600"
+                className="flex-1 bg-primary hover:bg-primary"
               >
                 {isUploading ? (
                   <>
@@ -951,3 +951,5 @@ export function FinanceiroPage() {
     </div>
   );
 }
+
+

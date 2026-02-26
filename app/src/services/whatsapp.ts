@@ -4,8 +4,11 @@ export interface WhatsAppStatus {
   configurado: boolean;
   provider: string;
   connected: boolean;
+  conectado?: boolean;
   state?: string;
+  estado?: string;
   error?: string;
+  erro?: string;
 }
 
 export interface QRCodeResponse {
@@ -33,6 +36,9 @@ export const whatsapp = {
 
   // QR Code para conexão
   getQRCode: () => api.get<QRCodeResponse>('/whatsapp/qrcode'),
+
+  // Desconectar instância
+  desconectar: () => api.post<{ sucesso: boolean; erro?: string }>('/whatsapp/desconectar'),
 
   // Enviar mensagem genérica
   enviarMensagem: (data: EnviarMensagemRequest) =>

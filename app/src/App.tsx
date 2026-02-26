@@ -10,6 +10,7 @@ import { LoginPage } from '@/pages/LoginPage';
 import { RegisterPage } from '@/pages/RegisterPage';
 import { DashboardPage } from '@/pages/DashboardPage';
 import { ProcessosPage } from '@/pages/ProcessosPage';
+import { NovoProcessoPage } from '@/pages/NovoProcessoPage';
 import { ProcessoDetalhePage } from '@/pages/ProcessoDetalhePage';
 import { ClientesPage } from '@/pages/ClientesPage';
 import { ClienteDetalhePage } from '@/pages/ClienteDetalhePage';
@@ -87,6 +88,7 @@ function AppRoutes() {
         <Route path="clientes" element={<ClientesPage />} />
         <Route path="clientes/:id" element={<ClienteDetalhePage />} />
         <Route path="processos" element={<ProcessosPage />} />
+        <Route path="processos/novo" element={<NovoProcessoPage />} />
         <Route path="processos/:id" element={<ProcessoDetalhePage />} />
         <Route path="prazos" element={<PrazosPage />} />
         <Route path="tarefas" element={<TarefasPage />} />
@@ -113,6 +115,7 @@ function AppRoutes() {
       >
         <Route index element={<DashboardPage />} />
         <Route path="processos" element={<ProcessosPage />} />
+        <Route path="processos/novo" element={<NovoProcessoPage />} />
         <Route path="processos/:id" element={<ProcessoDetalhePage />} />
         <Route path="clientes" element={<ClientesPage />} />
         <Route path="clientes/:id" element={<ClienteDetalhePage />} />
@@ -128,6 +131,7 @@ function AppRoutes() {
       {/* Redirecionamentos - Rotas antigas para novas */}
       <Route path="/financeiro" element={<Navigate to="/app/financeiro" replace />} />
       <Route path="/processos" element={<Navigate to="/app/processos" replace />} />
+      <Route path="/processos/novo" element={<Navigate to="/app/processos/novo" replace />} />
       <Route path="/processos/:id" element={<RedirectToDashboardProcesso />} />
       <Route path="/clientes" element={<Navigate to="/app/clientes" replace />} />
       <Route path="/clientes/:id" element={<RedirectToDashboardCliente />} />

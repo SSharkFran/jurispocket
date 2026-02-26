@@ -270,6 +270,12 @@ export function ProcessoDetalhePage() {
   const [linkPublico, setLinkPublico] = useState<string | null>(null);
   const [linkPublicoAtivo, setLinkPublicoAtivo] = useState(false);
   const [gerandoLink, setGerandoLink] = useState(false);
+  const montarUrlPublica = (token?: string | null, urlCompleta?: string | null) => {
+    const tokenViaUrl = urlCompleta?.split('/publico/processo/')[1]?.split(/[?#]/)[0];
+    const tokenFinal = token || tokenViaUrl;
+    if (!tokenFinal) return null;
+    return `${window.location.origin}/publico/processo/${tokenFinal}`;
+  };
 
   // Carrega link público ao carregar o processo
   useEffect(() => {
@@ -282,7 +288,8 @@ export function ProcessoDetalhePage() {
     try {
       const response = await processos.getLinkPublico(Number(id));
       if (response.data.ativo) {
-        setLinkPublico(response.data.url);
+        const token = response.data.token || response.data.link_publico;
+        setLinkPublico(montarUrlPublica(token, response.data.url));
         setLinkPublicoAtivo(true);
       }
     } catch (error) {
@@ -294,7 +301,8 @@ export function ProcessoDetalhePage() {
     setGerandoLink(true);
     try {
       const response = await processos.gerarLinkPublico(Number(id));
-      setLinkPublico(response.data.url);
+      const token = response.data.token || response.data.link_publico;
+      setLinkPublico(montarUrlPublica(token, response.data.url));
       setLinkPublicoAtivo(true);
       toast.success('Link público gerado!');
     } catch (error) {
