@@ -1,60 +1,88 @@
 """
-Serviço de Integração WhatsApp - Evolution API v2
+Servico de Integracao WhatsApp - Evolution API v2
 """
 
 import os
-import requests
-import json
-from typing import Optional, Dict, Any
-import urllib.parse
 import re
+import urllib.parse
+from typing import Any, Dict
+
+import requests
 
 
 class WhatsAppService:
-    """Serviço para envio de mensagens WhatsApp via Evolution API"""
-    
+    """Servico para envio de mensagens WhatsApp via Evolution API."""
+
     def __init__(self):
         self.provider = os.getenv('WHATSAPP_PROVIDER', 'evolution')
-        self.evolution_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080')
+        self.evolution_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080').rstrip('/')
         self.evolution_key = os.getenv('EVOLUTION_API_KEY', '')
         self.instance_name = os.getenv('EVOLUTION_INSTANCE_NAME', 'juris-instance')
-        
+
     def is_configured(self) -> bool:
-        """Verifica se o serviço está configurado corretamente"""
-        return (
-            self.provider == 'evolution' 
-            and bool(self.evolution_key) 
-            and bool(self.evolution_url)
-        )
-    
+        """Verifica se o servico esta configurado corretamente."""
+        return self.provider == 'evolution' and bool(self.evolution_key) and bool(self.evolution_url)
+
     def _get_headers(self) -> Dict[str, str]:
-        """Retorna headers padrão para requisições"""
+        """Retorna headers padrao para requisicoes."""
         return {
             'apikey': self.evolution_key,
-            'Content-Type': 'application/json'
+            'Content-Type': 'application/json',
         }
-    
+
+    def _candidate_base_urls(self) -> list:
+        """
+        Retorna URLs candidatas para conexao com Evolution.
+        Se o host for 'evolution' (comum em Docker), tenta localhost como fallback.
+        """
+        candidates = [self.evolution_url]
+        try:
+            parsed = urllib.parse.urlparse(self.evolution_url)
+            host = (parsed.hostname or '').lower()
+            if host == 'evolution':
+                scheme = parsed.scheme or 'http'
+                port = f":{parsed.port}" if parsed.port else ''
+                fallback = f"{scheme}://localhost{port}"
+                if fallback not in candidates:
+                    candidates.append(fallback)
+        except Exception:
+            pass
+        return candidates
+
+    def _request(self, method: str, path: str, **kwargs):
+        """Executa request com fallback de DNS para localhost quando necessario."""
+        last_error = None
+        for base_url in self._candidate_base_urls():
+            try:
+                response = requests.request(method, f"{base_url}{path}", **kwargs)
+                # Se fallback funcionou, persiste para proximas chamadas
+                if base_url != self.evolution_url:
+                    self.evolution_url = base_url
+                return response
+            except requests.exceptions.ConnectionError as exc:
+                last_error = exc
+                text = str(exc)
+                if 'NameResolutionError' in text or "Failed to resolve 'evolution'" in text:
+                    continue
+                raise
+
+        if last_error:
+            raise last_error
+        raise requests.exceptions.ConnectionError('Falha de conexao com Evolution API')
+
     def format_phone(self, phone: str) -> str:
         """
-        Formata número de telefone para padrão internacional
+        Formata numero de telefone para padrao internacional.
         Ex: 6892188833 -> 556892188833
         """
-        # Remove tudo que não é dígito
-        numero_limpo = re.sub(r'\D', '', phone)
-        
-        # Se não começar com 55, adiciona
+        numero_limpo = re.sub(r'\D', '', phone or '')
         if not numero_limpo.startswith('55'):
             numero_limpo = '55' + numero_limpo
-            
         return numero_limpo
-    
+
     def create_instance(self) -> Dict[str, Any]:
-        """
-        Cria a instância na Evolution API se não existir
-        """
+        """Cria a instancia na Evolution API se nao existir."""
         try:
-            url = f"{self.evolution_url}/instance/create"
-            
             payload = {
                 "instanceName": self.instance_name,
                 "token": self.evolution_key,
@@ -68,61 +96,54 @@ class WhatsAppService:
                     "MESSAGES_UPSERT",
                     "MESSAGES_UPDATE",
                     "SEND_MESSAGE",
-                    "CONNECTION_UPDATE"
-                ]
+                    "CONNECTION_UPDATE",
+                ],
             }
-            
-            response = requests.post(
-                url,
+
+            response = self._request(
+                'POST',
+                '/instance/create',
                 json=payload,
                 headers={'Content-Type': 'application/json'},
-                timeout=30
+                timeout=30,
             )
-            
+
             if response.status_code in [200, 201]:
                 data = response.json()
                 return {
                     'success': True,
                     'instance': data.get('instance', {}),
-                    'hash': data.get('hash', {})
+                    'hash': data.get('hash', {}),
                 }
-            elif response.status_code == 400 and 'already exists' in response.text:
-                return {
-                    'success': True,
-                    'message': 'Instância já existe'
-                }
-            else:
-                return {
-                    'success': False,
-                    'error': f'Erro {response.status_code}: {response.text}'
-                }
-                
+            if response.status_code == 400 and 'already exists' in response.text:
+                return {'success': True, 'message': 'Instancia ja existe'}
+            return {'success': False, 'error': f'Erro {response.status_code}: {response.text}'}
+
         except requests.exceptions.ConnectionError:
             return {
                 'success': False,
-                'error': 'Não foi possível conectar à Evolution API. Verifique se ela está rodando.'
+                'error': 'Nao foi possivel conectar a Evolution API. Verifique se ela esta rodando.',
             }
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
+            return {'success': False, 'error': str(e)}
+
     def get_connection_status(self) -> Dict[str, Any]:
-        """
-        Retorna o status da conexão com WhatsApp
-        """
+        """Retorna o status da conexao com WhatsApp."""
         if not self.is_configured():
             return {
                 'conectado': False,
-                'erro': 'Serviço não configurado. Verifique as variáveis de ambiente.',
-                'configurado': False
+                'erro': 'Servico nao configurado. Verifique as variaveis de ambiente.',
+                'configurado': False,
             }
-        
+
         try:
-            url = f"{self.evolution_url}/instance/connectionState/{self.instance_name}"
-            response = requests.get(url, headers=self._get_headers(), timeout=10)
-            
+            response = self._request(
+                'GET',
+                f'/instance/connectionState/{self.instance_name}',
+                headers=self._get_headers(),
+                timeout=10,
+            )
+
             if response.status_code == 200:
                 data = response.json()
                 state = data.get('instance', {}).get('state', 'unknown')
@@ -130,149 +151,120 @@ class WhatsAppService:
                     'conectado': state == 'open',
                     'estado': state,
                     'instancia': self.instance_name,
-                    'configurado': True
+                    'configurado': True,
                 }
-            elif response.status_code == 404:
-                # Instância não existe, precisa criar
+            if response.status_code == 404:
                 return {
                     'conectado': False,
                     'estado': 'not_found',
-                    'erro': 'Instância não encontrada. Execute a criação da instância.',
+                    'erro': 'Instancia nao encontrada. Execute a criacao da instancia.',
                     'instancia': self.instance_name,
-                    'configurado': True
+                    'configurado': True,
                 }
-            else:
-                return {
-                    'conectado': False,
-                    'estado': 'error',
-                    'erro': f'Erro HTTP {response.status_code}',
-                    'configurado': True
-                }
-                
+            return {
+                'conectado': False,
+                'estado': 'error',
+                'erro': f'Erro HTTP {response.status_code}',
+                'configurado': True,
+            }
+
         except requests.exceptions.ConnectionError:
             return {
                 'conectado': False,
                 'estado': 'offline',
-                'erro': 'Evolution API offline. Verifique se o serviço está rodando.',
-                'configurado': True
+                'erro': 'Evolution API offline. Verifique se o servico esta rodando.',
+                'configurado': True,
             }
         except Exception as e:
             return {
                 'conectado': False,
                 'estado': 'error',
                 'erro': str(e),
-                'configurado': True
+                'configurado': True,
             }
-    
+
     def get_qr_code(self) -> Dict[str, Any]:
-        """
-        Obtém o QR Code para conexão
-        """
+        """Obtem o QR Code para conexao."""
         return self.generate_qr_code()
-    
+
     def generate_qr_code(self) -> Dict[str, Any]:
-        """
-        Obtém o QR Code para conexão (alias para compatibilidade)
-        """
+        """Obtem o QR Code para conexao."""
         try:
-            url = f"{self.evolution_url}/instance/connect/{self.instance_name}"
-            response = requests.get(url, headers=self._get_headers(), timeout=15)
-            
+            response = self._request(
+                'GET',
+                f'/instance/connect/{self.instance_name}',
+                headers=self._get_headers(),
+                timeout=15,
+            )
             if response.status_code == 200:
                 data = response.json()
                 return {
                     'success': True,
                     'qrcode': data.get('base64'),
                     'code': data.get('code'),
-                    'pairingCode': data.get('pairingCode')
+                    'pairingCode': data.get('pairingCode'),
                 }
-            else:
-                return {
-                    'success': False,
-                    'error': f'Erro {response.status_code}: {response.text}'
-                }
+            return {'success': False, 'error': f'Erro {response.status_code}: {response.text}'}
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
+            return {'success': False, 'error': str(e)}
+
     def logout(self) -> Dict[str, Any]:
-        """
-        Desconecta a instância do WhatsApp
-        """
+        """Desconecta a instancia do WhatsApp."""
         try:
-            url = f"{self.evolution_url}/instance/logout/{self.instance_name}"
-            response = requests.delete(url, headers=self._get_headers(), timeout=10)
-            
+            response = self._request(
+                'DELETE',
+                f'/instance/logout/{self.instance_name}',
+                headers=self._get_headers(),
+                timeout=10,
+            )
             if response.status_code == 200:
                 return {'success': True}
-            else:
-                return {
-                    'success': False,
-                    'error': f'Erro {response.status_code}'
-                }
+            return {'success': False, 'error': f'Erro {response.status_code}'}
         except Exception as e:
-            return {
-                'success': False,
-                'error': str(e)
-            }
-    
+            return {'success': False, 'error': str(e)}
+
     def send_text_message(self, phone: str, message: str) -> Dict[str, Any]:
-        """
-        Envia mensagem de texto via WhatsApp
-        
-        Args:
-            phone: Número de telefone (com ou sem código do país)
-            message: Texto da mensagem
-            
-        Returns:
-            Dict com 'success', 'sucesso', 'error', 'erro', etc.
-        """
-        # Verifica configuração
+        """Envia mensagem de texto via WhatsApp."""
         if not self.is_configured():
             return {
                 'success': False,
                 'sucesso': False,
-                'error': 'WhatsApp não configurado',
-                'erro': 'Serviço não configurado. Verifique o .env',
-                'modo': 'none'
+                'error': 'WhatsApp nao configurado',
+                'erro': 'Servico nao configurado. Verifique o .env',
+                'modo': 'none',
             }
-        
-        # Verifica status da conexão
+
         status = self.get_connection_status()
         if not status.get('conectado'):
             return {
                 'success': False,
                 'sucesso': False,
-                'error': 'WhatsApp não conectado',
-                'erro': f"WhatsApp não conectado. Estado: {status.get('estado')}",
+                'error': 'WhatsApp nao conectado',
+                'erro': f"WhatsApp nao conectado. Estado: {status.get('estado')}",
                 'modo': 'none',
-                'url_wame': f"https://wa.me/{self.format_phone(phone)}?text={urllib.parse.quote(message)}"
+                'url_wame': f"https://wa.me/{self.format_phone(phone)}?text={urllib.parse.quote(message)}",
             }
-        
-        # Formata o número
+
         formatted_phone = self.format_phone(phone)
-        
+
         try:
-            url = f"{self.evolution_url}/message/sendText/{self.instance_name}"
-            
             payload = {
                 'number': formatted_phone,
                 'text': message,
                 'options': {
                     'delay': 1200,
-                    'presence': 'composing'
-                }
+                    'presence': 'composing',
+                },
             }
-            
-            response = requests.post(
-                url,
+
+            response = self._request(
+                'POST',
+                f'/message/sendText/{self.instance_name}',
                 json=payload,
                 headers=self._get_headers(),
-                timeout=30
+                timeout=30,
             )
-            
+
             if response.status_code == 200:
                 data = response.json()
                 return {
@@ -281,19 +273,18 @@ class WhatsAppService:
                     'modo': 'api',
                     'message_id': data.get('key', {}).get('id'),
                     'timestamp': data.get('messageTimestamp'),
-                    'phone': formatted_phone
+                    'phone': formatted_phone,
                 }
-            else:
-                error_text = response.text
-                return {
-                    'success': False,
-                    'sucesso': False,
-                    'error': f'API erro {response.status_code}: {error_text}',
-                    'erro': f'Erro na API: {response.status_code}',
-                    'modo': 'wa.me_fallback',
-                    'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}"
-                }
-                
+
+            return {
+                'success': False,
+                'sucesso': False,
+                'error': f'API erro {response.status_code}: {response.text}',
+                'erro': f'Erro na API: {response.status_code}',
+                'modo': 'wa.me_fallback',
+                'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}",
+            }
+
         except requests.Timeout:
             return {
                 'success': False,
@@ -301,7 +292,7 @@ class WhatsAppService:
                 'error': 'Timeout na API',
                 'erro': 'API demorou muito para responder',
                 'modo': 'wa.me_fallback',
-                'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}"
+                'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}",
             }
         except Exception as e:
             return {
@@ -310,119 +301,92 @@ class WhatsAppService:
                 'error': str(e),
                 'erro': f'Erro: {str(e)}',
                 'modo': 'error',
-                'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}"
+                'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}",
             }
-    
+
     def send_message_with_buttons(self, phone: str, message: str, buttons: list) -> Dict[str, Any]:
-        """
-        Envia mensagem com botões (se suportado pela API)
-        """
+        """Envia mensagem com botoes (se suportado pela API)."""
         formatted_phone = self.format_phone(phone)
-        
+
         try:
-            url = f"{self.evolution_url}/message/sendButtons/{self.instance_name}"
-            
             payload = {
                 'number': formatted_phone,
                 'title': message[:50],
                 'description': message,
-                'footer': 'JurisGestão',
-                'buttons': buttons
+                'footer': 'JurisGestao',
+                'buttons': buttons,
             }
-            
-            response = requests.post(
-                url,
+
+            response = self._request(
+                'POST',
+                f'/message/sendButtons/{self.instance_name}',
                 json=payload,
                 headers=self._get_headers(),
-                timeout=30
+                timeout=30,
             )
-            
+
             if response.status_code == 200:
-                return {
-                    'success': True,
-                    'sucesso': True,
-                    'modo': 'api'
-                }
-            else:
-                # Fallback para texto simples
-                return self.send_text_message(phone, message)
-                
-        except Exception as e:
+                return {'success': True, 'sucesso': True, 'modo': 'api'}
+            return self.send_text_message(phone, message)
+        except Exception:
             return self.send_text_message(phone, message)
 
 
-# Instância global do serviço
 whatsapp_service = WhatsAppService()
 
 
-# ============================================================================
-# FUNÇÕES AUXILIARES DE ALTO NÍVEL
-# ============================================================================
-
 def enviar_boas_vindas(telefone: str, nome: str) -> bool:
-    """Envia mensagem de boas-vindas para novo cliente"""
     mensagem = (
-        f"👋 Olá, *{nome}*!\n\n"
-        f"Seja bem-vindo ao *JurisGestão*! 🏛️\n\n"
-        f"Seu cadastro foi realizado com sucesso. "
-        f"Agora você receberá atualizações sobre seus processos por aqui.\n\n"
-        f"Em caso de dúvidas, entre em contato conosco."
+        f"Ola, *{nome}*!\n\n"
+        f"Seja bem-vindo ao *JurisGestao*!\n\n"
+        f"Seu cadastro foi realizado com sucesso. Agora voce recebera atualizacoes sobre seus processos por aqui.\n\n"
+        f"Em caso de duvidas, entre em contato conosco."
     )
     resultado = whatsapp_service.send_text_message(telefone, mensagem)
     return resultado.get('success', False)
 
 
 def enviar_link_publico(telefone: str, nome_cliente: str, titulo_processo: str, link: str) -> bool:
-    """Envia link público de acompanhamento de processo"""
     mensagem = (
-        f"👋 Olá, *{nome_cliente}*!\n\n"
-        f"📋 Seu processo *{titulo_processo}* está disponível para acompanhamento.\n\n"
-        f"🔗 *Link de acesso:*\n{link}\n\n"
-        f"Você pode acessar para ver andamentos, prazos e documentos.\n\n"
-        f"Em caso de dúvidas, entre em contato conosco."
+        f"Ola, *{nome_cliente}*!\n\n"
+        f"Seu processo *{titulo_processo}* esta disponivel para acompanhamento.\n\n"
+        f"*Link de acesso:*\n{link}\n\n"
+        f"Voce pode acessar para ver andamentos, prazos e documentos.\n\n"
+        f"Em caso de duvidas, entre em contato conosco."
     )
     resultado = whatsapp_service.send_text_message(telefone, mensagem)
     return resultado.get('success', False)
 
 
 def notificar_nova_movimentacao(telefone: str, numero_processo: str, descricao: str, data: str = None) -> bool:
-    """Notifica cliente sobre nova movimentação no processo"""
-    mensagem = (
-        f"📋 *Nova Movimentação*\n\n"
-        f"⚖️ Processo: {numero_processo}\n"
-    )
+    mensagem = f"Nova movimentacao\n\nProcesso: {numero_processo}\n"
     if data:
-        mensagem += f"📅 Data: {data}\n"
-    mensagem += (
-        f"📝 Descrição: {descricao}\n\n"
-        f"Acesse o sistema para mais detalhes."
-    )
+        mensagem += f"Data: {data}\n"
+    mensagem += f"Descricao: {descricao}\n\nAcesse o sistema para mais detalhes."
     resultado = whatsapp_service.send_text_message(telefone, mensagem)
     return resultado.get('success', False)
 
 
 def notificar_novo_prazo(telefone: str, numero_processo: str, prazo_titulo: str, data_prazo: str) -> bool:
-    """Notifica cliente sobre novo prazo processual"""
     mensagem = (
-        f"⏰ *Novo Prazo*\n\n"
-        f"⚖️ Processo: {numero_processo}\n"
-        f"📌 Prazo: {prazo_titulo}\n"
-        f"📅 Data: {data_prazo}\n\n"
-        f"⚠️ Não esqueça deste prazo!"
+        f"Novo prazo\n\n"
+        f"Processo: {numero_processo}\n"
+        f"Prazo: {prazo_titulo}\n"
+        f"Data: {data_prazo}\n\n"
+        f"Nao esqueca deste prazo!"
     )
     resultado = whatsapp_service.send_text_message(telefone, mensagem)
     return resultado.get('success', False)
 
 
 def notificar_audiencia(telefone: str, numero_processo: str, data_audiencia: str, hora: str, local: str) -> bool:
-    """Notifica cliente sobre audiência marcada"""
     mensagem = (
-        f"⚖️ *Audiência Marcada*\n\n"
-        f"📋 Processo: {numero_processo}\n"
-        f"📅 Data: {data_audiencia}\n"
-        f"🕐 Horário: {hora}\n"
-        f"📍 Local: {local}\n\n"
-        f"Compareça com 30 minutos de antecedência."
+        f"Audiencia marcada\n\n"
+        f"Processo: {numero_processo}\n"
+        f"Data: {data_audiencia}\n"
+        f"Horario: {hora}\n"
+        f"Local: {local}\n\n"
+        f"Compareca com 30 minutos de antecedencia."
     )
     resultado = whatsapp_service.send_text_message(telefone, mensagem)
     return resultado.get('success', False)

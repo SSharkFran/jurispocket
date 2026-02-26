@@ -47,6 +47,8 @@ const getNavItems = (isSuperAdmin: boolean) => [
   ...(isSuperAdmin ? [{ path: '/admin', label: 'Super Admin', icon: Crown }] : []),
 ];
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5002/api').replace(/\/api\/?$/, '');
+
 export function DashboardLayout() {
   const { user, workspace, logout } = useAuth();
   const location = useLocation();
@@ -145,7 +147,7 @@ export function DashboardLayout() {
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl glass-card">
           <Avatar className="w-10 h-10 border-2 border-primary/40">
             <AvatarImage 
-              src={user?.avatar_url ? `http://localhost:5000${user.avatar_url}` : undefined} 
+              src={user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : undefined} 
               alt={user?.nome}
               className="object-cover"
             />
@@ -255,7 +257,7 @@ export function DashboardLayout() {
                   <Button variant="ghost" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                     <Avatar className="w-8 h-8 border border-border/50">
                       <AvatarImage 
-                        src={user?.avatar_url ? `http://localhost:5000${user.avatar_url}` : undefined} 
+                        src={user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : undefined} 
                         alt={user?.nome}
                         className="object-cover"
                       />

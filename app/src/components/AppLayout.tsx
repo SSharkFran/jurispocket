@@ -60,7 +60,7 @@ const navItems = [
 const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
-  const { logout, user } = useAuth();
+  const { logout, user, workspace } = useAuth();
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
@@ -123,6 +123,16 @@ const AppLayout = () => {
   const userInitials = user?.nome 
     ? user.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
+
+  const formatPlano = (plano?: string) => {
+    const codigo = (plano || '').toLowerCase();
+    if (codigo === 'pro') return 'Pro';
+    if (codigo === 'escritorio') return 'Escritório';
+    if (codigo === 'enterprise') return 'Enterprise';
+    if (codigo === 'gratuito' || codigo === 'free') return 'Gratuito';
+    if (!plano) return 'Gratuito';
+    return plano.charAt(0).toUpperCase() + plano.slice(1);
+  };
 
   const formatDate = (date?: string) => {
     if (!date) return '-';
@@ -383,7 +393,7 @@ const AppLayout = () => {
               </AnimatePresence>
             </div>
 
-            <span className="feature-badge text-[10px]">Pro</span>
+            <span className="feature-badge text-[10px]">{formatPlano(workspace?.plano)}</span>
           </div>
         </header>
 

@@ -10,6 +10,7 @@ interface User {
   telefone?: string;
   alerta_email?: boolean;
   alerta_whatsapp?: boolean;
+  resumo_diario?: boolean;
   avatar_url?: string;
   workspace_id: number;
 }
@@ -18,10 +19,12 @@ interface Workspace {
   id: number;
   nome: string;
   slug: string;
-  plano: 'free' | 'pro' | 'enterprise';
+  plano: string;
   max_users: number;
   max_processos: number;
   max_storage_mb: number;
+  plano_nome?: string;
+  limites?: string;
 }
 
 interface AuthContextType {
@@ -30,6 +33,7 @@ interface AuthContextType {
   workspace: Workspace | null;
   isLoading: boolean;
   isAuthenticated: boolean;
+  refreshUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; nome: string; phone?: string }) => Promise<void>;
   logout: () => void;
@@ -114,6 +118,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         workspace,
         isLoading,
         isAuthenticated: !!user,
+        refreshUser,
         login,
         register,
         logout,

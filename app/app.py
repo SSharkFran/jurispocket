@@ -2287,15 +2287,27 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
             # Seleciona modelo baseado no provider
             modelo = AssistenteIA.get_modelo()
             
-            # Chama a API de IA
-            response = ia_client.chat.completions.create(
-                model=modelo,
-                messages=messages,
-                functions=AssistenteIA.FUNCTIONS,
-                function_call="auto",
-                temperature=0.7,
-                max_tokens=500
-            )
+            def _criar_completion(com_funcoes: bool = True):
+                payload = {
+                    'model': modelo,
+                    'messages': messages,
+                    'temperature': 0.7,
+                    'max_tokens': 500
+                }
+                if com_funcoes:
+                    payload['functions'] = AssistenteIA.FUNCTIONS
+                    payload['function_call'] = 'auto'
+                return ia_client.chat.completions.create(**payload)
+
+            # Chama a API de IA (fallback sem funcoes para evitar erro tool_use_failed)
+            try:
+                response = _criar_completion(com_funcoes=True)
+            except Exception as tool_error:
+                tool_error_msg = str(tool_error)
+                if 'tool_use_failed' in tool_error_msg or 'Failed to call a function' in tool_error_msg:
+                    response = _criar_completion(com_funcoes=False)
+                else:
+                    raise
             
             message = response.choices[0].message
             funcoes_chamadas = []
@@ -2307,9 +2319,15 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
             )
             
             # Verifica se houve function calling
-            if message.function_call:
-                func_name = message.function_call.name
-                func_args = json.loads(message.function_call.arguments)
+            function_call = getattr(message, 'function_call', None)
+            if function_call:
+                func_name = function_call.name
+                try:
+                    func_args = json.loads(function_call.arguments or '{}')
+                except Exception:
+                    func_args = {}
+                if not isinstance(func_args, dict):
+                    func_args = {}
                 funcoes_chamadas.append({'nome': func_name, 'args': func_args})
                 
                 # Executa a função
@@ -2897,7 +2915,7 @@ def get_me():
     workspace = None
     if workspace_id:
         row = db.execute('''
-            SELECT w.*, p.codigo as plano, p.limites 
+            SELECT w.*, p.codigo as plano, p.nome as plano_nome, p.limites 
             FROM workspaces w
             LEFT JOIN assinaturas a ON w.id = a.workspace_id AND a.status = 'ativo'
             LEFT JOIN planos p ON a.plano_id = p.id
@@ -2910,6 +2928,7 @@ def get_me():
             # Se não tem plano, assume gratuito
             if not workspace.get('plano'):
                 workspace['plano'] = 'gratuito'
+                workspace['plano_nome'] = 'Gratuito'
                 workspace['limites'] = json.dumps({
                     'processos': 5, 
                     'clientes': 20, 
@@ -2921,6 +2940,7 @@ def get_me():
             workspace = {
                 'id': workspace_id,
                 'plano': 'gratuito',
+                'plano_nome': 'Gratuito',
                 'limites': json.dumps({
                     'processos': 5, 
                     'clientes': 20, 
@@ -7835,6 +7855,14 @@ def whatsapp_qrcode():
         }), 400
 
     resultado = whatsapp_service.generate_qr_code() or {}
+
+    # Se a instancia ainda nao existir, tenta criar automaticamente e gera QR novamente
+    if not resultado.get('success'):
+        erro_texto = (resultado.get('error') or '').lower()
+        if '404' in erro_texto or 'not found' in erro_texto or 'nao encontrada' in erro_texto:
+            criado = whatsapp_service.create_instance() or {}
+            if criado.get('success'):
+                resultado = whatsapp_service.generate_qr_code() or {}
 
     if resultado.get('success') and resultado.get('qrcode'):
         return jsonify({
