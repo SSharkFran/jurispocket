@@ -110,12 +110,12 @@ export const prazos = {
 };
 
 export const tarefas = {
-  list: (params?: { status?: string; processo_id?: number; atribuido_a?: number }) =>
+  list: (params?: { status?: string; processo_id?: number; assigned_to?: number; atribuido_a?: number }) =>
     api.get('/tarefas', { params }),
   get: (id: number) => api.get(`/tarefas/${id}`),
-  create: (data: { titulo: string; descricao?: string; prioridade: 'baixa' | 'media' | 'alta' | 'urgente'; processo_id?: number; data_vencimento?: string; atribuido_a?: number }) =>
+  create: (data: { titulo: string; descricao?: string; prioridade: 'baixa' | 'media' | 'alta' | 'urgente'; processo_id?: number; data_vencimento?: string; assigned_to?: number; atribuido_a?: number }) =>
     api.post('/tarefas', data),
-  update: (id: number, data: Partial<{ titulo?: string; descricao?: string; status?: 'pendente' | 'em_andamento' | 'concluida'; prioridade?: 'baixa' | 'media' | 'alta' | 'urgente'; atribuido_a?: number }>) =>
+  update: (id: number, data: Pick<{ status?: 'pendente' | 'em_andamento' | 'concluida' }, 'status'>) =>
     api.put(`/tarefas/${id}`, data),
   delete: (id: number) => api.delete(`/tarefas/${id}`),
   getWhatsAppLink: (id: number, params?: { phone?: string }) =>

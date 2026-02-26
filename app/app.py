@@ -41,6 +41,7 @@ import json
 import sqlite3
 import hashlib
 import secrets
+import threading
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, List, Dict, Any
@@ -4346,34 +4347,18 @@ def create_prazo():
 @app.route('/api/prazos/<int:id>', methods=['PUT'])
 @require_auth
 def update_prazo(id):
-    """Update deadline"""
-    data = request.get_json()
-    db = get_db()
-    
-    data_prazo = data.get('data_prazo') or data.get('data_final')
-
-    db.execute(
-        'UPDATE prazos SET tipo = ?, data_prazo = ?, descricao = ?, status = ? WHERE id = ? AND workspace_id = ?',
-        (data.get('tipo'), data_prazo, data.get('descricao'),
-         data.get('status'), id, g.auth['workspace_id'])
-    )
-    db.commit()
-    
-    prazo = db.execute('SELECT * FROM prazos WHERE id = ?', (id,)).fetchone()
-    prazo_dict = dict(prazo)
-    prazo_dict['data_final'] = prazo_dict.get('data_prazo')
-    if 'prioridade' not in prazo_dict or not prazo_dict.get('prioridade'):
-        prazo_dict['prioridade'] = 'media'
-    return jsonify(prazo_dict)
+    """Deadline editing is disabled."""
+    return jsonify({
+        'error': 'Edição de prazo desativada. Use "Marcar como cumprido".'
+    }), 403
 
 @app.route('/api/prazos/<int:id>', methods=['DELETE'])
 @require_auth
 def delete_prazo(id):
-    """Delete deadline"""
-    db = get_db()
-    db.execute('DELETE FROM prazos WHERE id = ? AND workspace_id = ?', (id, g.auth['workspace_id']))
-    db.commit()
-    return jsonify({'message': 'Prazo excluído'})
+    """Deadline deletion is disabled."""
+    return jsonify({
+        'error': 'Exclusão de prazo desativada.'
+    }), 403
 
 @app.route('/api/prazos/<int:id>/cumprido', methods=['PUT'])
 @require_auth
@@ -4441,18 +4426,39 @@ def list_tarefas():
 @require_auth
 def create_tarefa():
     """Create new task"""
-    data = request.get_json()
+    data = request.get_json() or {}
     db = get_db()
+    workspace_id = g.auth['workspace_id']
+    user_id = g.auth['user_id']
     
     # Suporta tanto 'assigned_to' quanto 'atribuido_a' (usado pelo frontend)
-    assigned_to = data.get('assigned_to') or data.get('atribuido_a')
-    print(f"📝 Criando tarefa: titulo={data.get('titulo')}, assigned_to={assigned_to}, user_id={g.auth['user_id']}")
+    assigned_to_raw = data.get('assigned_to')
+    if assigned_to_raw is None:
+        assigned_to_raw = data.get('atribuido_a')
+
+    assigned_to = None
+    if assigned_to_raw not in (None, ''):
+        try:
+            assigned_to = int(assigned_to_raw)
+        except (TypeError, ValueError):
+            return jsonify({'error': 'Responsável inválido'}), 400
+
+    if assigned_to is None:
+        assigned_to = user_id
+    else:
+        usuario_atribuido = db.execute(
+            'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+            (assigned_to, workspace_id)
+        ).fetchone()
+        if not usuario_atribuido:
+            return jsonify({'error': 'Responsável não pertence ao grupo'}), 400
+    print(f"📝 Criando tarefa: titulo={data.get('titulo')}, assigned_to={assigned_to}, user_id={user_id}")
     
     cursor = db.execute(
         '''INSERT INTO tarefas (workspace_id, processo_id, assigned_to, titulo, descricao,
            prioridade, status, data_vencimento)
            VALUES (?, ?, ?, ?, ?, ?, ?, ?)''',
-        (g.auth['workspace_id'], data.get('processo_id'), assigned_to,
+        (workspace_id, data.get('processo_id'), assigned_to,
          data.get('titulo'), data.get('descricao'), data.get('prioridade', 'media'),
          data.get('status', 'pendente'), data.get('data_vencimento'))
     )
@@ -4461,8 +4467,8 @@ def create_tarefa():
     tarefa_id = cursor.lastrowid
     tarefa = db.execute('SELECT * FROM tarefas WHERE id = ?', (tarefa_id,)).fetchone()
     
-    # Criar notificação para o usuário atribuído (ou para si mesmo se não atribuído)
-    assigned_to = assigned_to or g.auth['user_id']  # Se não atribuído, notifica o criador
+    # Criar notificação para o usuário atribuído.
+    assigned_to = assigned_to or user_id
     print(f"📝 assigned_to final: {assigned_to}")
     
     # Busca nome do processo se houver
@@ -4474,7 +4480,7 @@ def create_tarefa():
             processo_nome = processo['titulo']
     
     # Mensagem diferente se for para si mesmo ou outro
-    if assigned_to == g.auth['user_id']:
+    if assigned_to == user_id:
         mensagem = f"Você criou uma nova tarefa: {data.get('titulo')}"
     else:
         mensagem = f"Você foi atribuído à tarefa: {data.get('titulo')}"
@@ -4485,53 +4491,55 @@ def create_tarefa():
     db.execute(
         '''INSERT INTO notificacoes (usuario_id, workspace_id, titulo, mensagem, tipo, link)
            VALUES (?, ?, ?, ?, ?, ?)''',
-        (assigned_to, g.auth['workspace_id'], 'Nova Tarefa', mensagem, 'tarefa', 
+        (assigned_to, workspace_id, 'Nova Tarefa', mensagem, 'tarefa',
          f'/tarefas')
     )
     db.commit()
     print(f"🔔 Notificação criada para user_id={assigned_to}: {mensagem}")
     
-    # ============================================================================
-    # ENVIO DE EMAIL
-    # ============================================================================
     if EMAIL_SERVICE_DISPONIVEL and email_service.is_configured():
-        try:
-            # Busca dados do usuário atribuído
-            usuario = db.execute(
-                'SELECT id, nome, email, alerta_email FROM users WHERE id = ?',
-                (assigned_to,)
-            ).fetchone()
-            
-            if usuario and usuario['email'] and usuario['alerta_email']:
-                # Envia email de notificação
-                resultado_email = notificador_email.notificar_nova_tarefa(
-                    workspace_id=g.auth['workspace_id'],
-                    tarefa_id=tarefa_id,
-                    titulo_tarefa=data.get('titulo'),
-                    descricao=data.get('descricao'),
-                    data_vencimento=data.get('data_vencimento'),
-                    usuario_atribuido_id=assigned_to
-                )
-                
-                if resultado_email.get('success'):
-                    print(f"📧 Email enviado para {usuario['email']}")
-                else:
-                    print(f"⚠️  Erro ao enviar email: {resultado_email.get('error')}")
-            else:
-                print(f"📧 Usuário {assigned_to} não tem email ou alerta_email desativado")
-        except Exception as e:
-            print(f"⚠️  Erro ao enviar notificação por email: {e}")
-    else:
-        print(f"📧 Serviço de email não configurado")
-    
+        titulo_tarefa = data.get('titulo')
+        descricao = data.get('descricao')
+        data_vencimento = data.get('data_vencimento')
+
+        def _enviar_email_tarefa():
+            with app.app_context():
+                try:
+                    resultado_email = notificador_email.notificar_nova_tarefa(
+                        workspace_id=workspace_id,
+                        tarefa_id=tarefa_id,
+                        titulo_tarefa=titulo_tarefa,
+                        descricao=descricao,
+                        data_vencimento=data_vencimento,
+                        usuario_atribuido_id=assigned_to
+                    )
+                    if resultado_email.get('success'):
+                        print(f"[email] Notificação de tarefa enviada para user_id={assigned_to}")
+                    else:
+                        print(f"[email] Falha ao enviar notificação de tarefa: {resultado_email.get('error')}")
+                except Exception as e:
+                    print(f"[email] Erro inesperado ao enviar notificação de tarefa: {e}")
+
+        threading.Thread(target=_enviar_email_tarefa, daemon=True).start()
+
     return jsonify(dict(tarefa)), 201
 
 @app.route('/api/tarefas/<int:id>', methods=['PUT'])
 @require_auth
 def update_tarefa(id):
-    """Update task - partial update supported"""
-    data = request.get_json()
+    """Update task status (field editing disabled)."""
+    data = request.get_json() or {}
     db = get_db()
+
+    allowed_fields = {'status'}
+    campos_invalidos = set(data.keys()) - allowed_fields
+    if campos_invalidos:
+        return jsonify({
+            'error': 'Edição de tarefa desativada. Apenas mudança de status é permitida.'
+        }), 403
+
+    if 'status' in data and data['status'] not in ('pendente', 'em_andamento', 'concluida'):
+        return jsonify({'error': 'Status inválido'}), 400
     
     # Busca a tarefa atual
     tarefa_atual = db.execute(
@@ -4592,11 +4600,10 @@ def update_tarefa(id):
 @app.route('/api/tarefas/<int:id>', methods=['DELETE'])
 @require_auth
 def delete_tarefa(id):
-    """Delete task"""
-    db = get_db()
-    db.execute('DELETE FROM tarefas WHERE id = ? AND workspace_id = ?', (id, g.auth['workspace_id']))
-    db.commit()
-    return jsonify({'message': 'Tarefa excluída'})
+    """Task deletion is disabled."""
+    return jsonify({
+        'error': 'Exclusão de tarefa desativada.'
+    }), 403
 
 @app.route('/api/tarefas/<int:id>/whatsapp', methods=['GET'])
 @require_auth

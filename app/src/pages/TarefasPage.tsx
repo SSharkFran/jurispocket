@@ -8,7 +8,8 @@ import { Label } from '@/components/ui/label';
 import { Textarea } from '@/components/ui/textarea';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
-import { tarefas as tarefasApi, prazos as prazosApi, processos } from '@/services/api';
+import { tarefas as tarefasApi, prazos as prazosApi, processos, equipe } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { toast } from 'sonner';
 
 interface Tarefa {
@@ -41,6 +42,11 @@ interface Processo {
   titulo: string;
 }
 
+interface MembroEquipe {
+  id: number;
+  nome: string;
+}
+
 const statusIcon = (status: string) => {
   if (status === 'concluida' || status === 'cumprido') return <Check className="h-4 w-4 text-success" />;
   if (status === 'em_andamento') return <Clock className="h-4 w-4 text-info" />;
@@ -55,9 +61,11 @@ const prioridadeColors: Record<string, string> = {
 };
 
 export function TarefasPage() {
+  const { user } = useAuth();
   const [tarefasList, setTarefasList] = useState<Tarefa[]>([]);
   const [prazosList, setPrazosList] = useState<Prazo[]>([]);
   const [processosList, setProcessosList] = useState<Processo[]>([]);
+  const [membrosList, setMembrosList] = useState<MembroEquipe[]>([]);
   const [isLoading, setIsLoading] = useState(true);
 
   const [isTarefaDialogOpen, setIsTarefaDialogOpen] = useState(false);
@@ -69,6 +77,7 @@ export function TarefasPage() {
     prioridade: 'media' as 'baixa' | 'media' | 'alta' | 'urgente',
     processo_id: '',
     data_vencimento: '',
+    assigned_to: '',
   });
 
   const [prazoForm, setPrazoForm] = useState({
@@ -80,22 +89,33 @@ export function TarefasPage() {
     observacoes: '',
   });
 
+  const getDefaultAssignedTo = (membros: MembroEquipe[]) =>
+    membros.length === 1 ? membros[0].id.toString() : '';
+
   const loadData = async () => {
     setIsLoading(true);
     try {
-      const [tarefasRes, prazosRes, processosRes] = await Promise.all([
+      const [tarefasRes, prazosRes, processosRes, equipeRes] = await Promise.all([
         tarefasApi.list(),
         prazosApi.list(),
         processos.list(),
+        equipe.list(),
       ]);
 
       const tarefasData = tarefasRes.data?.tarefas || tarefasRes.data || [];
       const prazosData = prazosRes.data?.prazos || prazosRes.data || [];
       const processosData = processosRes.data?.processos || processosRes.data || [];
+      const equipeData = equipeRes.data?.equipe || equipeRes.data || [];
+      const membrosData = Array.isArray(equipeData) ? equipeData : [];
 
       setTarefasList(Array.isArray(tarefasData) ? tarefasData : []);
       setPrazosList(Array.isArray(prazosData) ? prazosData : []);
       setProcessosList(Array.isArray(processosData) ? processosData : []);
+      setMembrosList(membrosData);
+      setTarefaForm((prev) => ({
+        ...prev,
+        assigned_to: prev.assigned_to || getDefaultAssignedTo(membrosData),
+      }));
     } catch (error) {
       console.error('Erro ao carregar dados:', error);
       toast.error('Erro ao carregar dados');
@@ -115,6 +135,22 @@ export function TarefasPage() {
       return;
     }
 
+    if (membrosList.length > 1 && !tarefaForm.assigned_to) {
+      toast.error('Selecione o responsável da tarefa');
+      return;
+    }
+
+    const assignedTo = tarefaForm.assigned_to
+      ? parseInt(tarefaForm.assigned_to, 10)
+      : membrosList.length === 1
+        ? membrosList[0].id
+        : user?.id;
+
+    if (!assignedTo) {
+      toast.error('Não foi possível definir o responsável da tarefa');
+      return;
+    }
+
     try {
       await tarefasApi.create({
         titulo: tarefaForm.titulo,
@@ -122,6 +158,7 @@ export function TarefasPage() {
         prioridade: tarefaForm.prioridade,
         processo_id: tarefaForm.processo_id ? parseInt(tarefaForm.processo_id, 10) : undefined,
         data_vencimento: tarefaForm.data_vencimento || undefined,
+        assigned_to: assignedTo,
       });
       toast.success('Tarefa criada com sucesso!');
       setIsTarefaDialogOpen(false);
@@ -131,6 +168,7 @@ export function TarefasPage() {
         prioridade: 'media',
         processo_id: '',
         data_vencimento: '',
+        assigned_to: getDefaultAssignedTo(membrosList),
       });
       loadData();
     } catch (error) {
@@ -390,6 +428,25 @@ export function TarefasPage() {
                 </div>
 
                 <div>
+                  <Label htmlFor="assigned_to_tarefa">Responsável *</Label>
+                  <Select
+                    value={tarefaForm.assigned_to}
+                    onValueChange={(v) => setTarefaForm({ ...tarefaForm, assigned_to: v })}
+                  >
+                    <SelectTrigger className="bg-secondary border-border">
+                      <SelectValue placeholder={membrosList.length <= 1 ? 'Atribuída automaticamente a você' : 'Selecione o responsável'} />
+                    </SelectTrigger>
+                    <SelectContent className="bg-secondary border-border">
+                      {membrosList.map((membro) => (
+                        <SelectItem key={membro.id} value={membro.id.toString()}>
+                          {membro.nome}{membro.id === user?.id ? ' (Você)' : ''}
+                        </SelectItem>
+                      ))}
+                    </SelectContent>
+                  </Select>
+                </div>
+
+                <div>
                   <Label htmlFor="venc_tarefa">Data de Vencimento</Label>
                   <Input
                     id="venc_tarefa"
@@ -441,6 +498,9 @@ export function TarefasPage() {
                             <FileText className="h-3 w-3" />
                             {tarefa.processo_titulo}
                           </span>
+                        )}
+                        {tarefa.assigned_to_nome && (
+                          <span>Responsável: {tarefa.assigned_to_nome}</span>
                         )}
                         {tarefa.data_vencimento && (
                           <span>{new Date(tarefa.data_vencimento).toLocaleString('pt-BR')}</span>
