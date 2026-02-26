@@ -172,6 +172,7 @@ export function TemplatesPage() {
         uploadData.append('categoria', formData.categoria);
         
         // Upload de arquivo não implementado na API helper
+        await api.post('/templates/upload', uploadData, {
           headers: { 'Content-Type': 'multipart/form-data' }
         });
         
