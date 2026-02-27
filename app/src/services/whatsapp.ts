@@ -63,6 +63,37 @@ export interface WorkspaceEnvioResponse {
   }>;
 }
 
+export interface WhatsAppAutomacaoConfig {
+  sender_user_id?: number | null;
+  auto_nova_movimentacao: boolean;
+  auto_novo_prazo: boolean;
+  auto_lembrete_prazo: boolean;
+  auto_nova_tarefa: boolean;
+  reminder_days: string;
+  auto_resumo_diario: boolean;
+  daily_summary_time: string;
+  ai_generate_messages: boolean;
+  ai_prompt?: string;
+}
+
+export interface WhatsAppAutomacaoUser {
+  id: number;
+  nome: string;
+  email: string;
+  role: string;
+  telefone?: string;
+  alerta_whatsapp?: boolean | number;
+}
+
+export interface WhatsAppSenderStatus {
+  connected?: boolean;
+  conectado?: boolean;
+  state?: string;
+  estado?: string;
+  error?: string;
+  erro?: string;
+}
+
 export const whatsapp = {
   // Inicializa conexão da sessão do usuário
   connect: () => api.post<{ sucesso: boolean; estado?: string; connected?: boolean }>('/whatsapp/conectar'),
@@ -160,4 +191,40 @@ export const whatsapp = {
     user_ids?: number[];
     somente_alerta_whatsapp?: boolean;
   }) => api.post<WorkspaceEnvioResponse>('/whatsapp/workspace/enviar', payload),
+
+  // Configuração de automações por workspace
+  getAutomacoesConfig: () =>
+    api.get<{
+      sucesso: boolean;
+      is_admin: boolean;
+      config: WhatsAppAutomacaoConfig;
+      usuarios: WhatsAppAutomacaoUser[];
+      sender_status?: WhatsAppSenderStatus | null;
+    }>('/whatsapp/automacoes/config'),
+
+  updateAutomacoesConfig: (payload: Partial<WhatsAppAutomacaoConfig>) =>
+    api.put<{ sucesso: boolean; config: WhatsAppAutomacaoConfig }>('/whatsapp/automacoes/config', payload),
+
+  // Envia resumo diário de teste
+  enviarResumoTeste: () =>
+    api.post<{
+      sucesso: boolean;
+      enviados?: number;
+      falhas?: number;
+      total?: number;
+      error?: string;
+    }>('/whatsapp/automacoes/teste-resumo'),
+
+  // Sugere texto com IA
+  gerarMensagemIA: (payload: {
+    objetivo?: string;
+    mensagem_base?: string;
+    contexto?: string;
+    ai_prompt?: string;
+  }) =>
+    api.post<{
+      sucesso: boolean;
+      mensagem: string;
+      ia_disponivel: boolean;
+    }>('/whatsapp/automacoes/preview-ia', payload),
 };

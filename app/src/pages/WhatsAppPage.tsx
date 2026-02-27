@@ -1,9 +1,17 @@
 import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Users, QrCode, Settings, Loader2, Power, PowerOff, RefreshCw, Smartphone } from 'lucide-react';
+import { MessageSquare, Users, QrCode, Settings, Loader2, Power, PowerOff, RefreshCw, Smartphone, Bell, Clock3, Save, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
-import { whatsapp, WhatsAppStatus } from '@/services/whatsapp';
+import { Input } from '@/components/ui/input';
+import { Textarea } from '@/components/ui/textarea';
+import {
+  whatsapp,
+  WhatsAppStatus,
+  WhatsAppAutomacaoConfig,
+  WhatsAppAutomacaoUser,
+  WhatsAppSenderStatus
+} from '@/services/whatsapp';
 import { clientes } from '@/services/api';
 import { toast } from 'sonner';
 
@@ -26,6 +34,15 @@ const WhatsAppPage = () => {
   const [qrCode, setQrCode] = useState<string | null>(null);
   const [contatos, setContatos] = useState<ContatoWhatsApp[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
+  const [automacaoConfig, setAutomacaoConfig] = useState<WhatsAppAutomacaoConfig | null>(null);
+  const [automacaoUsers, setAutomacaoUsers] = useState<WhatsAppAutomacaoUser[]>([]);
+  const [senderStatus, setSenderStatus] = useState<WhatsAppSenderStatus | null>(null);
+  const [isAdminWorkspace, setIsAdminWorkspace] = useState(false);
+  const [isSavingAutomacao, setIsSavingAutomacao] = useState(false);
+  const [isEnviandoResumoTeste, setIsEnviandoResumoTeste] = useState(false);
+  const [iaContexto, setIaContexto] = useState('');
+  const [iaMensagemGerada, setIaMensagemGerada] = useState('');
+  const [isGerandoIA, setIsGerandoIA] = useState(false);
 
   const carregarStatus = async (silencioso = false) => {
     try {
@@ -61,9 +78,24 @@ const WhatsAppPage = () => {
     }
   };
 
+  const carregarAutomacoes = async (silencioso = true) => {
+    try {
+      const response = await whatsapp.getAutomacoesConfig();
+      setAutomacaoConfig(response.data.config);
+      setAutomacaoUsers(response.data.usuarios || []);
+      setSenderStatus(response.data.sender_status || null);
+      setIsAdminWorkspace(Boolean(response.data.is_admin));
+    } catch (error) {
+      if (!silencioso) {
+        toast.error('Erro ao carregar configurações de automação');
+      }
+    }
+  };
+
   useEffect(() => {
     carregarStatus(true);
     carregarClientes();
+    carregarAutomacoes(true);
   }, []);
 
   useEffect(() => {
@@ -137,8 +169,85 @@ const WhatsAppPage = () => {
     }
   };
 
+  const updateAutomacaoField = <K extends keyof WhatsAppAutomacaoConfig>(
+    key: K,
+    value: WhatsAppAutomacaoConfig[K]
+  ) => {
+    setAutomacaoConfig((prev) => (prev ? { ...prev, [key]: value } : prev));
+  };
+
+  const handleSalvarAutomacoes = async () => {
+    if (!automacaoConfig) return;
+    if (!isAdminWorkspace) {
+      toast.error('Apenas admin pode alterar automações');
+      return;
+    }
+
+    setIsSavingAutomacao(true);
+    try {
+      const payload = {
+        ...automacaoConfig,
+        sender_user_id: automacaoConfig.sender_user_id || null,
+      };
+      const response = await whatsapp.updateAutomacoesConfig(payload);
+      setAutomacaoConfig(response.data.config);
+      toast.success('Configurações de automação salvas');
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao salvar automações');
+    } finally {
+      setIsSavingAutomacao(false);
+    }
+  };
+
+  const handleEnviarResumoTeste = async () => {
+    if (!isAdminWorkspace) {
+      toast.error('Apenas admin pode enviar resumo de teste');
+      return;
+    }
+
+    setIsEnviandoResumoTeste(true);
+    try {
+      const response = await whatsapp.enviarResumoTeste();
+      if (response.data.sucesso) {
+        toast.success(`Resumo enviado: ${response.data.enviados || 0} mensagem(ns)`);
+      } else {
+        toast.error(response.data.error || 'Resumo não enviado');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao enviar resumo de teste');
+    } finally {
+      setIsEnviandoResumoTeste(false);
+    }
+  };
+
+  const handleGerarMensagemIA = async () => {
+    if (!iaContexto.trim()) {
+      toast.error('Descreva o contexto para gerar a mensagem');
+      return;
+    }
+
+    setIsGerandoIA(true);
+    try {
+      const response = await whatsapp.gerarMensagemIA({
+        objetivo: 'Criar mensagem automática para WhatsApp do escritório',
+        contexto: iaContexto,
+        ai_prompt: automacaoConfig?.ai_prompt || '',
+      });
+      setIaMensagemGerada(response.data.mensagem);
+      if (!response.data.ia_disponivel) {
+        toast.info('IA não configurada no servidor. Retornado texto base.');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao gerar mensagem com IA');
+    } finally {
+      setIsGerandoIA(false);
+    }
+  };
+
   const isConectado = Boolean(status?.connected ?? status?.conectado);
   const estadoConexao = status?.state || status?.estado || (isConectado ? 'open' : 'disconnected');
+  const senderConectado = Boolean(senderStatus?.connected ?? senderStatus?.conectado);
+  const senderEstado = senderStatus?.state || senderStatus?.estado || (senderConectado ? 'connected' : 'disconnected');
 
   const cards = [
     { label: 'Clientes com Telefone', value: contatos.length.toString(), icon: Users, color: 'text-primary' },
@@ -251,6 +360,194 @@ const WhatsAppPage = () => {
           </div>
         </div>
       </div>
+
+      {automacaoConfig && (
+        <div className="grid gap-6 lg:grid-cols-2">
+          <div className="glass-card p-5 space-y-4">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <Bell className="h-4 w-4 text-muted-foreground" /> Automações de WhatsApp
+            </h3>
+
+            {!isAdminWorkspace && (
+              <p className="text-xs text-warning">
+                Somente admins do workspace podem editar estas configurações.
+              </p>
+            )}
+
+            <div className="space-y-3 text-sm">
+              <div>
+                <label className="text-xs text-muted-foreground">Sessão remetente (WhatsApp comercial)</label>
+                <select
+                  className="mt-1 w-full rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm"
+                  value={automacaoConfig.sender_user_id || ''}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) =>
+                    updateAutomacaoField(
+                      'sender_user_id',
+                      e.target.value ? Number(e.target.value) : null
+                    )
+                  }
+                >
+                  <option value="">Selecionar automaticamente (admin do workspace)</option>
+                  {automacaoUsers.map((u) => (
+                    <option key={u.id} value={u.id}>
+                      {u.nome} {u.telefone ? `- ${u.telefone}` : ''}
+                    </option>
+                  ))}
+                </select>
+                {automacaoConfig.sender_user_id ? (
+                  <p className={`mt-2 text-xs ${senderConectado ? 'text-success' : 'text-warning'}`}>
+                    Sessão do remetente: {senderConectado ? 'conectada' : 'desconectada'} ({senderEstado})
+                  </p>
+                ) : (
+                  <p className="mt-2 text-xs text-muted-foreground">
+                    Sem remetente fixo. O sistema usa automaticamente o admin do workspace.
+                  </p>
+                )}
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.auto_nova_movimentacao}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('auto_nova_movimentacao', e.target.checked)}
+                />
+                <span>Enviar WhatsApp em nova movimentação</span>
+              </label>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.auto_novo_prazo}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('auto_novo_prazo', e.target.checked)}
+                />
+                <span>Enviar WhatsApp em novo prazo</span>
+              </label>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.auto_nova_tarefa}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('auto_nova_tarefa', e.target.checked)}
+                />
+                <span>Enviar WhatsApp em nova tarefa atribuída</span>
+              </label>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.auto_lembrete_prazo}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('auto_lembrete_prazo', e.target.checked)}
+                />
+                <span>Lembretes de prazo automáticos</span>
+              </label>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Dias para lembrar (ex: 7,3,1,0)</label>
+                <Input
+                  value={automacaoConfig.reminder_days}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('reminder_days', e.target.value)}
+                />
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.auto_resumo_diario}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('auto_resumo_diario', e.target.checked)}
+                />
+                <span>Resumo diário do escritório no WhatsApp</span>
+              </label>
+
+              <div>
+                <label className="text-xs text-muted-foreground flex items-center gap-2">
+                  <Clock3 className="h-3 w-3" /> Horário do resumo diário
+                </label>
+                <Input
+                  type="time"
+                  value={automacaoConfig.daily_summary_time || '18:00'}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('daily_summary_time', e.target.value)}
+                />
+              </div>
+
+              <label className="flex items-center gap-2">
+                <input
+                  type="checkbox"
+                  checked={automacaoConfig.ai_generate_messages}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('ai_generate_messages', e.target.checked)}
+                />
+                <span>Usar IA para melhorar mensagens automáticas</span>
+              </label>
+
+              <div>
+                <label className="text-xs text-muted-foreground">Prompt do escritório para IA (opcional)</label>
+                <Textarea
+                  rows={3}
+                  value={automacaoConfig.ai_prompt || ''}
+                  disabled={!isAdminWorkspace}
+                  onChange={(e) => updateAutomacaoField('ai_prompt', e.target.value)}
+                  placeholder="Ex: Mensagens diretas, formais e com foco em ação."
+                />
+              </div>
+            </div>
+
+            <div className="flex gap-2">
+              <Button
+                className="flex-1"
+                onClick={handleSalvarAutomacoes}
+                disabled={!isAdminWorkspace || isSavingAutomacao}
+              >
+                {isSavingAutomacao ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
+                Salvar automações
+              </Button>
+              <Button
+                variant="outline"
+                onClick={handleEnviarResumoTeste}
+                disabled={!isAdminWorkspace || isEnviandoResumoTeste}
+              >
+                {isEnviandoResumoTeste ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
+                Testar resumo
+              </Button>
+            </div>
+          </div>
+
+          <div className="glass-card p-5 space-y-4">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <Wand2 className="h-4 w-4 text-muted-foreground" /> Assistente IA de Mensagens
+            </h3>
+            <p className="text-xs text-muted-foreground">
+              Descreva um cenário e gere uma sugestão pronta para disparos automáticos.
+            </p>
+
+            <Textarea
+              rows={6}
+              value={iaContexto}
+              onChange={(e) => setIaContexto(e.target.value)}
+              placeholder="Ex: Avisar equipe sobre prazo de audiência amanhã às 14h do processo 123..."
+            />
+
+            <Button onClick={handleGerarMensagemIA} disabled={isGerandoIA}>
+              {isGerandoIA ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Wand2 className="mr-2 h-4 w-4" />}
+              Gerar mensagem com IA
+            </Button>
+
+            <Textarea
+              rows={8}
+              value={iaMensagemGerada}
+              onChange={(e) => setIaMensagemGerada(e.target.value)}
+              placeholder="A mensagem sugerida aparecerá aqui..."
+            />
+          </div>
+        </div>
+      )}
 
       <Dialog open={showQRCode} onOpenChange={setShowQRCode}>
         <DialogContent className="sm:max-w-md">

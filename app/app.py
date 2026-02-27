@@ -759,6 +759,44 @@ def init_db():
             FOREIGN KEY (workspace_id) REFERENCES workspaces (id)
         )
     ''')
+
+    # Configuração de automações WhatsApp por workspace
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS workspace_whatsapp_config (
+            workspace_id INTEGER PRIMARY KEY,
+            sender_user_id INTEGER,
+            auto_nova_movimentacao BOOLEAN DEFAULT 1,
+            auto_novo_prazo BOOLEAN DEFAULT 1,
+            auto_lembrete_prazo BOOLEAN DEFAULT 1,
+            auto_nova_tarefa BOOLEAN DEFAULT 1,
+            reminder_days TEXT DEFAULT '7,3,1,0',
+            auto_resumo_diario BOOLEAN DEFAULT 0,
+            daily_summary_time TEXT DEFAULT '18:00',
+            ai_generate_messages BOOLEAN DEFAULT 0,
+            ai_prompt TEXT,
+            updated_by INTEGER,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id),
+            FOREIGN KEY (sender_user_id) REFERENCES users (id),
+            FOREIGN KEY (updated_by) REFERENCES users (id)
+        )
+    ''')
+
+    # Log para evitar disparos duplicados de automação
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS whatsapp_automacao_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            tipo TEXT NOT NULL,
+            entity_type TEXT NOT NULL,
+            entity_id INTEGER NOT NULL,
+            marker TEXT NOT NULL,
+            payload TEXT,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(workspace_id, tipo, entity_type, entity_id, marker),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id)
+        )
+    ''')
     
     # Templates de Documentos (código duplicado removido - já criado acima)
     
@@ -797,7 +835,37 @@ def init_db():
         db.execute('SELECT fase FROM processos LIMIT 1')
     except:
         db.execute('ALTER TABLE processos ADD COLUMN fase TEXT')
-    
+
+    # Migration: garantir colunas novas em workspace_whatsapp_config
+    try:
+        db.execute('SELECT auto_nova_tarefa FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN auto_nova_tarefa BOOLEAN DEFAULT 1')
+    try:
+        db.execute('SELECT ai_generate_messages FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN ai_generate_messages BOOLEAN DEFAULT 0')
+    try:
+        db.execute('SELECT ai_prompt FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN ai_prompt TEXT')
+    try:
+        db.execute('SELECT reminder_days FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute("ALTER TABLE workspace_whatsapp_config ADD COLUMN reminder_days TEXT DEFAULT '7,3,1,0'")
+    try:
+        db.execute('SELECT sender_user_id FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN sender_user_id INTEGER')
+    try:
+        db.execute('SELECT updated_by FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN updated_by INTEGER')
+    try:
+        db.execute('SELECT updated_at FROM workspace_whatsapp_config LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspace_whatsapp_config ADD COLUMN updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+
     db.commit()
 
 # Initialize database on startup
@@ -2083,6 +2151,25 @@ class DatajudMonitor:
                         print(f"⚠️  Erro ao enviar email de movimentação: {resultado_email.get('error')}")
                 except Exception as e:
                     print(f"⚠️  Erro ao enviar notificação por email: {e}")
+
+            # ============================================================================
+            # ENVIO AUTOMÁTICO WHATSAPP PARA MOVIMENTAÇÕES
+            # ============================================================================
+            try:
+                if alertas_criados > 0:
+                    resultado_whatsapp = trigger_whatsapp_on_new_movements(
+                        workspace_id=workspace_id,
+                        processo_id=processo_id,
+                        numero_processo=numero_processo,
+                        movimentacoes=movimentacoes,
+                    )
+                    if resultado_whatsapp.get('success'):
+                        print(
+                            f"📱 WhatsApp de movimentações enviado: "
+                            f"{resultado_whatsapp.get('enviados', 0)} enviado(s)"
+                        )
+            except Exception as e:
+                print(f"⚠️  Erro ao enviar automação WhatsApp de movimentações: {e}")
             
             return alertas_criados
             
@@ -2659,6 +2746,514 @@ def parse_bool(value: Any) -> bool:
     text = str(value).strip().lower()
     return text in ('1', 'true', 'sim', 'yes', 'on')
 
+
+# ============================================================================
+# WHATSAPP AUTOMAÇÕES (WORKSPACE)
+# ============================================================================
+
+DEFAULT_WHATSAPP_AUTOMACAO = {
+    'sender_user_id': None,
+    'auto_nova_movimentacao': True,
+    'auto_novo_prazo': True,
+    'auto_lembrete_prazo': True,
+    'auto_nova_tarefa': True,
+    'reminder_days': '7,3,1,0',
+    'auto_resumo_diario': False,
+    'daily_summary_time': '18:00',
+    'ai_generate_messages': False,
+    'ai_prompt': '',
+}
+
+
+def parse_reminder_days(value: Any) -> List[int]:
+    """Converte texto '7,3,1,0' em lista de inteiros normalizada."""
+    if isinstance(value, list):
+        raw_values = value
+    else:
+        raw_values = str(value or '').split(',')
+
+    days: List[int] = []
+    for item in raw_values:
+        try:
+            day = int(str(item).strip())
+        except (TypeError, ValueError):
+            continue
+        if 0 <= day <= 30:
+            days.append(day)
+
+    normalized = sorted(set(days), reverse=True)
+    return normalized or [7, 3, 1, 0]
+
+
+def normalize_hhmm(value: Any, default: str = '18:00') -> str:
+    """Normaliza horário no formato HH:MM."""
+    text = str(value or '').strip()
+    if not text:
+        return default
+
+    try:
+        parsed = datetime.strptime(text[:5], '%H:%M')
+        return parsed.strftime('%H:%M')
+    except ValueError:
+        return default
+
+
+def get_workspace_whatsapp_config(db, workspace_id: int) -> Dict[str, Any]:
+    """Retorna configuração de automações WhatsApp com defaults aplicados."""
+    row = db.execute(
+        'SELECT * FROM workspace_whatsapp_config WHERE workspace_id = ?',
+        (workspace_id,),
+    ).fetchone()
+
+    config = dict(DEFAULT_WHATSAPP_AUTOMACAO)
+    if row:
+        config.update(dict(row))
+
+    reminder_days_list = parse_reminder_days(config.get('reminder_days'))
+    config['reminder_days'] = ','.join(str(day) for day in reminder_days_list)
+    config['reminder_days_list'] = reminder_days_list
+    config['daily_summary_time'] = normalize_hhmm(config.get('daily_summary_time'))
+    config['auto_nova_movimentacao'] = parse_bool(config.get('auto_nova_movimentacao'))
+    config['auto_novo_prazo'] = parse_bool(config.get('auto_novo_prazo'))
+    config['auto_lembrete_prazo'] = parse_bool(config.get('auto_lembrete_prazo'))
+    config['auto_nova_tarefa'] = parse_bool(config.get('auto_nova_tarefa'))
+    config['auto_resumo_diario'] = parse_bool(config.get('auto_resumo_diario'))
+    config['ai_generate_messages'] = parse_bool(config.get('ai_generate_messages'))
+    return config
+
+
+def resolve_workspace_whatsapp_sender_user_id(
+    db,
+    workspace_id: int,
+    fallback_user_id: Optional[int] = None,
+) -> Optional[int]:
+    """
+    Define qual usuário será usado como remetente da sessão WhatsApp do workspace.
+    Prioridade: configuração > fallback > primeiro admin/superadmin > primeiro usuário.
+    """
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    configured_sender = config.get('sender_user_id')
+
+    if configured_sender:
+        sender_row = db.execute(
+            'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+            (configured_sender, workspace_id),
+        ).fetchone()
+        if sender_row:
+            return int(sender_row['id'])
+
+    if fallback_user_id:
+        fallback_row = db.execute(
+            'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+            (fallback_user_id, workspace_id),
+        ).fetchone()
+        if fallback_row:
+            return int(fallback_row['id'])
+
+    admin_row = db.execute(
+        '''SELECT id
+           FROM users
+           WHERE workspace_id = ? AND role IN ('admin', 'superadmin')
+           ORDER BY id ASC
+           LIMIT 1''',
+        (workspace_id,),
+    ).fetchone()
+    if admin_row:
+        return int(admin_row['id'])
+
+    first_user = db.execute(
+        'SELECT id FROM users WHERE workspace_id = ? ORDER BY id ASC LIMIT 1',
+        (workspace_id,),
+    ).fetchone()
+    if first_user:
+        return int(first_user['id'])
+
+    return None
+
+
+def list_workspace_whatsapp_recipients(db, workspace_id: int) -> List[Dict[str, Any]]:
+    """
+    Lista destinatários padrão das automações.
+    Prioriza quem marcou alerta_whatsapp; se ninguém marcou, usa todos com telefone.
+    """
+    recipients = listar_usuarios_workspace_com_telefone(
+        db=db,
+        workspace_id=workspace_id,
+        somente_alerta_whatsapp=True,
+    )
+    if recipients:
+        return recipients
+
+    return listar_usuarios_workspace_com_telefone(
+        db=db,
+        workspace_id=workspace_id,
+        somente_alerta_whatsapp=False,
+    )
+
+
+def was_whatsapp_automacao_sent(
+    db,
+    workspace_id: int,
+    tipo: str,
+    entity_type: str,
+    entity_id: int,
+    marker: str,
+) -> bool:
+    row = db.execute(
+        '''SELECT id
+           FROM whatsapp_automacao_logs
+           WHERE workspace_id = ? AND tipo = ? AND entity_type = ? AND entity_id = ? AND marker = ?
+           LIMIT 1''',
+        (workspace_id, tipo, entity_type, entity_id, marker),
+    ).fetchone()
+    return bool(row)
+
+
+def register_whatsapp_automacao_log(
+    db,
+    workspace_id: int,
+    tipo: str,
+    entity_type: str,
+    entity_id: int,
+    marker: str,
+    payload: Optional[Dict[str, Any]] = None,
+) -> None:
+    db.execute(
+        '''INSERT OR IGNORE INTO whatsapp_automacao_logs
+           (workspace_id, tipo, entity_type, entity_id, marker, payload)
+           VALUES (?, ?, ?, ?, ?, ?)''',
+        (
+            workspace_id,
+            tipo,
+            entity_type,
+            entity_id,
+            marker,
+            json.dumps(payload or {}, ensure_ascii=False),
+        ),
+    )
+    db.commit()
+
+
+def maybe_generate_whatsapp_message_with_ai(
+    base_message: str,
+    objective: str,
+    ai_prompt: str = '',
+) -> str:
+    """
+    Reescreve mensagem com IA (quando configurada), mantendo fallback deterministico.
+    """
+    if not openai_client:
+        return base_message
+
+    model = 'llama-3.3-70b-versatile' if ia_provider == 'groq' else 'gpt-3.5-turbo'
+    system_prompt = (
+        "Voce escreve mensagens curtas e profissionais para WhatsApp de escritorio juridico. "
+        "Use portugues brasileiro, tom objetivo e claro."
+    )
+    if ai_prompt:
+        system_prompt += f" Preferencias do escritorio: {ai_prompt}"
+
+    user_prompt = (
+        f"Objetivo: {objective}\n"
+        "Reescreva a mensagem abaixo para WhatsApp, sem inventar dados, mantendo ate 700 caracteres.\n\n"
+        f"Mensagem base:\n{base_message}"
+    )
+
+    try:
+        response = openai_client.chat.completions.create(
+            model=model,
+            messages=[
+                {'role': 'system', 'content': system_prompt},
+                {'role': 'user', 'content': user_prompt},
+            ],
+            temperature=0.5,
+            max_tokens=260,
+        )
+        content = response.choices[0].message.content if response.choices else ''
+        text = (content or '').strip()
+        return text or base_message
+    except Exception as error:
+        print(f"[whatsapp-ai] Falha ao gerar mensagem com IA: {error}")
+        return base_message
+
+
+def dispatch_workspace_whatsapp_message(
+    db,
+    workspace_id: int,
+    message: str,
+    sender_user_id: Optional[int] = None,
+    recipients: Optional[List[Dict[str, Any]]] = None,
+) -> Dict[str, Any]:
+    """
+    Envia mensagem para destinatários padrão do workspace via sessão WhatsApp configurada.
+    """
+    if not whatsapp_service.is_configured():
+        return {'success': False, 'error': 'Servico WhatsApp nao configurado'}
+
+    sender = sender_user_id or resolve_workspace_whatsapp_sender_user_id(db, workspace_id)
+    if not sender:
+        return {'success': False, 'error': 'Nenhum usuario remetente encontrado para o workspace'}
+
+    targets = recipients or list_workspace_whatsapp_recipients(db, workspace_id)
+    if not targets:
+        return {'success': False, 'error': 'Nenhum destinatario com telefone configurado'}
+
+    report = enviar_whatsapp_para_destinatarios(
+        user_id_origem=sender,
+        destinatarios=targets,
+        mensagem=message,
+    )
+    return {'success': report.get('enviados', 0) > 0, 'sender_user_id': sender, **report}
+
+
+def trigger_whatsapp_on_new_deadline(workspace_id: int, prazo_id: int) -> Dict[str, Any]:
+    """Dispara WhatsApp automático ao criar um novo prazo."""
+    db = get_db()
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    if not config.get('auto_novo_prazo'):
+        return {'success': False, 'reason': 'auto_novo_prazo_desativado'}
+
+    prazo = db.execute(
+        '''SELECT p.id, p.tipo, p.data_prazo, p.descricao,
+                  pr.numero as processo_numero, pr.titulo as processo_titulo
+           FROM prazos p
+           JOIN processos pr ON p.processo_id = pr.id
+           WHERE p.id = ? AND p.workspace_id = ?''',
+        (prazo_id, workspace_id),
+    ).fetchone()
+    if not prazo:
+        return {'success': False, 'reason': 'prazo_nao_encontrado'}
+
+    prazo_data = dict(prazo)
+    message = (
+        "Novo prazo cadastrado\n\n"
+        f"Processo: {prazo_data.get('processo_numero')}\n"
+        f"Titulo: {prazo_data.get('processo_titulo')}\n"
+        f"Tipo: {prazo_data.get('tipo')}\n"
+        f"Data: {prazo_data.get('data_prazo')}\n"
+        f"Descricao: {prazo_data.get('descricao') or '-'}"
+    )
+
+    if config.get('ai_generate_messages'):
+        message = maybe_generate_whatsapp_message_with_ai(
+            base_message=message,
+            objective='Notificar equipe sobre novo prazo',
+            ai_prompt=config.get('ai_prompt') or '',
+        )
+
+    return dispatch_workspace_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        message=message,
+    )
+
+
+def trigger_whatsapp_on_new_task(workspace_id: int, tarefa_id: int) -> Dict[str, Any]:
+    """Dispara WhatsApp automático para responsável da tarefa."""
+    db = get_db()
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    if not config.get('auto_nova_tarefa'):
+        return {'success': False, 'reason': 'auto_nova_tarefa_desativado'}
+
+    tarefa = db.execute(
+        '''SELECT t.id, t.titulo, t.descricao, t.prioridade, t.data_vencimento,
+                  u.id as user_id, u.nome as user_nome, u.telefone as user_telefone,
+                  p.numero as processo_numero
+           FROM tarefas t
+           LEFT JOIN users u ON t.assigned_to = u.id
+           LEFT JOIN processos p ON t.processo_id = p.id
+           WHERE t.id = ? AND t.workspace_id = ?''',
+        (tarefa_id, workspace_id),
+    ).fetchone()
+    if not tarefa:
+        return {'success': False, 'reason': 'tarefa_nao_encontrada'}
+
+    task = dict(tarefa)
+    if not task.get('user_telefone'):
+        return {'success': False, 'reason': 'responsavel_sem_telefone'}
+
+    message = (
+        "Nova tarefa atribuida\n\n"
+        f"Responsavel: {task.get('user_nome')}\n"
+        f"Titulo: {task.get('titulo')}\n"
+        f"Processo: {task.get('processo_numero') or '-'}\n"
+        f"Prioridade: {task.get('prioridade')}\n"
+        f"Vencimento: {task.get('data_vencimento') or '-'}\n"
+        f"Descricao: {task.get('descricao') or '-'}"
+    )
+
+    if config.get('ai_generate_messages'):
+        message = maybe_generate_whatsapp_message_with_ai(
+            base_message=message,
+            objective='Notificar responsavel sobre nova tarefa',
+            ai_prompt=config.get('ai_prompt') or '',
+        )
+
+    recipient = [{
+        'id': task.get('user_id'),
+        'nome': task.get('user_nome'),
+        'telefone': task.get('user_telefone'),
+    }]
+
+    return dispatch_workspace_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        message=message,
+        recipients=recipient,
+    )
+
+
+def trigger_whatsapp_on_new_movements(
+    workspace_id: int,
+    processo_id: int,
+    numero_processo: str,
+    movimentacoes: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Dispara WhatsApp automático ao detectar novas movimentações."""
+    db = get_db()
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    if not config.get('auto_nova_movimentacao'):
+        return {'success': False, 'reason': 'auto_nova_movimentacao_desativado'}
+
+    if not movimentacoes:
+        return {'success': False, 'reason': 'sem_movimentacoes'}
+
+    resumo_linhas = []
+    for mov in movimentacoes[:5]:
+        resumo_linhas.append(f"- {mov.get('nome')} ({mov.get('data')})")
+
+    more_count = max(len(movimentacoes) - 5, 0)
+    complemento = f"\n...e mais {more_count} movimentacao(oes)." if more_count else ''
+
+    message = (
+        "Atualizacao de processo\n\n"
+        f"Processo: {numero_processo}\n"
+        f"Novas movimentacoes: {len(movimentacoes)}\n\n"
+        + '\n'.join(resumo_linhas)
+        + complemento
+    )
+
+    if config.get('ai_generate_messages'):
+        message = maybe_generate_whatsapp_message_with_ai(
+            base_message=message,
+            objective='Notificar equipe sobre novas movimentacoes de processo',
+            ai_prompt=config.get('ai_prompt') or '',
+        )
+
+    return dispatch_workspace_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        message=message,
+    )
+
+
+def build_workspace_daily_summary_message(
+    db,
+    workspace_id: int,
+    ai_enabled: bool = False,
+    ai_prompt: str = '',
+) -> str:
+    """Monta mensagem de resumo diário do escritório."""
+    hoje = datetime.now().strftime('%Y-%m-%d')
+    amanha = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+
+    total_processos_ativos = db.execute(
+        "SELECT COUNT(*) as count FROM processos WHERE workspace_id = ? AND status = 'ativo'",
+        (workspace_id,),
+    ).fetchone()['count']
+
+    tarefas_pendentes = db.execute(
+        "SELECT COUNT(*) as count FROM tarefas WHERE workspace_id = ? AND status IN ('pendente', 'em_andamento')",
+        (workspace_id,),
+    ).fetchone()['count']
+
+    prazos_hoje = db.execute(
+        "SELECT COUNT(*) as count FROM prazos WHERE workspace_id = ? AND status = 'pendente' AND data_prazo = ?",
+        (workspace_id, hoje),
+    ).fetchone()['count']
+
+    prazos_amanha = db.execute(
+        "SELECT COUNT(*) as count FROM prazos WHERE workspace_id = ? AND status = 'pendente' AND data_prazo = ?",
+        (workspace_id, amanha),
+    ).fetchone()['count']
+
+    movimentacoes_hoje = db.execute(
+        '''SELECT COUNT(*) as count
+           FROM movimentacoes_processo
+           WHERE workspace_id = ? AND date(created_at) = ?''',
+        (workspace_id, hoje),
+    ).fetchone()['count']
+
+    message = (
+        "Resumo diario do escritorio\n\n"
+        f"- Processos ativos: {total_processos_ativos}\n"
+        f"- Tarefas pendentes/em andamento: {tarefas_pendentes}\n"
+        f"- Prazos para hoje: {prazos_hoje}\n"
+        f"- Prazos para amanha: {prazos_amanha}\n"
+        f"- Novas movimentacoes hoje: {movimentacoes_hoje}\n\n"
+        "JurisPocket - acompanhamento diario"
+    )
+
+    if ai_enabled:
+        message = maybe_generate_whatsapp_message_with_ai(
+            base_message=message,
+            objective='Enviar resumo diario do escritorio via WhatsApp',
+            ai_prompt=ai_prompt,
+        )
+
+    return message
+
+
+def send_workspace_daily_summary(
+    workspace_id: int,
+    force: bool = False,
+) -> Dict[str, Any]:
+    """Envia resumo diário do workspace via WhatsApp."""
+    db = get_db()
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    if not force and not config.get('auto_resumo_diario'):
+        return {'success': False, 'reason': 'auto_resumo_diario_desativado'}
+
+    marker = datetime.now().strftime('%Y-%m-%d')
+    if not force and was_whatsapp_automacao_sent(
+        db,
+        workspace_id=workspace_id,
+        tipo='resumo_diario',
+        entity_type='workspace',
+        entity_id=workspace_id,
+        marker=marker,
+    ):
+        return {'success': False, 'reason': 'resumo_ja_enviado_hoje'}
+
+    message = build_workspace_daily_summary_message(
+        db=db,
+        workspace_id=workspace_id,
+        ai_enabled=config.get('ai_generate_messages', False),
+        ai_prompt=config.get('ai_prompt') or '',
+    )
+
+    report = dispatch_workspace_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        message=message,
+    )
+
+    if report.get('success'):
+        register_whatsapp_automacao_log(
+            db=db,
+            workspace_id=workspace_id,
+            tipo='resumo_diario',
+            entity_type='workspace',
+            entity_id=workspace_id,
+            marker=marker,
+            payload={
+                'enviados': report.get('enviados', 0),
+                'falhas': report.get('falhas', 0),
+            },
+        )
+
+    return report
+
 # ============================================================================
 # BACKGROUND JOBS
 # ============================================================================
@@ -2853,25 +3448,138 @@ def monitorar_datajud_job():
 
 
 def verificar_prazos_job():
-    """Job para verificar prazos próximos e enviar alertas"""
+    """Job para verificar prazos e disparar lembretes automáticos via WhatsApp."""
     with app.app_context():
         db = get_db()
-        
-        # Prazos dos próximos 3 dias
-        data_limite = (datetime.now() + timedelta(days=3)).strftime('%Y-%m-%d')
-        
+        hoje = datetime.now().date()
+        data_limite = (datetime.now() + timedelta(days=30)).strftime('%Y-%m-%d')
+
         prazos = db.execute(
-            '''SELECT p.*, pr.numero as processo_numero, pr.titulo as processo_titulo 
-               FROM prazos p 
-               JOIN processos pr ON p.processo_id = pr.id 
-               WHERE p.status = ? AND p.data_prazo <= ?''',
-            ('pendente', data_limite)
+            '''SELECT p.id, p.workspace_id, p.tipo, p.data_prazo, p.descricao,
+                      pr.numero as processo_numero, pr.titulo as processo_titulo
+               FROM prazos p
+               JOIN processos pr ON p.processo_id = pr.id
+               WHERE p.status = 'pendente' AND p.data_prazo <= ?''',
+            (data_limite,),
         ).fetchall()
-        
-        # Aqui você poderia integrar com serviço de email/SMS
-        # Por enquanto, apenas logamos
+
+        workspace_config_cache: Dict[int, Dict[str, Any]] = {}
+        total_enviados = 0
+
         for prazo in prazos:
-            print(f"ALERTA: Prazo próximo - {prazo['processo_numero']} - {prazo['tipo']} - {prazo['data_prazo']}")
+            prazo_dict = dict(prazo)
+            workspace_id = int(prazo_dict['workspace_id'])
+
+            if workspace_id not in workspace_config_cache:
+                workspace_config_cache[workspace_id] = get_workspace_whatsapp_config(db, workspace_id)
+            config = workspace_config_cache[workspace_id]
+
+            if not config.get('auto_lembrete_prazo'):
+                continue
+
+            data_raw = str(prazo_dict.get('data_prazo') or '')[:10]
+            try:
+                data_evento = datetime.strptime(data_raw, '%Y-%m-%d').date()
+            except ValueError:
+                continue
+
+            dias_restantes = (data_evento - hoje).days
+            if dias_restantes < 0:
+                continue
+
+            if dias_restantes not in config.get('reminder_days_list', [7, 3, 1, 0]):
+                continue
+
+            marker = f"D-{dias_restantes}"
+            if was_whatsapp_automacao_sent(
+                db=db,
+                workspace_id=workspace_id,
+                tipo='lembrete_prazo',
+                entity_type='prazo',
+                entity_id=int(prazo_dict['id']),
+                marker=marker,
+            ):
+                continue
+
+            if dias_restantes == 0:
+                cabecalho = "Lembrete de prazo: hoje e o dia"
+            elif dias_restantes == 1:
+                cabecalho = "Lembrete de prazo: falta 1 dia"
+            else:
+                cabecalho = f"Lembrete de prazo: faltam {dias_restantes} dias"
+
+            message = (
+                f"{cabecalho}\n\n"
+                f"Processo: {prazo_dict.get('processo_numero')}\n"
+                f"Titulo: {prazo_dict.get('processo_titulo')}\n"
+                f"Tipo: {prazo_dict.get('tipo')}\n"
+                f"Data: {prazo_dict.get('data_prazo')}\n"
+                f"Descricao: {prazo_dict.get('descricao') or '-'}"
+            )
+
+            if config.get('ai_generate_messages'):
+                message = maybe_generate_whatsapp_message_with_ai(
+                    base_message=message,
+                    objective='Lembrete de prazo processual',
+                    ai_prompt=config.get('ai_prompt') or '',
+                )
+
+            report = dispatch_workspace_whatsapp_message(
+                db=db,
+                workspace_id=workspace_id,
+                message=message,
+            )
+
+            if report.get('success'):
+                total_enviados += int(report.get('enviados', 0))
+                register_whatsapp_automacao_log(
+                    db=db,
+                    workspace_id=workspace_id,
+                    tipo='lembrete_prazo',
+                    entity_type='prazo',
+                    entity_id=int(prazo_dict['id']),
+                    marker=marker,
+                    payload={
+                        'dias_restantes': dias_restantes,
+                        'enviados': report.get('enviados', 0),
+                        'falhas': report.get('falhas', 0),
+                    },
+                )
+
+        if total_enviados:
+            print(f"[whatsapp] Lembretes de prazo enviados: {total_enviados}")
+
+
+def enviar_resumo_diario_whatsapp_job():
+    """Job para envio de resumo diário do escritório via WhatsApp."""
+    with app.app_context():
+        db = get_db()
+        agora = datetime.now().strftime('%H:%M')
+
+        workspaces = db.execute(
+            '''SELECT workspace_id
+               FROM workspace_whatsapp_config
+               WHERE auto_resumo_diario = 1 AND daily_summary_time = ?''',
+            (agora,),
+        ).fetchall()
+
+        if not workspaces:
+            return
+
+        total_workspaces = 0
+        total_enviados = 0
+        for row in workspaces:
+            workspace_id = int(row['workspace_id'])
+            report = send_workspace_daily_summary(workspace_id=workspace_id, force=False)
+            if report.get('success'):
+                total_workspaces += 1
+                total_enviados += int(report.get('enviados', 0))
+
+        if total_workspaces:
+            print(
+                f"[whatsapp] Resumo diário enviado para {total_workspaces} workspace(s), "
+                f"mensagens enviadas: {total_enviados}"
+            )
 
 # Agenda jobs
 scheduler.add_job(monitorar_processos_job, 'cron', hour=6, minute=0, id='pje_monitor')
@@ -2910,10 +3618,20 @@ scheduler.add_job(
     replace_existing=True
 )
 
+# Job de resumo diário WhatsApp (verifica a cada minuto o horário configurado por workspace)
+scheduler.add_job(
+    enviar_resumo_diario_whatsapp_job,
+    'cron',
+    minute='*',
+    id='whatsapp_resumo_diario',
+    replace_existing=True
+)
+
 print(f"[{datetime.now()}] Agendador iniciado. Jobs configurados:")
 print(f"  - PJe Monitor: 06:00 diariamente")
 print(f"  - Verificar Prazos: 08:00 diariamente")
 print(f"  - Datajud Monitor: 08:00 e 17:30 diariamente")
+print(f"  - WhatsApp Resumo Diário: checagem a cada minuto")
 
 scheduler.start()
 
@@ -4445,6 +5163,18 @@ def create_prazo():
              'prazo', '/prazos')
         )
     db.commit()
+
+    # Automação WhatsApp para novo prazo (assíncrono)
+    workspace_id = g.auth['workspace_id']
+
+    def _whatsapp_novo_prazo_job():
+        with app.app_context():
+            try:
+                trigger_whatsapp_on_new_deadline(workspace_id, prazo_id)
+            except Exception as error:
+                print(f"[whatsapp] Falha ao enviar automação de novo prazo: {error}")
+
+    threading.Thread(target=_whatsapp_novo_prazo_job, daemon=True).start()
     
     prazo_dict = dict(prazo)
     prazo_dict['data_final'] = prazo_dict.get('data_prazo')
@@ -4629,6 +5359,16 @@ def create_tarefa():
                     print(f"[email] Erro inesperado ao enviar notificação de tarefa: {e}")
 
         threading.Thread(target=_enviar_email_tarefa, daemon=True).start()
+
+    # Automação WhatsApp para nova tarefa (assíncrono)
+    def _whatsapp_nova_tarefa_job():
+        with app.app_context():
+            try:
+                trigger_whatsapp_on_new_task(workspace_id=workspace_id, tarefa_id=tarefa_id)
+            except Exception as error:
+                print(f"[whatsapp] Falha ao enviar automação de nova tarefa: {error}")
+
+    threading.Thread(target=_whatsapp_nova_tarefa_job, daemon=True).start()
 
     return jsonify(dict(tarefa)), 201
 
@@ -8536,6 +9276,161 @@ def whatsapp_workspace_enviar():
 
     return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
 
+
+@app.route('/api/whatsapp/automacoes/config', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_automacoes_config_get():
+    """Retorna configuração de automações WhatsApp do workspace."""
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    sender_status = None
+    if config.get('sender_user_id'):
+        try:
+            sender_status = whatsapp_service.get_connection_status(config.get('sender_user_id'))
+        except Exception:
+            sender_status = None
+
+    usuarios = db.execute(
+        '''SELECT id, nome, email, role, telefone, alerta_whatsapp
+           FROM users
+           WHERE workspace_id = ?
+           ORDER BY nome ASC''',
+        (workspace_id,),
+    ).fetchall()
+
+    return jsonify({
+        'sucesso': True,
+        'is_admin': g.auth.get('role') in ('admin', 'superadmin'),
+        'config': {
+            'sender_user_id': config.get('sender_user_id'),
+            'auto_nova_movimentacao': config.get('auto_nova_movimentacao'),
+            'auto_novo_prazo': config.get('auto_novo_prazo'),
+            'auto_lembrete_prazo': config.get('auto_lembrete_prazo'),
+            'auto_nova_tarefa': config.get('auto_nova_tarefa'),
+            'reminder_days': config.get('reminder_days'),
+            'auto_resumo_diario': config.get('auto_resumo_diario'),
+            'daily_summary_time': config.get('daily_summary_time'),
+            'ai_generate_messages': config.get('ai_generate_messages'),
+            'ai_prompt': config.get('ai_prompt') or '',
+        },
+        'sender_status': sender_status,
+        'usuarios': [dict(row) for row in usuarios],
+    })
+
+
+@app.route('/api/whatsapp/automacoes/config', methods=['PUT'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_automacoes_config_update():
+    """Atualiza configuração de automações WhatsApp do workspace (apenas admin)."""
+    if g.auth.get('role') not in ('admin', 'superadmin'):
+        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode alterar automações do workspace'}), 403
+
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+    data = request.get_json() or {}
+
+    sender_user_id = data.get('sender_user_id')
+    if sender_user_id in ('', None):
+        sender_user_id = None
+    else:
+        try:
+            sender_user_id = int(sender_user_id)
+        except (TypeError, ValueError):
+            return jsonify({'sucesso': False, 'erro': 'sender_user_id inválido'}), 400
+
+        user_ok = db.execute(
+            'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+            (sender_user_id, workspace_id),
+        ).fetchone()
+        if not user_ok:
+            return jsonify({'sucesso': False, 'erro': 'Usuário remetente não pertence ao workspace'}), 400
+
+    reminder_days = ','.join(str(d) for d in parse_reminder_days(data.get('reminder_days')))
+    daily_summary_time = normalize_hhmm(data.get('daily_summary_time'))
+
+    db.execute(
+        '''INSERT INTO workspace_whatsapp_config
+           (workspace_id, sender_user_id, auto_nova_movimentacao, auto_novo_prazo,
+            auto_lembrete_prazo, auto_nova_tarefa, reminder_days, auto_resumo_diario,
+            daily_summary_time, ai_generate_messages, ai_prompt, updated_by, updated_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+           ON CONFLICT(workspace_id) DO UPDATE SET
+             sender_user_id = excluded.sender_user_id,
+             auto_nova_movimentacao = excluded.auto_nova_movimentacao,
+             auto_novo_prazo = excluded.auto_novo_prazo,
+             auto_lembrete_prazo = excluded.auto_lembrete_prazo,
+             auto_nova_tarefa = excluded.auto_nova_tarefa,
+             reminder_days = excluded.reminder_days,
+             auto_resumo_diario = excluded.auto_resumo_diario,
+             daily_summary_time = excluded.daily_summary_time,
+             ai_generate_messages = excluded.ai_generate_messages,
+             ai_prompt = excluded.ai_prompt,
+             updated_by = excluded.updated_by,
+             updated_at = excluded.updated_at''',
+        (
+            workspace_id,
+            sender_user_id,
+            1 if parse_bool(data.get('auto_nova_movimentacao', True)) else 0,
+            1 if parse_bool(data.get('auto_novo_prazo', True)) else 0,
+            1 if parse_bool(data.get('auto_lembrete_prazo', True)) else 0,
+            1 if parse_bool(data.get('auto_nova_tarefa', True)) else 0,
+            reminder_days,
+            1 if parse_bool(data.get('auto_resumo_diario', False)) else 0,
+            daily_summary_time,
+            1 if parse_bool(data.get('ai_generate_messages', False)) else 0,
+            (data.get('ai_prompt') or '').strip()[:800],
+            g.auth['user_id'],
+            datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+        ),
+    )
+    db.commit()
+
+    config = get_workspace_whatsapp_config(db, workspace_id)
+    return jsonify({'sucesso': True, 'config': config})
+
+
+@app.route('/api/whatsapp/automacoes/teste-resumo', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_automacoes_teste_resumo():
+    """Envia resumo diário de teste para o workspace."""
+    if g.auth.get('role') not in ('admin', 'superadmin'):
+        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode enviar resumo de teste'}), 403
+
+    workspace_id = g.auth['workspace_id']
+    report = send_workspace_daily_summary(workspace_id=workspace_id, force=True)
+    return jsonify({'sucesso': report.get('success', False), **report})
+
+
+@app.route('/api/whatsapp/automacoes/preview-ia', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_automacoes_preview_ia():
+    """Gera sugestão de mensagem com IA para WhatsApp."""
+    data = request.get_json() or {}
+    objetivo = (data.get('objetivo') or 'Gerar mensagem profissional para WhatsApp').strip()
+    mensagem_base = (data.get('mensagem_base') or '').strip()
+    contexto = (data.get('contexto') or '').strip()
+
+    if not mensagem_base and not contexto:
+        return jsonify({'sucesso': False, 'erro': 'Informe mensagem_base ou contexto'}), 400
+
+    base = mensagem_base or f"Contexto: {contexto}"
+    suggested = maybe_generate_whatsapp_message_with_ai(
+        base_message=base,
+        objective=objetivo,
+        ai_prompt=(data.get('ai_prompt') or '').strip(),
+    )
+
+    return jsonify({
+        'sucesso': True,
+        'mensagem': suggested,
+        'ia_disponivel': bool(openai_client),
+    })
+
 @app.route('/api/clientes/<int:id>/whatsapp/boasvindas', methods=['POST'])
 @require_auth
 def enviar_boas_vindas_cliente(id):
@@ -8598,6 +9493,35 @@ def whatsapp_inbound_webhook():
     text = payload.get('text')
 
     print(f"Webhook WhatsApp recebido: event={event} user_id={user_id} from={from_jid} text={text}")
+
+    # Registra notificação interna para o dono da sessão
+    try:
+        if event == 'whatsapp.message.received' and user_id:
+            db = get_db()
+            owner = db.execute(
+                'SELECT id, workspace_id FROM users WHERE id = ? LIMIT 1',
+                (int(user_id),),
+            ).fetchone()
+            if owner:
+                msg_preview = (text or '').strip()
+                if len(msg_preview) > 120:
+                    msg_preview = msg_preview[:117] + '...'
+
+                db.execute(
+                    '''INSERT INTO notificacoes (usuario_id, workspace_id, titulo, mensagem, tipo, link)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (
+                        owner['id'],
+                        owner['workspace_id'],
+                        'Nova mensagem no WhatsApp',
+                        f"De: {from_jid or 'contato'} - {msg_preview or '(sem texto)'}",
+                        'whatsapp',
+                        '/app/whatsapp',
+                    ),
+                )
+                db.commit()
+    except Exception as error:
+        print(f"Erro ao registrar notificação inbound WhatsApp: {error}")
 
     return jsonify({'sucesso': True})
 

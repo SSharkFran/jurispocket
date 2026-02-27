@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { dashboard, financeiro, processos } from '@/services/api';
+import { useAuth } from '@/contexts/AuthContext';
 import { Badge } from '@/components/ui/badge';
 import { Button } from '@/components/ui/button';
 import { ScrollArea } from '@/components/ui/scroll-area';
@@ -83,16 +84,15 @@ interface Transacao {
 }
 
 export function DashboardPage() {
+  const { user } = useAuth();
   const [data, setData] = useState<DashboardData | null>(null);
   const [transacoes, setTransacoes] = useState<Transacao[]>([]);
   const [processosList, setProcessosList] = useState<Processo[]>([]);
   const [isLoading, setIsLoading] = useState(true);
-  const [debugInfo, setDebugInfo] = useState<string>('');
 
   const loadDashboard = async () => {
     try {
       setIsLoading(true);
-      setDebugInfo('Iniciando carregamento...');
       
       console.log('[Dashboard] Iniciando requisições...');
       
@@ -126,11 +126,8 @@ export function DashboardPage() {
       const processosData = processosRes.data?.processos || processosRes.data || [];
       console.log('[Dashboard] Processos extraídos:', processosData);
       setProcessosList(Array.isArray(processosData) ? processosData : []);
-      
-      setDebugInfo(`Carregado: ${transacoesData.length} transações, ${processosData.length} processos`);
     } catch (error: any) {
       console.error('[Dashboard] Erro geral:', error);
-      setDebugInfo(`Erro: ${error.message}`);
       toast.error('Erro ao carregar dashboard: ' + (error.message || 'Erro desconhecido'));
     } finally {
       setIsLoading(false);
@@ -313,6 +310,27 @@ export function DashboardPage() {
   const minhas_tarefas = data?.minhas_tarefas || data?.tarefas?.lista || [];
   const processos_movimentacao = data?.processos_movimentacao || [];
 
+  const saudacao = (() => {
+    const hora = new Date().getHours();
+    if (hora < 12) return 'Bom dia';
+    if (hora < 18) return 'Boa tarde';
+    return 'Boa noite';
+  })();
+
+  const primeiroNome = user?.nome?.trim().split(' ')[0] || 'Doutor(a)';
+  const lembretePrincipal = (() => {
+    if (stats.prazos_vencidos > 0) {
+      return `Você tem ${stats.prazos_vencidos} prazo(s) vencido(s) para revisar hoje.`;
+    }
+    if (stats.prazos_pendentes > 0) {
+      return `Existem ${stats.prazos_pendentes} prazo(s) pendente(s) no radar.`;
+    }
+    if (stats.minhas_tarefas > 0) {
+      return `Você tem ${stats.minhas_tarefas} tarefa(s) pendente(s).`;
+    }
+    return 'Sem alertas críticos no momento. Ótimo ritmo.';
+  })();
+
   const fade = (i: number) => ({
     initial: { opacity: 0, y: 20 },
     animate: { opacity: 1, y: 0 },
@@ -353,18 +371,16 @@ export function DashboardPage() {
 
   return (
     <div className="space-y-6">
-      {/* Debug info - remover depois */}
-      {debugInfo && (
-        <div className="text-xs text-muted-foreground bg-secondary p-2 rounded">
-          Debug: {debugInfo} | Transações: {transacoes.length} | Processos: {processosList.length} | 
-          Dados financeiros: {chartDataComBase.length} meses | Dados processos: {processosChart.length} meses
-        </div>
-      )}
-      
       {/* Header */}
-      <div>
-        <h1 className="text-2xl font-bold">Dashboard</h1>
-        <p className="text-muted-foreground text-sm">Aqui está o resumo do seu escritório hoje.</p>
+      <div className="glass-card p-5 flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+        <div>
+          <h1 className="text-2xl font-bold">{saudacao}, {primeiroNome}.</h1>
+          <p className="text-muted-foreground text-sm">{lembretePrincipal}</p>
+        </div>
+        <Button variant="outline" onClick={loadDashboard} disabled={isLoading}>
+          {isLoading ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
+          Atualizar
+        </Button>
       </div>
 
       {/* Stats */}
