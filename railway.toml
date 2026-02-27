@@ -16,7 +16,7 @@ replicas = 1
 
 # Healthcheck endpoint
 healthcheckPath = "/api/health"
-healthcheckTimeout = 60
+healthcheckTimeout = 180
 
 # Porta exposta (deve bater com o EXPOSE do Dockerfile)
 port = 8080

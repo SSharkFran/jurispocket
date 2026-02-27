@@ -78,20 +78,12 @@ ENV WHATSAPP_MICROSERVICE_URL=http://127.0.0.1:3001
 ENV WHATSAPP_SERVICE_PORT=3001
 ENV WHATSAPP_SESSIONS_DIR=/app/data/whatsapp-sessions
 
+# Script de startup robusto para Railway
+COPY start-railway.sh /start.sh
+RUN chmod +x /start.sh
+
 # Health check - mais generoso para Railway
-HEALTHCHECK --interval=30s --timeout=10s --start-period=60s --retries=5 \
+HEALTHCHECK --interval=30s --timeout=10s --start-period=120s --retries=6 \
     CMD curl -f http://localhost:$PORT/api/health || exit 1
 
-# Comando para iniciar usando Gunicorn (produção)
-# Usando 1 worker para economizar memória no Railway Hobby
-# O Railway já gerencia múltiplas réplicas se necessário
-CMD sh -c "node /app/whatsapp-service/src/server.js & \
-    exec gunicorn -w 1 -b 0.0.0.0:$PORT \
-    --access-logfile - \
-    --error-logfile - \
-    --timeout 120 \
-    --keep-alive 2 \
-    --max-requests 1000 \
-    --max-requests-jitter 50 \
-    --preload \
-    app:app"
+CMD ["/start.sh"]
