@@ -43,6 +43,28 @@ export function WhatsAppStatusPanel() {
     return () => clearInterval(interval);
   }, [fetchStatus]);
 
+  useEffect(() => {
+    if (!qrDialogOpen) return undefined;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await whatsapp.getStatus();
+        setStatus(response.data);
+
+        const conectado = Boolean(response.data?.connected ?? response.data?.conectado);
+        if (conectado) {
+          setQrDialogOpen(false);
+          setQrCode(null);
+          toast.success('WhatsApp conectado com sucesso');
+        }
+      } catch (error) {
+        console.error('Erro ao acompanhar status de conexao WhatsApp:', error);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [qrDialogOpen]);
+
   const handleGenerateQR = async () => {
     try {
       setQrLoading(true);
@@ -207,7 +229,8 @@ export function WhatsAppStatusPanel() {
             )}
 
             <p className="text-xs text-muted-foreground text-center">
-              WhatsApp - Menu - Aparelhos conectados - Conectar um aparelho
+              No celular: WhatsApp - Menu - Aparelhos conectados - Conectar um aparelho.
+              Nao use "Transferir conta".
             </p>
           </div>
         </DialogContent>

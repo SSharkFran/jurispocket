@@ -66,6 +66,28 @@ const WhatsAppPage = () => {
     carregarClientes();
   }, []);
 
+  useEffect(() => {
+    if (!showQRCode) return undefined;
+
+    const interval = setInterval(async () => {
+      try {
+        const response = await whatsapp.getStatus();
+        setStatus(response.data);
+
+        const conectado = Boolean(response.data?.connected ?? response.data?.conectado);
+        if (conectado) {
+          setShowQRCode(false);
+          setQrCode(null);
+          toast.success('WhatsApp conectado com sucesso');
+        }
+      } catch (error) {
+        console.error('Erro ao acompanhar status de conexao no modal QR:', error);
+      }
+    }, 3000);
+
+    return () => clearInterval(interval);
+  }, [showQRCode]);
+
   const handleConectar = async () => {
     setIsLoading(true);
     setShowQRCode(true);
@@ -237,7 +259,8 @@ const WhatsAppPage = () => {
           </DialogHeader>
           <div className="flex flex-col items-center p-4">
             <p className="text-sm text-muted-foreground mb-4 text-center">
-              Escaneie o QR Code com seu WhatsApp para conectar.
+              Escaneie pelo WhatsApp em "Aparelhos conectados > Conectar um aparelho".
+              Nao use o fluxo de "Transferir conta".
             </p>
             {qrCode ? (
               <div className="bg-white p-4 rounded-lg">

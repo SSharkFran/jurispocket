@@ -77,6 +77,7 @@ EXPOSE 8080
 ENV WHATSAPP_MICROSERVICE_URL=http://127.0.0.1:3001
 ENV WHATSAPP_SERVICE_PORT=3001
 ENV WHATSAPP_SESSIONS_DIR=/app/data/whatsapp-sessions
+ENV WHATSAPP_MAX_RECONNECT_ATTEMPTS=8
 
 # Script de startup robusto para Railway
 COPY start-railway.sh /start.sh

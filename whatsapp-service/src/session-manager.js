@@ -17,10 +17,18 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms));
 const normalizeUserId = (value) => String(value).trim();
 
 export class SessionManager {
-  constructor({ sessionsDir, minDelayMs, maxDelayMs, logger, webhookClient }) {
+  constructor({
+    sessionsDir,
+    minDelayMs,
+    maxDelayMs,
+    maxReconnectAttempts,
+    logger,
+    webhookClient,
+  }) {
     this.sessionsDir = sessionsDir;
     this.minDelayMs = minDelayMs;
     this.maxDelayMs = Math.max(maxDelayMs, minDelayMs);
+    this.maxReconnectAttempts = Math.max(Number(maxReconnectAttempts || 8), 1);
     this.logger = logger;
     this.webhookClient = webhookClient;
 
@@ -63,6 +71,7 @@ export class SessionManager {
       updatedAt: new Date().toISOString(),
       reconnectAttempts: 0,
       manualDisconnect: false,
+      lastDisconnectCode: null,
       recentMessages: [],
     };
   }
@@ -85,6 +94,11 @@ export class SessionManager {
     if (!error) return undefined;
     if (error instanceof Boom) return error.output?.statusCode;
     return error?.output?.statusCode;
+  }
+
+  _canReconnect(activeSession, loggedOut) {
+    if (activeSession.manualDisconnect || loggedOut) return false;
+    return activeSession.reconnectAttempts < this.maxReconnectAttempts;
   }
 
   _randomDelay() {
@@ -223,17 +237,31 @@ export class SessionManager {
         const statusCode = this._extractDisconnectStatusCode(lastDisconnect?.error);
         const activeSession = this._getOrCreateSession(userId);
         const loggedOut = statusCode === DisconnectReason.loggedOut;
-        const shouldReconnect = !activeSession.manualDisconnect && !loggedOut;
+        const shouldReconnect = this._canReconnect(activeSession, loggedOut);
+
+        if (loggedOut) {
+          // Quando o WhatsApp invalida a sessao, remove credenciais antigas
+          // para forcar um novo pareamento limpo no proximo QR.
+          await fs.rm(this._userSessionPath(userId), { recursive: true, force: true });
+        }
 
         this._updateSession(userId, {
           state: loggedOut ? 'logged_out' : 'disconnected',
           connected: false,
           socket: null,
           lastError: lastDisconnect?.error?.message || null,
+          lastDisconnectCode: statusCode ?? null,
         });
 
         this.logger.warn(
-          { userId, statusCode, shouldReconnect, loggedOut },
+          {
+            userId,
+            statusCode,
+            shouldReconnect,
+            loggedOut,
+            reconnectAttempts: activeSession.reconnectAttempts,
+            maxReconnectAttempts: this.maxReconnectAttempts,
+          },
           'Sessao WhatsApp desconectada',
         );
 
@@ -250,6 +278,13 @@ export class SessionManager {
               );
             });
           }, reconnectDelayMs);
+        } else if (!loggedOut && !activeSession.manualDisconnect) {
+          this._updateSession(userId, {
+            state: 'error',
+            lastError:
+              activeSession.lastError ||
+              `Reconexao excedeu limite (${this.maxReconnectAttempts})`,
+          });
         }
       }
     });
@@ -311,6 +346,7 @@ export class SessionManager {
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       reconnectAttempts: session.reconnectAttempts,
+      lastDisconnectCode: session.lastDisconnectCode,
     };
   }
 
