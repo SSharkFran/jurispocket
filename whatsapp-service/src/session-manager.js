@@ -67,12 +67,14 @@ export class SessionManager {
       connected: false,
       qrCodeDataUrl: null,
       lastError: null,
+      me: null,
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
       reconnectAttempts: 0,
       manualDisconnect: false,
       lastDisconnectCode: null,
       recentMessages: [],
+      recentAcks: [],
     };
   }
 
@@ -126,6 +128,22 @@ export class SessionManager {
       throw new Error('Telefone invalido');
     }
     return `${normalized}@s.whatsapp.net`;
+  }
+
+  _extractPhoneFromJid(jid) {
+    if (!jid) return null;
+    const raw = String(jid);
+    const withoutDomain = raw.split('@')[0] || '';
+    const base = withoutDomain.split(':')[0] || '';
+    const digits = base.replace(/\D/g, '');
+    return digits || null;
+  }
+
+  _recordAck(userId, entry) {
+    const session = this._getOrCreateSession(userId);
+    session.recentAcks.unshift(entry);
+    session.recentAcks = session.recentAcks.slice(0, 50);
+    session.updatedAt = new Date().toISOString();
   }
 
   _extractMessageText(message) {
@@ -209,6 +227,59 @@ export class SessionManager {
       }
     });
 
+    socket.ev.on('messages.update', (updates) => {
+      try {
+        updates.forEach((item) => {
+          const key = item?.key;
+          if (!key?.id || key.fromMe !== true) return;
+          const rawStatus = item?.update?.status ?? null;
+          const status =
+            rawStatus === null || rawStatus === undefined
+              ? null
+              : typeof rawStatus === 'string' || typeof rawStatus === 'number'
+                ? rawStatus
+                : JSON.stringify(rawStatus);
+          this._recordAck(userId, {
+            messageId: key.id,
+            to: key.remoteJid || null,
+            status,
+            timestamp: new Date().toISOString(),
+            source: 'messages.update',
+          });
+        });
+      } catch (error) {
+        this.logger.error({ userId, error: error.message }, 'Falha ao processar mensagens.update');
+      }
+    });
+
+    socket.ev.on('message-receipt.update', (updates) => {
+      try {
+        updates.forEach((item) => {
+          const key = item?.key;
+          if (!key?.id || key.fromMe !== true) return;
+          const rawStatus = item?.receipt?.status ?? item?.receipt ?? null;
+          const status =
+            rawStatus === null || rawStatus === undefined
+              ? null
+              : typeof rawStatus === 'string' || typeof rawStatus === 'number'
+                ? rawStatus
+                : JSON.stringify(rawStatus);
+          this._recordAck(userId, {
+            messageId: key.id,
+            to: key.remoteJid || null,
+            status,
+            timestamp: new Date().toISOString(),
+            source: 'message-receipt.update',
+          });
+        });
+      } catch (error) {
+        this.logger.error(
+          { userId, error: error.message },
+          'Falha ao processar message-receipt.update',
+        );
+      }
+    });
+
     socket.ev.on('connection.update', async (update) => {
       const { connection, lastDisconnect, qr } = update;
 
@@ -223,12 +294,22 @@ export class SessionManager {
       }
 
       if (connection === 'open') {
+        const me = socket.user || null;
+        const meJid = me?.id || me?.jid || null;
+        const mePhone = this._extractPhoneFromJid(meJid);
         this._updateSession(userId, {
           state: 'connected',
           connected: true,
           qrCodeDataUrl: null,
           reconnectAttempts: 0,
           lastError: null,
+          me: me
+            ? {
+                id: meJid,
+                name: me?.name || null,
+                phone: mePhone,
+              }
+            : null,
         });
         this.logger.info({ userId }, 'Sessao WhatsApp conectada');
       }
@@ -343,6 +424,8 @@ export class SessionManager {
       state: session.state,
       hasQrCode: Boolean(session.qrCodeDataUrl),
       lastError: session.lastError,
+      me: session.me,
+      recentAcks: session.recentAcks,
       createdAt: session.createdAt,
       updatedAt: session.updatedAt,
       reconnectAttempts: session.reconnectAttempts,

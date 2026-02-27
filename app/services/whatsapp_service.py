@@ -139,6 +139,9 @@ class WhatsAppService:
             if response.status_code == 200:
                 connected = bool(data.get('connected', False))
                 state = data.get('state', 'unknown')
+                me = data.get('me') or {}
+                me_phone = me.get('phone') if isinstance(me, dict) else None
+                me_name = me.get('name') if isinstance(me, dict) else None
                 return {
                     'connected': connected,
                     'conectado': connected,
@@ -148,6 +151,10 @@ class WhatsAppService:
                     'user_id': user_id,
                     'has_qrcode': data.get('hasQrCode', False),
                     'last_error': data.get('lastError'),
+                    'me': me or None,
+                    'phone_number': me_phone,
+                    'display_name': me_name,
+                    'recent_acks': data.get('recentAcks'),
                 }
 
             return {
