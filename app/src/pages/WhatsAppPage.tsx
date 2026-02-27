@@ -259,7 +259,7 @@ const WhatsAppPage = () => {
           </DialogHeader>
           <div className="flex flex-col items-center p-4">
             <p className="text-sm text-muted-foreground mb-4 text-center">
-              Escaneie pelo WhatsApp em "Aparelhos conectados > Conectar um aparelho".
+              Escaneie pelo WhatsApp em "Aparelhos conectados &gt; Conectar um aparelho".
               Nao use o fluxo de "Transferir conta".
             </p>
             {qrCode ? (
