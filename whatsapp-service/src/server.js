@@ -12,7 +12,7 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.WHATSAPP_SERVICE_PORT || 3001);
+const PORT = Number(process.env.PORT || process.env.WHATSAPP_SERVICE_PORT || 3001);
 const HOST = process.env.HOST || '0.0.0.0';
 const SERVICE_API_KEY =
   process.env.WHATSAPP_SERVICE_API_KEY || process.env.WHATSAPP_MICROSERVICE_TOKEN || '';
