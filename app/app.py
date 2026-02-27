@@ -9880,6 +9880,7 @@ def whatsapp_automacoes_config_update():
     db = get_db()
     workspace_id = g.auth['workspace_id']
     data = request.get_json() or {}
+    current_config = get_workspace_whatsapp_config(db, workspace_id)
 
     sender_user_id = data.get('sender_user_id')
     if sender_user_id in ('', None):
@@ -9897,8 +9898,10 @@ def whatsapp_automacoes_config_update():
         if not user_ok:
             return jsonify({'sucesso': False, 'erro': 'Usuário remetente não pertence ao workspace'}), 400
 
-    reminder_days = ','.join(str(d) for d in parse_reminder_days(data.get('reminder_days')))
-    daily_summary_time = normalize_hhmm(data.get('daily_summary_time'))
+    reminder_days = ','.join(
+        str(d) for d in parse_reminder_days(data.get('reminder_days', current_config.get('reminder_days')))
+    )
+    daily_summary_time = normalize_hhmm(data.get('daily_summary_time', current_config.get('daily_summary_time')))
 
     db.execute(
         '''INSERT INTO workspace_whatsapp_config
@@ -9922,15 +9925,15 @@ def whatsapp_automacoes_config_update():
         (
             workspace_id,
             sender_user_id,
-            1 if parse_bool(data.get('auto_nova_movimentacao', True)) else 0,
-            1 if parse_bool(data.get('auto_novo_prazo', True)) else 0,
-            1 if parse_bool(data.get('auto_lembrete_prazo', True)) else 0,
-            1 if parse_bool(data.get('auto_nova_tarefa', True)) else 0,
+            1 if parse_bool(data.get('auto_nova_movimentacao', current_config.get('auto_nova_movimentacao', True))) else 0,
+            1 if parse_bool(data.get('auto_novo_prazo', current_config.get('auto_novo_prazo', True))) else 0,
+            1 if parse_bool(data.get('auto_lembrete_prazo', current_config.get('auto_lembrete_prazo', True))) else 0,
+            1 if parse_bool(data.get('auto_nova_tarefa', current_config.get('auto_nova_tarefa', True))) else 0,
             reminder_days,
-            1 if parse_bool(data.get('auto_resumo_diario', False)) else 0,
+            1 if parse_bool(data.get('auto_resumo_diario', current_config.get('auto_resumo_diario', False))) else 0,
             daily_summary_time,
-            1 if parse_bool(data.get('ai_generate_messages', False)) else 0,
-            (data.get('ai_prompt') or '').strip()[:800],
+            1 if parse_bool(data.get('ai_generate_messages', current_config.get('ai_generate_messages', False))) else 0,
+            (data.get('ai_prompt', current_config.get('ai_prompt') or '') or '').strip()[:800],
             g.auth['user_id'],
             datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
         ),
@@ -10064,6 +10067,70 @@ def listar_mensagens_whatsapp_cliente(id):
     ).fetchall()
 
     return jsonify({'sucesso': True, 'mensagens': [dict(r) for r in rows]})
+
+
+@app.route('/api/whatsapp/debug', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_debug():
+    """Endpoint de debug para verificar envios e configuracoes WhatsApp."""
+    if g.auth.get('role') not in ('admin', 'superadmin'):
+        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode acessar debug'}), 403
+
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+
+    platform_config = ensure_platform_whatsapp_config(db)
+    workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
+    automacao_config = get_workspace_whatsapp_config(db, workspace_id)
+
+    platform_status = None
+    if whatsapp_service.is_configured():
+        try:
+            platform_status = whatsapp_service.get_connection_status(
+                platform_config.get('session_key') or PLATFORM_WHATSAPP_SESSION_KEY
+            )
+        except Exception as error:
+            platform_status = {'error': str(error)}
+
+    recipients = list_workspace_whatsapp_recipients(db, workspace_id)
+
+    logs = db.execute(
+        '''SELECT id, channel, direction, sender_key, sender_phone, recipient_phone,
+                  message_text, status, created_at
+           FROM whatsapp_message_log
+           WHERE workspace_id = ?
+           ORDER BY id DESC
+           LIMIT 30''',
+        (workspace_id,),
+    ).fetchall()
+
+    automacao_logs = db.execute(
+        '''SELECT id, tipo, entity_type, entity_id, marker, created_at
+           FROM whatsapp_automacao_logs
+           WHERE workspace_id = ?
+           ORDER BY id DESC
+           LIMIT 20''',
+        (workspace_id,),
+    ).fetchall()
+
+    raw_workspace_config = db.execute(
+        'SELECT * FROM workspace_whatsapp_config WHERE workspace_id = ?',
+        (workspace_id,),
+    ).fetchone()
+
+    return jsonify({
+        'sucesso': True,
+        'workspace_id': workspace_id,
+        'platform_config': platform_config,
+        'platform_status': platform_status,
+        'workspace_config': workspace_config,
+        'workspace_config_row': dict(raw_workspace_config) if raw_workspace_config else None,
+        'automacao_config': automacao_config,
+        'recipients': recipients,
+        'logs': [dict(r) for r in logs],
+        'automacao_logs': [dict(r) for r in automacao_logs],
+    })
 
 @app.route('/api/internal/whatsapp/inbound', methods=['POST'])
 def whatsapp_inbound_webhook():
