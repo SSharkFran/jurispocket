@@ -15,15 +15,17 @@ services:
       - DATAJUD_API_KEY=${DATAJUD_API_KEY:-}
       - GROQ_API_KEY=${GROQ_API_KEY:-}
       - WHATSAPP_VENDAS=${WHATSAPP_VENDAS:-5511999999999}
+      - WHATSAPP_MICROSERVICE_URL=${WHATSAPP_MICROSERVICE_URL:-http://whatsapp-service:3001}
+      - WHATSAPP_MICROSERVICE_TOKEN=${WHATSAPP_MICROSERVICE_TOKEN:-troque-essa-chave}
       - SMTP_HOST=${SMTP_HOST:-}
       - SMTP_USER=${SMTP_USER:-}
       - SMTP_PASS=${SMTP_PASS:-}
-      - EVOLUTION_API_URL=${EVOLUTION_API_URL:-http://evolution:8080}
-      - EVOLUTION_API_KEY=${EVOLUTION_API_KEY:-}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads
       - ./logs:/app/logs
+    depends_on:
+      - whatsapp-service
     networks:
       - jurispocket-network
     healthcheck:
@@ -46,44 +48,27 @@ services:
     networks:
       - jurispocket-network
 
-  # Evolution API (WhatsApp) - Opcional
-  evolution:
-    image: atendai/evolution-api:latest
-    container_name: jurispocket-evolution
-    restart: unless-stopped
-    ports:
-      - "8080:8080"
-    environment:
-      - SERVER_URL=${SERVER_URL:-http://localhost:8080}
-      - AUTHENTICATION_API_KEY=${EVOLUTION_API_KEY:-sua-chave-evolution}
-      - DATABASE_ENABLED=true
-      - DATABASE_URL=postgresql://postgres:postgres@postgres:5432/evolution
-      - DATABASE_SAVE_DATA_INSTANCE=true
-      - DATABASE_SAVE_DATA_NEW_MESSAGE=true
-    volumes:
-      - evolution_data:/evolution/instances
-    depends_on:
-      - postgres
-    networks:
-      - jurispocket-network
-
-  # PostgreSQL para Evolution
-  postgres:
-    image: postgres:15-alpine
-    container_name: jurispocket-postgres
+  # Microservico WhatsApp Web (Node.js + Baileys)
+  whatsapp-service:
+    build:
+      context: ./whatsapp-service
+      dockerfile: Dockerfile
+    container_name: jurispocket-whatsapp-service
     restart: unless-stopped
     environment:
-      - POSTGRES_USER=postgres
-      - POSTGRES_PASSWORD=postgres
-      - POSTGRES_DB=evolution
+      - PORT=3001
+      - HOST=0.0.0.0
+      - LOG_LEVEL=${WHATSAPP_LOG_LEVEL:-info}
+      - WHATSAPP_SERVICE_API_KEY=${WHATSAPP_MICROSERVICE_TOKEN:-troque-essa-chave}
+      - WHATSAPP_SESSIONS_DIR=/app/sessions
+      - WHATSAPP_MIN_DELAY_MS=${WHATSAPP_MIN_DELAY_MS:-1200}
+      - WHATSAPP_MAX_DELAY_MS=${WHATSAPP_MAX_DELAY_MS:-2600}
+      - WHATSAPP_INBOUND_WEBHOOK_URL=${WHATSAPP_INBOUND_WEBHOOK_URL:-http://backend:5000/api/internal/whatsapp/inbound}
+      - WHATSAPP_INBOUND_WEBHOOK_SECRET=${WHATSAPP_INBOUND_WEBHOOK_SECRET:-}
     volumes:
-      - postgres_data:/var/lib/postgresql/data
+      - ./whatsapp-sessions:/app/sessions
     networks:
       - jurispocket-network
-
-volumes:
-  evolution_data:
-  postgres_data:
 
 networks:
   jurispocket-network:

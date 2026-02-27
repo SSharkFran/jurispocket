@@ -41,10 +41,23 @@ export function WhatsAppButton({
   const [apiConfigured, setApiConfigured] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  // API via Evolution está com problemas, usar wa.me por padrão
   useEffect(() => {
-    // Desabilitar API direta por enquanto - usar wa.me
-    setApiConfigured(false);
+    let mounted = true;
+    const loadStatus = async () => {
+      try {
+        const response = await whatsapp.getStatus();
+        if (!mounted) return;
+        const data = response.data;
+        const conectado = Boolean(data.connected ?? data.conectado);
+        setApiConfigured(data.provider === 'whatsapp-web' && conectado);
+      } catch {
+        if (mounted) setApiConfigured(false);
+      }
+    };
+    loadStatus();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const formatarTelefone = (telefone: string): string => {
@@ -132,6 +145,13 @@ export function WhatsAppButton({
       toast.error('Cliente não possui telefone cadastrado');
       return;
     }
+    whatsapp.getStatus()
+      .then((response) => {
+        const data = response.data;
+        const conectado = Boolean(data.connected ?? data.conectado);
+        setApiConfigured(data.provider === 'whatsapp-web' && conectado);
+      })
+      .catch(() => setApiConfigured(false));
     setMensagem(gerarMensagemPadrao());
     setOpen(true);
   };
@@ -238,7 +258,7 @@ export function WhatsAppButton({
             {apiConfigured ? (
               <>
                 <Smartphone className="h-3 w-3 text-green-500" />
-                <span>Evolution API conectada</span>
+                <span>WhatsApp Web conectado</span>
               </>
             ) : (
               <>

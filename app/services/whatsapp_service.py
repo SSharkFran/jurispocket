@@ -1,74 +1,48 @@
 """
-Servico de Integracao WhatsApp - Evolution API v2
+Servico de Integracao WhatsApp - Microservico WhatsApp Web
 """
 
 import os
 import re
+import time
 import urllib.parse
-from typing import Any, Dict
+from typing import Any, Dict, Optional
 
 import requests
 
 
 class WhatsAppService:
-    """Servico para envio de mensagens WhatsApp via Evolution API."""
+    """Servico para envio de mensagens via microservico WhatsApp Web."""
 
     def __init__(self):
-        self.provider = os.getenv('WHATSAPP_PROVIDER', 'evolution')
-        self.evolution_url = os.getenv('EVOLUTION_API_URL', 'http://localhost:8080').rstrip('/')
-        self.evolution_key = os.getenv('EVOLUTION_API_KEY', '')
-        self.instance_name = os.getenv('EVOLUTION_INSTANCE_NAME', 'juris-instance')
+        self.provider = os.getenv('WHATSAPP_PROVIDER', 'whatsapp-web')
+        self.service_url = os.getenv('WHATSAPP_MICROSERVICE_URL', 'http://localhost:3001').rstrip('/')
+        self.service_api_key = os.getenv('WHATSAPP_MICROSERVICE_TOKEN', '')
+        self.timeout_seconds = int(os.getenv('WHATSAPP_MICROSERVICE_TIMEOUT', '20'))
 
     def is_configured(self) -> bool:
         """Verifica se o servico esta configurado corretamente."""
-        return self.provider == 'evolution' and bool(self.evolution_key) and bool(self.evolution_url)
+        return bool(self.service_url)
 
     def _get_headers(self) -> Dict[str, str]:
         """Retorna headers padrao para requisicoes."""
-        return {
-            'apikey': self.evolution_key,
-            'Content-Type': 'application/json',
-        }
-
-    def _candidate_base_urls(self) -> list:
-        """
-        Retorna URLs candidatas para conexao com Evolution.
-        Se o host for 'evolution' (comum em Docker), tenta localhost como fallback.
-        """
-        candidates = [self.evolution_url]
-        try:
-            parsed = urllib.parse.urlparse(self.evolution_url)
-            host = (parsed.hostname or '').lower()
-            if host == 'evolution':
-                scheme = parsed.scheme or 'http'
-                port = f":{parsed.port}" if parsed.port else ''
-                fallback = f"{scheme}://localhost{port}"
-                if fallback not in candidates:
-                    candidates.append(fallback)
-        except Exception:
-            pass
-        return candidates
+        headers: Dict[str, str] = {}
+        if self.service_api_key:
+            headers['x-api-key'] = self.service_api_key
+        return headers
 
     def _request(self, method: str, path: str, **kwargs):
-        """Executa request com fallback de DNS para localhost quando necessario."""
-        last_error = None
-        for base_url in self._candidate_base_urls():
-            try:
-                response = requests.request(method, f"{base_url}{path}", **kwargs)
-                # Se fallback funcionou, persiste para proximas chamadas
-                if base_url != self.evolution_url:
-                    self.evolution_url = base_url
-                return response
-            except requests.exceptions.ConnectionError as exc:
-                last_error = exc
-                text = str(exc)
-                if 'NameResolutionError' in text or "Failed to resolve 'evolution'" in text:
-                    continue
-                raise
+        """Executa request para o microservico."""
+        headers = kwargs.pop('headers', {}) or {}
+        headers.update(self._get_headers())
 
-        if last_error:
-            raise last_error
-        raise requests.exceptions.ConnectionError('Falha de conexao com Evolution API')
+        return requests.request(
+            method,
+            f"{self.service_url}{path}",
+            headers=headers,
+            timeout=kwargs.pop('timeout', self.timeout_seconds),
+            **kwargs,
+        )
 
     def format_phone(self, phone: str) -> str:
         """
@@ -76,155 +50,193 @@ class WhatsAppService:
         Ex: 6892188833 -> 556892188833
         """
         numero_limpo = re.sub(r'\D', '', phone or '')
-        if not numero_limpo.startswith('55'):
-            numero_limpo = '55' + numero_limpo
+        if not numero_limpo:
+            return ''
+
+        if numero_limpo.startswith('55'):
+            return numero_limpo
+
+        if len(numero_limpo) in [10, 11]:
+            return '55' + numero_limpo
+
         return numero_limpo
 
-    def create_instance(self) -> Dict[str, Any]:
-        """Cria a instancia na Evolution API se nao existir."""
+    def connect_user(self, user_id: int) -> Dict[str, Any]:
+        """Inicializa sessao WhatsApp de um usuario."""
+        if not user_id:
+            return {'success': False, 'error': 'user_id obrigatorio'}
+
         try:
-            payload = {
-                "instanceName": self.instance_name,
-                "token": self.evolution_key,
-                "qrcode": True,
-                "webhook": None,
-                "webhook_by_events": False,
-                "events": [
-                    "APPLICATION_STARTUP",
-                    "QRCODE_UPDATED",
-                    "MESSAGES_SET",
-                    "MESSAGES_UPSERT",
-                    "MESSAGES_UPDATE",
-                    "SEND_MESSAGE",
-                    "CONNECTION_UPDATE",
-                ],
+            response = self._request('POST', f'/whatsapp/connect/{user_id}')
+            data = response.json() if response.text else {}
+
+            if response.status_code == 200 and data.get('success'):
+                return {'success': True, **data}
+
+            return {
+                'success': False,
+                'error': data.get('error') or f'Erro {response.status_code}: {response.text}',
             }
-
-            response = self._request(
-                'POST',
-                '/instance/create',
-                json=payload,
-                headers={'Content-Type': 'application/json'},
-                timeout=30,
-            )
-
-            if response.status_code in [200, 201]:
-                data = response.json()
-                return {
-                    'success': True,
-                    'instance': data.get('instance', {}),
-                    'hash': data.get('hash', {}),
-                }
-            if response.status_code == 400 and 'already exists' in response.text:
-                return {'success': True, 'message': 'Instancia ja existe'}
-            return {'success': False, 'error': f'Erro {response.status_code}: {response.text}'}
-
         except requests.exceptions.ConnectionError:
             return {
                 'success': False,
-                'error': 'Nao foi possivel conectar a Evolution API. Verifique se ela esta rodando.',
+                'error': 'Nao foi possivel conectar ao microservico WhatsApp.',
             }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def get_connection_status(self) -> Dict[str, Any]:
-        """Retorna o status da conexao com WhatsApp."""
+    def create_instance(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Compatibilidade com codigo legado. Equivale a iniciar sessao."""
+        if not user_id:
+            return {'success': False, 'error': 'user_id obrigatorio'}
+        return self.connect_user(user_id)
+
+    def get_connection_status(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Retorna o status da conexao com WhatsApp para um usuario."""
         if not self.is_configured():
             return {
+                'connected': False,
                 'conectado': False,
+                'state': 'not_configured',
+                'estado': 'not_configured',
+                'error': 'Servico nao configurado',
                 'erro': 'Servico nao configurado. Verifique as variaveis de ambiente.',
                 'configurado': False,
             }
 
+        if not user_id:
+            return {
+                'connected': False,
+                'conectado': False,
+                'state': 'invalid_user',
+                'estado': 'invalid_user',
+                'error': 'user_id obrigatorio',
+                'erro': 'ID do usuario e obrigatorio para status.',
+                'configurado': True,
+            }
+
         try:
-            response = self._request(
-                'GET',
-                f'/instance/connectionState/{self.instance_name}',
-                headers=self._get_headers(),
-                timeout=10,
-            )
+            response = self._request('GET', f'/whatsapp/status/{user_id}', timeout=10)
+            data = response.json() if response.text else {}
 
             if response.status_code == 200:
-                data = response.json()
-                state = data.get('instance', {}).get('state', 'unknown')
+                connected = bool(data.get('connected', False))
+                state = data.get('state', 'unknown')
                 return {
-                    'conectado': state == 'open',
+                    'connected': connected,
+                    'conectado': connected,
+                    'state': state,
                     'estado': state,
-                    'instancia': self.instance_name,
                     'configurado': True,
+                    'user_id': user_id,
+                    'has_qrcode': data.get('hasQrCode', False),
+                    'last_error': data.get('lastError'),
                 }
-            if response.status_code == 404:
-                return {
-                    'conectado': False,
-                    'estado': 'not_found',
-                    'erro': 'Instancia nao encontrada. Execute a criacao da instancia.',
-                    'instancia': self.instance_name,
-                    'configurado': True,
-                }
+
             return {
+                'connected': False,
                 'conectado': False,
+                'state': 'error',
                 'estado': 'error',
+                'error': f'Erro HTTP {response.status_code}',
                 'erro': f'Erro HTTP {response.status_code}',
                 'configurado': True,
+                'user_id': user_id,
             }
 
         except requests.exceptions.ConnectionError:
             return {
+                'connected': False,
                 'conectado': False,
+                'state': 'offline',
                 'estado': 'offline',
-                'erro': 'Evolution API offline. Verifique se o servico esta rodando.',
+                'error': 'Microservico WhatsApp offline.',
+                'erro': 'Microservico WhatsApp offline. Verifique se o servico esta rodando.',
                 'configurado': True,
+                'user_id': user_id,
             }
         except Exception as e:
             return {
+                'connected': False,
                 'conectado': False,
+                'state': 'error',
                 'estado': 'error',
+                'error': str(e),
                 'erro': str(e),
                 'configurado': True,
+                'user_id': user_id,
             }
 
-    def get_qr_code(self) -> Dict[str, Any]:
-        """Obtem o QR Code para conexao."""
-        return self.generate_qr_code()
+    def get_qr_code(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Obtem QR code de conexao."""
+        return self.generate_qr_code(user_id)
 
-    def generate_qr_code(self) -> Dict[str, Any]:
-        """Obtem o QR Code para conexao."""
+    def generate_qr_code(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Obtem QR code para conexao de um usuario."""
+        if not user_id:
+            return {'success': False, 'error': 'user_id obrigatorio'}
+
+        connect_result = self.connect_user(user_id)
+        if not connect_result.get('success'):
+            return connect_result
+
         try:
-            response = self._request(
-                'GET',
-                f'/instance/connect/{self.instance_name}',
-                headers=self._get_headers(),
-                timeout=15,
-            )
-            if response.status_code == 200:
-                data = response.json()
-                return {
-                    'success': True,
-                    'qrcode': data.get('base64'),
-                    'code': data.get('code'),
-                    'pairingCode': data.get('pairingCode'),
-                }
-            return {'success': False, 'error': f'Erro {response.status_code}: {response.text}'}
+            max_attempts = 5
+            for _ in range(max_attempts):
+                response = self._request('GET', f'/whatsapp/qrcode/{user_id}', timeout=15)
+                data = response.json() if response.text else {}
+
+                if response.status_code == 200 and data.get('success'):
+                    return {
+                        'success': True,
+                        'qrcode': data.get('qrcode'),
+                        'state': data.get('state'),
+                        'connected': data.get('connected', False),
+                    }
+
+                if data.get('connected') and data.get('state') == 'connected':
+                    return {
+                        'success': False,
+                        'error': 'Usuario ja conectado. Nao ha QR code pendente.',
+                        'state': data.get('state'),
+                        'connected': True,
+                    }
+
+                # Aguarda curto intervalo para permitir atualizacao do evento QR no socket
+                time.sleep(1)
+
+            return {
+                'success': False,
+                'error': 'QR code ainda nao disponivel. Aguarde e tente novamente.',
+                'state': data.get('state') if 'data' in locals() else None,
+                'connected': data.get('connected', False) if 'data' in locals() else False,
+            }
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def logout(self) -> Dict[str, Any]:
-        """Desconecta a instancia do WhatsApp."""
+    def logout(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+        """Desconecta sessao do WhatsApp do usuario."""
+        if not user_id:
+            return {'success': False, 'error': 'user_id obrigatorio'}
+
         try:
             response = self._request(
-                'DELETE',
-                f'/instance/logout/{self.instance_name}',
-                headers=self._get_headers(),
+                'POST',
+                f'/whatsapp/disconnect/{user_id}',
+                json={'logout': True},
                 timeout=10,
             )
-            if response.status_code == 200:
+            data = response.json() if response.text else {}
+
+            if response.status_code == 200 and data.get('success'):
                 return {'success': True}
-            return {'success': False, 'error': f'Erro {response.status_code}'}
+
+            return {'success': False, 'error': data.get('error') or f'Erro {response.status_code}'}
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def send_text_message(self, phone: str, message: str) -> Dict[str, Any]:
-        """Envia mensagem de texto via WhatsApp."""
+    def send_text_message(self, user_id: Optional[int], phone: str, message: str) -> Dict[str, Any]:
+        """Envia mensagem de texto via WhatsApp do usuario."""
         if not self.is_configured():
             return {
                 'success': False,
@@ -234,54 +246,59 @@ class WhatsAppService:
                 'modo': 'none',
             }
 
-        status = self.get_connection_status()
-        if not status.get('conectado'):
+        if not user_id:
             return {
                 'success': False,
                 'sucesso': False,
-                'error': 'WhatsApp nao conectado',
-                'erro': f"WhatsApp nao conectado. Estado: {status.get('estado')}",
+                'error': 'user_id obrigatorio',
+                'erro': 'Nao foi possivel identificar o usuario da sessao WhatsApp.',
                 'modo': 'none',
-                'url_wame': f"https://wa.me/{self.format_phone(phone)}?text={urllib.parse.quote(message)}",
             }
 
         formatted_phone = self.format_phone(phone)
+        if not formatted_phone:
+            return {
+                'success': False,
+                'sucesso': False,
+                'error': 'Telefone invalido',
+                'erro': 'Telefone invalido',
+                'modo': 'none',
+            }
 
         try:
             payload = {
-                'number': formatted_phone,
-                'text': message,
-                'options': {
-                    'delay': 1200,
-                    'presence': 'composing',
-                },
+                'to': formatted_phone,
+                'message': message,
             }
 
             response = self._request(
                 'POST',
-                f'/message/sendText/{self.instance_name}',
+                f'/whatsapp/send/{user_id}',
                 json=payload,
-                headers=self._get_headers(),
                 timeout=30,
             )
+            data = response.json() if response.text else {}
 
-            if response.status_code == 200:
-                data = response.json()
+            if response.status_code == 200 and data.get('success'):
                 return {
                     'success': True,
                     'sucesso': True,
                     'modo': 'api',
-                    'message_id': data.get('key', {}).get('id'),
-                    'timestamp': data.get('messageTimestamp'),
+                    'message_id': data.get('messageId'),
+                    'timestamp': data.get('timestamp'),
                     'phone': formatted_phone,
+                    'delay_ms': data.get('delayMs'),
                 }
+
+            not_connected = response.status_code == 409
+            error_text = data.get('error') or f'API erro {response.status_code}'
 
             return {
                 'success': False,
                 'sucesso': False,
-                'error': f'API erro {response.status_code}: {response.text}',
-                'erro': f'Erro na API: {response.status_code}',
-                'modo': 'wa.me_fallback',
+                'error': error_text,
+                'erro': error_text,
+                'modo': 'wa.me_fallback' if not_connected else 'error',
                 'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}",
             }
 
@@ -304,49 +321,39 @@ class WhatsAppService:
                 'url_wame': f"https://wa.me/{formatted_phone}?text={urllib.parse.quote(message)}",
             }
 
-    def send_message_with_buttons(self, phone: str, message: str, buttons: list) -> Dict[str, Any]:
-        """Envia mensagem com botoes (se suportado pela API)."""
-        formatted_phone = self.format_phone(phone)
-
-        try:
-            payload = {
-                'number': formatted_phone,
-                'title': message[:50],
-                'description': message,
-                'footer': 'JurisGestao',
-                'buttons': buttons,
-            }
-
-            response = self._request(
-                'POST',
-                f'/message/sendButtons/{self.instance_name}',
-                json=payload,
-                headers=self._get_headers(),
-                timeout=30,
-            )
-
-            if response.status_code == 200:
-                return {'success': True, 'sucesso': True, 'modo': 'api'}
-            return self.send_text_message(phone, message)
-        except Exception:
-            return self.send_text_message(phone, message)
+    def send_message_with_buttons(
+        self,
+        user_id: Optional[int],
+        phone: str,
+        message: str,
+        buttons: list,
+    ) -> Dict[str, Any]:
+        """Fallback para texto. Botoes nao sao suportados no MVP."""
+        _ = buttons
+        return self.send_text_message(user_id, phone, message)
 
 
 whatsapp_service = WhatsAppService()
 
 
-def enviar_boas_vindas(telefone: str, nome: str) -> bool:
+def enviar_boas_vindas(telefone: str, nome: str, user_id: Optional[int] = None) -> bool:
     mensagem = (
         f"Ola, *{nome}*!\n\n"
-        f"Seja bem-vindo ao *JurisGestao*!\n\n"
+        f"Seja bem-vindo ao *JurisPocket*!\n\n"
         f"Seu cadastro foi realizado com sucesso. Agora voce recebera atualizacoes sobre seus processos por aqui.\n\n"
         f"Em caso de duvidas, entre em contato conosco."
     )
-    resultado = whatsapp_service.send_text_message(telefone, mensagem)
+    resultado = whatsapp_service.send_text_message(user_id, telefone, mensagem)
     return resultado.get('success', False)
 
 
-def enviar_link_publico(telefone: str, nome_cliente: str, titulo_processo: str, link: str) -> bool:
+def enviar_link_publico(
+    telefone: str,
+    nome_cliente: str,
+    titulo_processo: str,
+    link: str,
+    user_id: Optional[int] = None,
+) -> bool:
     mensagem = (
         f"Ola, *{nome_cliente}*!\n\n"
         f"Seu processo *{titulo_processo}* esta disponivel para acompanhamento.\n\n"
@@ -354,20 +361,32 @@ def enviar_link_publico(telefone: str, nome_cliente: str, titulo_processo: str, 
         f"Voce pode acessar para ver andamentos, prazos e documentos.\n\n"
         f"Em caso de duvidas, entre em contato conosco."
     )
-    resultado = whatsapp_service.send_text_message(telefone, mensagem)
+    resultado = whatsapp_service.send_text_message(user_id, telefone, mensagem)
     return resultado.get('success', False)
 
 
-def notificar_nova_movimentacao(telefone: str, numero_processo: str, descricao: str, data: str = None) -> bool:
+def notificar_nova_movimentacao(
+    telefone: str,
+    numero_processo: str,
+    descricao: str,
+    data: str = None,
+    user_id: Optional[int] = None,
+) -> bool:
     mensagem = f"Nova movimentacao\n\nProcesso: {numero_processo}\n"
     if data:
         mensagem += f"Data: {data}\n"
     mensagem += f"Descricao: {descricao}\n\nAcesse o sistema para mais detalhes."
-    resultado = whatsapp_service.send_text_message(telefone, mensagem)
+    resultado = whatsapp_service.send_text_message(user_id, telefone, mensagem)
     return resultado.get('success', False)
 
 
-def notificar_novo_prazo(telefone: str, numero_processo: str, prazo_titulo: str, data_prazo: str) -> bool:
+def notificar_novo_prazo(
+    telefone: str,
+    numero_processo: str,
+    prazo_titulo: str,
+    data_prazo: str,
+    user_id: Optional[int] = None,
+) -> bool:
     mensagem = (
         f"Novo prazo\n\n"
         f"Processo: {numero_processo}\n"
@@ -375,11 +394,18 @@ def notificar_novo_prazo(telefone: str, numero_processo: str, prazo_titulo: str,
         f"Data: {data_prazo}\n\n"
         f"Nao esqueca deste prazo!"
     )
-    resultado = whatsapp_service.send_text_message(telefone, mensagem)
+    resultado = whatsapp_service.send_text_message(user_id, telefone, mensagem)
     return resultado.get('success', False)
 
 
-def notificar_audiencia(telefone: str, numero_processo: str, data_audiencia: str, hora: str, local: str) -> bool:
+def notificar_audiencia(
+    telefone: str,
+    numero_processo: str,
+    data_audiencia: str,
+    hora: str,
+    local: str,
+    user_id: Optional[int] = None,
+) -> bool:
     mensagem = (
         f"Audiencia marcada\n\n"
         f"Processo: {numero_processo}\n"
@@ -388,5 +414,5 @@ def notificar_audiencia(telefone: str, numero_processo: str, data_audiencia: str
         f"Local: {local}\n\n"
         f"Compareca com 30 minutos de antecedencia."
     )
-    resultado = whatsapp_service.send_text_message(telefone, mensagem)
+    resultado = whatsapp_service.send_text_message(user_id, telefone, mensagem)
     return resultado.get('success', False)

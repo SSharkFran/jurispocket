@@ -82,7 +82,10 @@ const WhatsAppPage = () => {
         qrValue = (rawQr as any).qrcode || (rawQr as any).base64;
       }
 
-      if (response.data.sucesso && qrValue) {
+      if (response.data.sucesso && response.data.connected && !qrValue) {
+        toast.success('WhatsApp ja esta conectado');
+        setShowQRCode(false);
+      } else if (response.data.sucesso && qrValue) {
         setQrCode(normalizeQrCode(qrValue));
       } else {
         toast.error(response.data.erro || 'Erro ao gerar QR Code');

@@ -40,6 +40,7 @@ import re
 import json
 import sqlite3
 import hashlib
+import hmac
 import secrets
 import threading
 from datetime import datetime, timedelta
@@ -2551,6 +2552,113 @@ def formatar_mensagem_tarefa(tarefa: Dict) -> str:
 
 _Enviado via JurisPocket_"""
 
+
+def formatar_mensagem_movimentacao(processo: Dict, movimentacao: Dict) -> str:
+    """Formata mensagem para compartilhamento de movimentacao."""
+    return (
+        f"Atualizacao de processo\n\n"
+        f"Processo: {processo.get('numero', 'N/A')}\n"
+        f"Titulo: {processo.get('titulo', 'N/A')}\n"
+        f"Movimentacao: {movimentacao.get('nome_movimento', 'N/A')}\n"
+        f"Data: {movimentacao.get('data_movimento', 'N/A')}\n"
+        f"Codigo: {movimentacao.get('codigo_movimento', 'N/A')}\n\n"
+        f"Enviado via JurisPocket"
+    )
+
+
+def listar_usuarios_workspace_com_telefone(
+    db,
+    workspace_id: int,
+    user_ids: Optional[List[int]] = None,
+    somente_alerta_whatsapp: bool = False,
+) -> List[Dict[str, Any]]:
+    """
+    Lista usuarios do workspace com telefone valido.
+    """
+    query = '''
+        SELECT id, nome, email, telefone, alerta_whatsapp
+        FROM users
+        WHERE workspace_id = ?
+          AND telefone IS NOT NULL
+          AND TRIM(telefone) != ''
+    '''
+    params: List[Any] = [workspace_id]
+
+    if somente_alerta_whatsapp:
+        query += ' AND alerta_whatsapp = 1'
+
+    if user_ids:
+        placeholders = ','.join(['?'] * len(user_ids))
+        query += f' AND id IN ({placeholders})'
+        params.extend(user_ids)
+
+    query += ' ORDER BY nome ASC'
+    rows = db.execute(query, params).fetchall()
+    return [dict(r) for r in rows]
+
+
+def enviar_whatsapp_para_destinatarios(
+    user_id_origem: int,
+    destinatarios: List[Dict[str, Any]],
+    mensagem: str,
+) -> Dict[str, Any]:
+    """
+    Envia mensagem para lista de destinatarios e retorna relatorio consolidado.
+    """
+    resultados = []
+    enviados = 0
+    falhas = 0
+
+    for dest in destinatarios:
+        telefone = dest.get('telefone')
+        if not telefone:
+            falhas += 1
+            resultados.append({
+                'id': dest.get('id'),
+                'nome': dest.get('nome'),
+                'telefone': None,
+                'sucesso': False,
+                'erro': 'Telefone ausente',
+            })
+            continue
+
+        resposta = whatsapp_service.send_text_message(user_id_origem, telefone, mensagem)
+        sucesso = bool(resposta.get('success'))
+        if sucesso:
+            enviados += 1
+        else:
+            falhas += 1
+
+        resultados.append({
+            'id': dest.get('id'),
+            'nome': dest.get('nome'),
+            'telefone': telefone,
+            'sucesso': sucesso,
+            'erro': resposta.get('error') or resposta.get('erro'),
+            'message_id': resposta.get('message_id'),
+            'modo': resposta.get('modo'),
+            'url_wame': resposta.get('url_wame'),
+        })
+
+    return {
+        'total': len(destinatarios),
+        'enviados': enviados,
+        'falhas': falhas,
+        'resultados': resultados,
+    }
+
+
+def parse_bool(value: Any) -> bool:
+    """Converte valor dinamico para bool de forma previsivel."""
+    if isinstance(value, bool):
+        return value
+    if value is None:
+        return False
+    if isinstance(value, (int, float)):
+        return value != 0
+    text = str(value).strip().lower()
+    return text in ('1', 'true', 'sim', 'yes', 'on')
+
 # ============================================================================
 # BACKGROUND JOBS
 # ============================================================================
@@ -2820,7 +2928,7 @@ atexit.register(lambda: scheduler.shutdown())
 @app.route('/api/auth/register', methods=['POST'])
 def register():
     """Register new user with workspace"""
-    data = request.get_json()
+    data = request.get_json() or {}
     
     nome = data.get('nome')
     email = data.get('email')
@@ -2866,7 +2974,7 @@ def register():
 @app.route('/api/auth/login', methods=['POST'])
 def login():
     """Login user"""
-    data = request.get_json()
+    data = request.get_json() or {}
     
     email = data.get('email')
     password = data.get('password')
@@ -2959,7 +3067,7 @@ def get_me():
 @require_auth
 def update_me():
     """Update current user profile"""
-    data = request.get_json()
+    data = request.get_json() or {}
     db = get_db()
     
     # Atualiza os campos permitidos
@@ -4609,11 +4717,11 @@ def delete_tarefa(id):
 @require_auth
 @require_recurso('whatsapp')
 def gerar_whatsapp_tarefa(id):
-    """Generate WhatsApp link for task"""
+    """Prepara dados de compartilhamento WhatsApp para tarefa."""
     db = get_db()
     
     tarefa = db.execute(
-        '''SELECT t.*, u.nome as assigned_to_nome, u.email as assigned_to_email
+        '''SELECT t.*, u.nome as assigned_to_nome, u.email as assigned_to_email, u.telefone as assigned_to_telefone
            FROM tarefas t 
            LEFT JOIN users u ON t.assigned_to = u.id 
            WHERE t.id = ? AND t.workspace_id = ?''',
@@ -4623,10 +4731,21 @@ def gerar_whatsapp_tarefa(id):
     if not tarefa:
         return jsonify({'error': 'Tarefa não encontrada'}), 404
     
-    # Get workspace admin phone (simplified - in production, you'd have user phones)
-    mensagem = formatar_mensagem_tarefa(dict(tarefa))
-    
-    return jsonify({'mensagem': mensagem})
+    tarefa_dict = dict(tarefa)
+    mensagem = formatar_mensagem_tarefa(tarefa_dict)
+    link = None
+    if tarefa_dict.get('assigned_to_telefone'):
+        link = gerar_link_whatsapp(tarefa_dict.get('assigned_to_telefone'), mensagem)
+
+    return jsonify({
+        'mensagem': mensagem,
+        'responsavel': {
+            'nome': tarefa_dict.get('assigned_to_nome'),
+            'email': tarefa_dict.get('assigned_to_email'),
+            'telefone': tarefa_dict.get('assigned_to_telefone'),
+        },
+        'link': link,
+    })
 
 # ============================================================================
 # API ROUTES - FINANCEIRO
@@ -7826,13 +7945,36 @@ def email_notificar_movimentacao():
 # WHATSAPP INTEGRATION
 # ============================================================================
 
+@app.route('/api/whatsapp/conectar', methods=['POST'])
+@require_auth
+def whatsapp_conectar():
+    """
+    Inicializa a sessao WhatsApp do usuario autenticado.
+    """
+    user_id = g.auth.get('user_id')
+    resultado = whatsapp_service.connect_user(user_id) or {}
+
+    if resultado.get('success'):
+        return jsonify({
+            'sucesso': True,
+            'estado': resultado.get('state'),
+            'connected': resultado.get('connected', False),
+        })
+
+    return jsonify({
+        'sucesso': False,
+        'erro': resultado.get('error') or resultado.get('erro') or 'Falha ao iniciar sessao WhatsApp.'
+    }), 500
+
+
 @app.route('/api/whatsapp/status', methods=['GET'])
 @require_auth
 def whatsapp_status():
     """
     Retorna status da conexao com WhatsApp
     """
-    status = whatsapp_service.get_connection_status() or {}
+    user_id = g.auth.get('user_id')
+    status = whatsapp_service.get_connection_status(user_id) or {}
     connected = status.get('connected')
     if connected is None:
         connected = status.get('conectado', False)
@@ -7843,6 +7985,7 @@ def whatsapp_status():
     return jsonify({
         'configurado': whatsapp_service.is_configured(),
         'provider': whatsapp_service.provider,
+        'user_id': user_id,
         **status,
         'connected': connected,
         'state': state,
@@ -7853,35 +7996,35 @@ def whatsapp_status():
 @require_auth
 def whatsapp_qrcode():
     """
-    Gera QR code para conexao (apenas Evolution API)
+    Gera QR code para conexao da sessao WhatsApp do usuario autenticado
     """
-    if whatsapp_service.provider != 'evolution':
-        return jsonify({
-            'sucesso': False,
-            'erro': 'QR code apenas disponivel para Evolution API'
-        }), 400
-
-    resultado = whatsapp_service.generate_qr_code() or {}
-
-    # Se a instancia ainda nao existir, tenta criar automaticamente e gera QR novamente
-    if not resultado.get('success'):
-        erro_texto = (resultado.get('error') or '').lower()
-        if '404' in erro_texto or 'not found' in erro_texto or 'nao encontrada' in erro_texto:
-            criado = whatsapp_service.create_instance() or {}
-            if criado.get('success'):
-                resultado = whatsapp_service.generate_qr_code() or {}
+    user_id = g.auth.get('user_id')
+    resultado = whatsapp_service.generate_qr_code(user_id) or {}
 
     if resultado.get('success') and resultado.get('qrcode'):
         return jsonify({
             'sucesso': True,
             'qrcode': resultado.get('qrcode'),
-            'pairing_code': resultado.get('pairingCode')
+            'pairing_code': resultado.get('pairingCode'),
+            'connected': resultado.get('connected', False),
+            'state': resultado.get('state'),
+        })
+
+    if resultado.get('connected'):
+        return jsonify({
+            'sucesso': True,
+            'qrcode': None,
+            'connected': True,
+            'state': resultado.get('state', 'connected'),
+            'mensagem': 'WhatsApp ja conectado para este usuario.',
         })
 
     return jsonify({
         'sucesso': False,
-        'erro': resultado.get('error') or 'Nao foi possivel gerar QR code. Verifique se a instancia esta configurada.'
-    }), 500
+        'erro': resultado.get('error') or 'Nao foi possivel gerar QR code. Tente novamente em alguns segundos.',
+        'connected': resultado.get('connected', False),
+        'state': resultado.get('state'),
+    }), 409
 
 @app.route('/api/whatsapp/desconectar', methods=['POST'])
 @require_auth
@@ -7889,7 +8032,8 @@ def whatsapp_desconectar():
     """
     Desconecta a instancia do WhatsApp
     """
-    resultado = whatsapp_service.logout() or {}
+    user_id = g.auth.get('user_id')
+    resultado = whatsapp_service.logout(user_id) or {}
 
     if resultado.get('success') or resultado.get('sucesso'):
         return jsonify({'sucesso': True})
@@ -7912,7 +8056,7 @@ def whatsapp_enviar():
         "tipo": "texto"  // ou "documento"
     }
     """
-    data = request.get_json()
+    data = request.get_json() or {}
     
     if not whatsapp_service.is_configured():
         return jsonify({
@@ -7930,11 +8074,8 @@ def whatsapp_enviar():
             'erro': 'Telefone e mensagem são obrigatórios'
         }), 400
     
-    # Formata telefone
-    telefone_formatado = whatsapp_service.format_phone(telefone)
-    
     if tipo == 'texto':
-        resultado = whatsapp_service.send_text_message(telefone_formatado, mensagem)
+        resultado = whatsapp_service.send_text_message(g.auth.get('user_id'), telefone, mensagem)
     else:
         return jsonify({
             'sucesso': False,
@@ -7945,13 +8086,18 @@ def whatsapp_enviar():
         return jsonify({
             'sucesso': True,
             'message_id': resultado.get('message_id'),
-            'timestamp': resultado.get('timestamp')
+            'timestamp': resultado.get('timestamp'),
+            'modo': resultado.get('modo', 'api'),
         })
     else:
+        erro = resultado.get('error', 'Erro desconhecido')
+        status_code = 409 if 'nao conectado' in erro.lower() else 500
         return jsonify({
             'sucesso': False,
-            'erro': resultado.get('error', 'Erro desconhecido')
-        }), 500
+            'erro': erro,
+            'modo': resultado.get('modo'),
+            'url_wame': resultado.get('url_wame'),
+        }), status_code
 
 @app.route('/api/processos/<int:id>/whatsapp/enviar', methods=['POST'])
 @require_auth
@@ -7984,62 +8130,387 @@ def enviar_whatsapp_processo(id):
     if not processo:
         return jsonify({'error': 'Processo não encontrado'}), 404
     
-    if not processo['cliente_telefone']:
-        return jsonify({
-            'sucesso': False,
-            'erro': 'Cliente não possui telefone cadastrado'
-        }), 400
-    
-    data = request.get_json()
+    data = request.get_json() or {}
     mensagem_personalizada = data.get('mensagem')
-    
-    # Se não tiver mensagem personalizada, envia mensagem padrão com link público
-    if mensagem_personalizada:
+    destino = (data.get('destino') or 'cliente').lower()
+
+    # Se nao tiver mensagem personalizada, monta mensagem padrao
+    if not mensagem_personalizada:
+        if destino == 'cliente':
+            # Gera ou busca link público
+            if not processo['public_token'] or not processo['public_link_enabled']:
+                token = gerar_token_publico()
+                db.execute(
+                    '''UPDATE processos 
+                       SET public_token = ?, public_link_enabled = 1 
+                       WHERE id = ?''',
+                    (token, id)
+                )
+                db.commit()
+            else:
+                token = processo['public_token']
+
+            base_url = request.host_url.rstrip('/')
+            link_publico = f"{base_url}/publico/processo/{token}"
+            sucesso = enviar_link_publico(
+                processo['cliente_telefone'],
+                processo['cliente_nome'],
+                processo['titulo'],
+                link_publico,
+                user_id=g.auth.get('user_id')
+            )
+            return jsonify({
+                'sucesso': sucesso,
+                'mensagem': 'Link de acompanhamento enviado' if sucesso else 'Erro ao enviar'
+            })
+
+        mensagem_personalizada = formatar_mensagem_processo(dict(processo))
+
+    # envio para telefone avulso
+    if destino == 'telefone':
+        telefone_destino = (data.get('telefone') or '').strip()
+        if not telefone_destino:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Informe o telefone quando o destino for \"telefone\"'
+            }), 400
         resultado = whatsapp_service.send_text_message(
-            processo['cliente_telefone'], 
+            g.auth.get('user_id'),
+            telefone_destino,
             mensagem_personalizada
         )
-    else:
-        # Gera ou busca link público
-        if not processo['public_token'] or not processo['public_link_enabled']:
-            # Gera link público
-            token = gerar_token_publico()
-            db.execute(
-                '''UPDATE processos 
-                   SET public_token = ?, public_link_enabled = 1 
-                   WHERE id = ?''',
-                (token, id)
-            )
-            db.commit()
-        else:
-            token = processo['public_token']
-        
-        base_url = request.host_url.rstrip('/')
-        link_publico = f"{base_url}/publico/processo/{token}"
-        
-        # Envia mensagem com link
-        sucesso = enviar_link_publico(
-            processo['cliente_telefone'],
-            processo['cliente_nome'],
-            processo['titulo'],
-            link_publico
+        if resultado.get('success'):
+            return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
+        return jsonify({'sucesso': False, 'erro': resultado.get('error'), 'url_wame': resultado.get('url_wame')}), 500
+
+    # envio para equipe do workspace
+    if destino == 'equipe':
+        integrantes = listar_usuarios_workspace_com_telefone(
+            db=db,
+            workspace_id=g.auth['workspace_id'],
+            somente_alerta_whatsapp=parse_bool(data.get('somente_alerta_whatsapp', False)),
         )
-        
-        return jsonify({
-            'sucesso': sucesso,
-            'mensagem': 'Link de acompanhamento enviado' if sucesso else 'Erro ao enviar'
-        })
-    
+        if not integrantes:
+            return jsonify({'sucesso': False, 'erro': 'Nenhum integrante com telefone cadastrado'}), 400
+
+        relatorio = enviar_whatsapp_para_destinatarios(
+            user_id_origem=g.auth.get('user_id'),
+            destinatarios=integrantes,
+            mensagem=mensagem_personalizada,
+        )
+        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+
+    # destino padrao: cliente
+    if not processo['cliente_telefone']:
+        return jsonify({'sucesso': False, 'erro': 'Cliente nao possui telefone cadastrado'}), 400
+
+    resultado = whatsapp_service.send_text_message(
+        g.auth.get('user_id'),
+        processo['cliente_telefone'],
+        mensagem_personalizada
+    )
+
     if resultado.get('success'):
         return jsonify({
             'sucesso': True,
             'message_id': resultado.get('message_id')
         })
-    else:
-        return jsonify({
-            'sucesso': False,
-            'erro': resultado.get('error')
-        }), 500
+    return jsonify({
+        'sucesso': False,
+        'erro': resultado.get('error'),
+        'url_wame': resultado.get('url_wame')
+    }), 500
+
+@app.route('/api/tarefas/<int:id>/whatsapp/enviar', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def enviar_whatsapp_tarefa(id):
+    """
+    Compartilha tarefa via WhatsApp.
+    BODY:
+    {
+        "mensagem": "opcional",
+        "destino": "responsavel|equipe|telefone",
+        "telefone": "obrigatorio se destino=telefone",
+        "somente_alerta_whatsapp": false
+    }
+    """
+    if not whatsapp_service.is_configured():
+        return jsonify({'sucesso': False, 'erro': 'Serviço WhatsApp não configurado'}), 503
+
+    data = request.get_json() or {}
+    destino = (data.get('destino') or 'responsavel').lower()
+    db = get_db()
+
+    tarefa = db.execute(
+        '''SELECT t.*, p.numero as processo_numero, p.titulo as processo_titulo,
+                  u.id as responsavel_id, u.nome as responsavel_nome, u.telefone as responsavel_telefone
+           FROM tarefas t
+           LEFT JOIN processos p ON p.id = t.processo_id
+           LEFT JOIN users u ON u.id = t.assigned_to
+           WHERE t.id = ? AND t.workspace_id = ?''',
+        (id, g.auth['workspace_id'])
+    ).fetchone()
+
+    if not tarefa:
+        return jsonify({'sucesso': False, 'erro': 'Tarefa não encontrada'}), 404
+
+    tarefa_dict = dict(tarefa)
+    mensagem = data.get('mensagem') or formatar_mensagem_tarefa(tarefa_dict)
+
+    if destino == 'telefone':
+        telefone = (data.get('telefone') or '').strip()
+        if not telefone:
+            return jsonify({'sucesso': False, 'erro': 'Telefone obrigatorio para destino=telefone'}), 400
+        resultado = whatsapp_service.send_text_message(g.auth.get('user_id'), telefone, mensagem)
+        if resultado.get('success'):
+            return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
+        return jsonify({'sucesso': False, 'erro': resultado.get('error'), 'url_wame': resultado.get('url_wame')}), 500
+
+    if destino == 'equipe':
+        integrantes = listar_usuarios_workspace_com_telefone(
+            db=db,
+            workspace_id=g.auth['workspace_id'],
+            somente_alerta_whatsapp=parse_bool(data.get('somente_alerta_whatsapp', False)),
+        )
+        if not integrantes:
+            return jsonify({'sucesso': False, 'erro': 'Nenhum integrante com telefone cadastrado'}), 400
+
+        relatorio = enviar_whatsapp_para_destinatarios(
+            user_id_origem=g.auth.get('user_id'),
+            destinatarios=integrantes,
+            mensagem=mensagem,
+        )
+        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+
+    # destino padrao: responsavel
+    telefone_responsavel = tarefa_dict.get('responsavel_telefone')
+    if not telefone_responsavel:
+        return jsonify({'sucesso': False, 'erro': 'Responsavel da tarefa nao possui telefone cadastrado'}), 400
+
+    resultado = whatsapp_service.send_text_message(g.auth.get('user_id'), telefone_responsavel, mensagem)
+    if resultado.get('success'):
+        return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
+    return jsonify({'sucesso': False, 'erro': resultado.get('error'), 'url_wame': resultado.get('url_wame')}), 500
+
+
+@app.route('/api/processos/<int:id>/movimentacoes/<int:movimentacao_id>/whatsapp/enviar', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def enviar_whatsapp_movimentacao(id, movimentacao_id):
+    """
+    Compartilha movimentacao de processo via WhatsApp.
+    BODY:
+    {
+        "mensagem": "opcional",
+        "destino": "cliente|equipe|telefone",
+        "telefone": "obrigatorio se destino=telefone",
+        "somente_alerta_whatsapp": false
+    }
+    """
+    if not whatsapp_service.is_configured():
+        return jsonify({'sucesso': False, 'erro': 'Serviço WhatsApp não configurado'}), 503
+
+    data = request.get_json() or {}
+    destino = (data.get('destino') or 'cliente').lower()
+    db = get_db()
+
+    processo = db.execute(
+        '''SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone
+           FROM processos p
+           LEFT JOIN clientes c ON c.id = p.cliente_id
+           WHERE p.id = ? AND p.workspace_id = ?''',
+        (id, g.auth['workspace_id'])
+    ).fetchone()
+    if not processo:
+        return jsonify({'sucesso': False, 'erro': 'Processo não encontrado'}), 404
+
+    movimentacao = db.execute(
+        '''SELECT *
+           FROM movimentacoes_processo
+           WHERE id = ? AND processo_id = ? AND workspace_id = ?''',
+        (movimentacao_id, id, g.auth['workspace_id'])
+    ).fetchone()
+    if not movimentacao:
+        return jsonify({'sucesso': False, 'erro': 'Movimentacao nao encontrada'}), 404
+
+    processo_dict = dict(processo)
+    movimentacao_dict = dict(movimentacao)
+    mensagem = data.get('mensagem') or formatar_mensagem_movimentacao(processo_dict, movimentacao_dict)
+
+    if destino == 'telefone':
+        telefone = (data.get('telefone') or '').strip()
+        if not telefone:
+            return jsonify({'sucesso': False, 'erro': 'Telefone obrigatorio para destino=telefone'}), 400
+        resultado = whatsapp_service.send_text_message(g.auth.get('user_id'), telefone, mensagem)
+        if resultado.get('success'):
+            return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
+        return jsonify({'sucesso': False, 'erro': resultado.get('error'), 'url_wame': resultado.get('url_wame')}), 500
+
+    if destino == 'equipe':
+        integrantes = listar_usuarios_workspace_com_telefone(
+            db=db,
+            workspace_id=g.auth['workspace_id'],
+            somente_alerta_whatsapp=parse_bool(data.get('somente_alerta_whatsapp', False)),
+        )
+        if not integrantes:
+            return jsonify({'sucesso': False, 'erro': 'Nenhum integrante com telefone cadastrado'}), 400
+
+        relatorio = enviar_whatsapp_para_destinatarios(
+            user_id_origem=g.auth.get('user_id'),
+            destinatarios=integrantes,
+            mensagem=mensagem,
+        )
+        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+
+    # destino padrao: cliente
+    if not processo_dict.get('cliente_telefone'):
+        return jsonify({'sucesso': False, 'erro': 'Cliente nao possui telefone cadastrado'}), 400
+    resultado = whatsapp_service.send_text_message(
+        g.auth.get('user_id'),
+        processo_dict['cliente_telefone'],
+        mensagem
+    )
+    if resultado.get('success'):
+        return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
+    return jsonify({'sucesso': False, 'erro': resultado.get('error'), 'url_wame': resultado.get('url_wame')}), 500
+
+
+@app.route('/api/processos/<int:id>/movimentacoes/<int:movimentacao_id>/whatsapp', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def preparar_whatsapp_movimentacao(id, movimentacao_id):
+    """
+    Prepara dados de compartilhamento de movimentacao via WhatsApp.
+    """
+    db = get_db()
+    processo = db.execute(
+        '''SELECT p.*, c.nome as cliente_nome, c.telefone as cliente_telefone
+           FROM processos p
+           LEFT JOIN clientes c ON c.id = p.cliente_id
+           WHERE p.id = ? AND p.workspace_id = ?''',
+        (id, g.auth['workspace_id'])
+    ).fetchone()
+    if not processo:
+        return jsonify({'error': 'Processo não encontrado'}), 404
+
+    movimentacao = db.execute(
+        '''SELECT *
+           FROM movimentacoes_processo
+           WHERE id = ? AND processo_id = ? AND workspace_id = ?''',
+        (movimentacao_id, id, g.auth['workspace_id'])
+    ).fetchone()
+    if not movimentacao:
+        return jsonify({'error': 'Movimentação não encontrada'}), 404
+
+    processo_dict = dict(processo)
+    movimentacao_dict = dict(movimentacao)
+    mensagem = formatar_mensagem_movimentacao(processo_dict, movimentacao_dict)
+    link = None
+    if processo_dict.get('cliente_telefone'):
+        link = gerar_link_whatsapp(processo_dict['cliente_telefone'], mensagem)
+
+    return jsonify({
+        'mensagem': mensagem,
+        'movimentacao': movimentacao_dict,
+        'cliente': {
+            'nome': processo_dict.get('cliente_nome'),
+            'telefone': processo_dict.get('cliente_telefone'),
+        },
+        'link': link,
+    })
+
+
+@app.route('/api/processos/<int:id>/movimentacoes/ultima/whatsapp/enviar', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def enviar_whatsapp_ultima_movimentacao(id):
+    """
+    Compartilha a ultima movimentacao do processo via WhatsApp.
+    """
+    db = get_db()
+    mov = db.execute(
+        '''SELECT id
+           FROM movimentacoes_processo
+           WHERE processo_id = ? AND workspace_id = ?
+           ORDER BY data_movimento DESC
+           LIMIT 1''',
+        (id, g.auth['workspace_id'])
+    ).fetchone()
+
+    if not mov:
+        return jsonify({'sucesso': False, 'erro': 'Processo sem movimentacoes registradas'}), 404
+
+    return enviar_whatsapp_movimentacao(id, mov['id'])
+
+
+@app.route('/api/whatsapp/workspace/contatos', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_workspace_contatos():
+    """
+    Lista integrantes do workspace com telefone cadastrado para envio via WhatsApp.
+    """
+    db = get_db()
+    somente_alerta = request.args.get('somente_alerta_whatsapp', 'false').lower() == 'true'
+    contatos = listar_usuarios_workspace_com_telefone(
+        db=db,
+        workspace_id=g.auth['workspace_id'],
+        somente_alerta_whatsapp=somente_alerta,
+    )
+    return jsonify({
+        'sucesso': True,
+        'total': len(contatos),
+        'contatos': contatos,
+    })
+
+
+@app.route('/api/whatsapp/workspace/enviar', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_workspace_enviar():
+    """
+    Envia mensagem para integrantes do workspace.
+    BODY:
+    {
+        "mensagem": "obrigatorio",
+        "user_ids": [1,2,3],         # opcional
+        "somente_alerta_whatsapp": false
+    }
+    """
+    if not whatsapp_service.is_configured():
+        return jsonify({'sucesso': False, 'erro': 'Serviço WhatsApp não configurado'}), 503
+
+    data = request.get_json() or {}
+    mensagem = (data.get('mensagem') or '').strip()
+    if not mensagem:
+        return jsonify({'sucesso': False, 'erro': 'Campo mensagem é obrigatório'}), 400
+
+    user_ids_raw = data.get('user_ids') or []
+    user_ids: List[int] = []
+    for value in user_ids_raw:
+        try:
+            user_ids.append(int(value))
+        except (TypeError, ValueError):
+            return jsonify({'sucesso': False, 'erro': f'user_id inválido: {value}'}), 400
+
+    db = get_db()
+    contatos = listar_usuarios_workspace_com_telefone(
+        db=db,
+        workspace_id=g.auth['workspace_id'],
+        user_ids=user_ids if user_ids else None,
+        somente_alerta_whatsapp=parse_bool(data.get('somente_alerta_whatsapp', False)),
+    )
+    if not contatos:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum destinatario com telefone cadastrado'}), 400
+
+    relatorio = enviar_whatsapp_para_destinatarios(
+        user_id_origem=g.auth.get('user_id'),
+        destinatarios=contatos,
+        mensagem=mensagem,
+    )
+
+    return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
 
 @app.route('/api/clientes/<int:id>/whatsapp/boasvindas', methods=['POST'])
 @require_auth
@@ -8069,12 +8540,42 @@ def enviar_boas_vindas_cliente(id):
             'erro': 'Cliente não possui telefone cadastrado'
         }), 400
     
-    sucesso = enviar_boas_vindas(cliente['telefone'], cliente['nome'])
+    sucesso = enviar_boas_vindas(cliente['telefone'], cliente['nome'], user_id=g.auth.get('user_id'))
     
     return jsonify({
         'sucesso': sucesso,
         'mensagem': 'Mensagem de boas-vindas enviada' if sucesso else 'Erro ao enviar'
     })
+
+@app.route('/api/internal/whatsapp/inbound', methods=['POST'])
+def whatsapp_inbound_webhook():
+    """
+    Recebe mensagens de entrada do microservico WhatsApp Web.
+    Endpoint interno (webhook) para listener de mensagens.
+    """
+    webhook_secret = os.environ.get('WHATSAPP_INBOUND_WEBHOOK_SECRET', '')
+    header_signature = request.headers.get('x-jurispocket-signature', '')
+
+    if webhook_secret:
+        raw_body = request.get_data(as_text=True) or ''
+        expected_signature = hmac.new(
+            webhook_secret.encode('utf-8'),
+            raw_body.encode('utf-8'),
+            hashlib.sha256
+        ).hexdigest()
+
+        if not hmac.compare_digest(header_signature, expected_signature):
+            return jsonify({'sucesso': False, 'erro': 'Assinatura invalida'}), 401
+
+    payload = request.get_json(silent=True) or {}
+    event = payload.get('event')
+    user_id = payload.get('userId')
+    from_jid = payload.get('from')
+    text = payload.get('text')
+
+    print(f"Webhook WhatsApp recebido: event={event} user_id={user_id} from={from_jid} text={text}")
+
+    return jsonify({'sucesso': True})
 
 
 # ============================================================================
@@ -8197,5 +8698,3 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     app.run(debug=debug, host='0.0.0.0', port=port)
-
-
