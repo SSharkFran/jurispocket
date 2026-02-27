@@ -18,7 +18,24 @@ class WhatsAppService:
         self.provider = os.getenv('WHATSAPP_PROVIDER', 'whatsapp-web')
         self.service_url = os.getenv('WHATSAPP_MICROSERVICE_URL', 'http://localhost:3001').rstrip('/')
         self.service_api_key = os.getenv('WHATSAPP_MICROSERVICE_TOKEN', '')
-        self.timeout_seconds = int(os.getenv('WHATSAPP_MICROSERVICE_TIMEOUT', '20'))
+        self.timeout_seconds = self._parse_timeout_seconds(
+            os.getenv('WHATSAPP_MICROSERVICE_TIMEOUT'),
+            default=20,
+        )
+
+    @staticmethod
+    def _parse_timeout_seconds(raw_value: Optional[str], default: int = 20) -> int:
+        """Converte timeout de ambiente com fallback seguro."""
+        try:
+            if raw_value is None:
+                return default
+            value = str(raw_value).strip()
+            if not value:
+                return default
+            parsed = int(value)
+            return parsed if parsed > 0 else default
+        except (TypeError, ValueError):
+            return default
 
     def is_configured(self) -> bool:
         """Verifica se o servico esta configurado corretamente."""

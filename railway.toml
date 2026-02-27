@@ -14,6 +14,9 @@ NODE_ENV = "production"
 # Número de réplicas (1 para Hobby plan)
 replicas = 1
 
+# Comando de inicialização explícito para evitar override no painel
+startCommand = "/start.sh"
+
 # Healthcheck endpoint
 healthcheckPath = "/api/health"
 healthcheckTimeout = 180

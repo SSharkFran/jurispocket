@@ -69,7 +69,7 @@ try:
         notificar_novo_prazo,
     )
     WHATSAPP_SERVICE_DISPONIVEL = True
-except ImportError as e:
+except Exception as e:
     WHATSAPP_SERVICE_DISPONIVEL = False
     whatsapp_service = None
     enviar_boas_vindas = None
