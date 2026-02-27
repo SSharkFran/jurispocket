@@ -6,7 +6,7 @@ import os
 import re
 import time
 import urllib.parse
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Optional, Union
 
 import requests
 
@@ -78,7 +78,7 @@ class WhatsAppService:
 
         return numero_limpo
 
-    def connect_user(self, user_id: int) -> Dict[str, Any]:
+    def connect_user(self, user_id: Union[int, str, None]) -> Dict[str, Any]:
         """Inicializa sessao WhatsApp de um usuario."""
         if not user_id:
             return {'success': False, 'error': 'user_id obrigatorio'}
@@ -108,7 +108,7 @@ class WhatsAppService:
             return {'success': False, 'error': 'user_id obrigatorio'}
         return self.connect_user(user_id)
 
-    def get_connection_status(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    def get_connection_status(self, user_id: Union[int, str, None] = None) -> Dict[str, Any]:
         """Retorna o status da conexao com WhatsApp para um usuario."""
         if not self.is_configured():
             return {
@@ -184,11 +184,11 @@ class WhatsAppService:
                 'user_id': user_id,
             }
 
-    def get_qr_code(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    def get_qr_code(self, user_id: Union[int, str, None] = None) -> Dict[str, Any]:
         """Obtem QR code de conexao."""
         return self.generate_qr_code(user_id)
 
-    def generate_qr_code(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    def generate_qr_code(self, user_id: Union[int, str, None] = None) -> Dict[str, Any]:
         """Obtem QR code para conexao de um usuario."""
         if not user_id:
             return {'success': False, 'error': 'user_id obrigatorio'}
@@ -231,7 +231,7 @@ class WhatsAppService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def logout(self, user_id: Optional[int] = None) -> Dict[str, Any]:
+    def logout(self, user_id: Union[int, str, None] = None) -> Dict[str, Any]:
         """Desconecta sessao do WhatsApp do usuario."""
         if not user_id:
             return {'success': False, 'error': 'user_id obrigatorio'}
@@ -252,7 +252,12 @@ class WhatsAppService:
         except Exception as e:
             return {'success': False, 'error': str(e)}
 
-    def send_text_message(self, user_id: Optional[int], phone: str, message: str) -> Dict[str, Any]:
+    def send_text_message(
+        self,
+        user_id: Union[int, str, None],
+        phone: str,
+        message: str,
+    ) -> Dict[str, Any]:
         """Envia mensagem de texto via WhatsApp do usuario."""
         if not self.is_configured():
             return {
@@ -340,7 +345,7 @@ class WhatsAppService:
 
     def send_message_with_buttons(
         self,
-        user_id: Optional[int],
+        user_id: Union[int, str, None],
         phone: str,
         message: str,
         buttons: list,
@@ -353,7 +358,7 @@ class WhatsAppService:
 whatsapp_service = WhatsAppService()
 
 
-def enviar_boas_vindas(telefone: str, nome: str, user_id: Optional[int] = None) -> bool:
+def enviar_boas_vindas(telefone: str, nome: str, user_id: Union[int, str, None] = None) -> bool:
     mensagem = (
         f"Ola, *{nome}*!\n\n"
         f"Seja bem-vindo ao *JurisPocket*!\n\n"
@@ -369,7 +374,7 @@ def enviar_link_publico(
     nome_cliente: str,
     titulo_processo: str,
     link: str,
-    user_id: Optional[int] = None,
+    user_id: Union[int, str, None] = None,
 ) -> bool:
     mensagem = (
         f"Ola, *{nome_cliente}*!\n\n"
@@ -387,7 +392,7 @@ def notificar_nova_movimentacao(
     numero_processo: str,
     descricao: str,
     data: str = None,
-    user_id: Optional[int] = None,
+    user_id: Union[int, str, None] = None,
 ) -> bool:
     mensagem = f"Nova movimentacao\n\nProcesso: {numero_processo}\n"
     if data:
@@ -402,7 +407,7 @@ def notificar_novo_prazo(
     numero_processo: str,
     prazo_titulo: str,
     data_prazo: str,
-    user_id: Optional[int] = None,
+    user_id: Union[int, str, None] = None,
 ) -> bool:
     mensagem = (
         f"Novo prazo\n\n"
@@ -421,7 +426,7 @@ def notificar_audiencia(
     data_audiencia: str,
     hora: str,
     local: str,
-    user_id: Optional[int] = None,
+    user_id: Union[int, str, None] = None,
 ) -> bool:
     mensagem = (
         f"Audiencia marcada\n\n"

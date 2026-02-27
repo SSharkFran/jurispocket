@@ -5,6 +5,9 @@ export interface WhatsAppStatus {
   provider: string;
   connected: boolean;
   conectado?: boolean;
+  workspace_enabled?: boolean;
+  display_name?: string | null;
+  phone_number?: string | null;
   user_id?: number;
   state?: string;
   estado?: string;
@@ -92,6 +95,16 @@ export interface WhatsAppSenderStatus {
   estado?: string;
   error?: string;
   erro?: string;
+}
+
+export interface WhatsAppPlatformConfig {
+  id?: number;
+  session_key?: string;
+  display_name?: string | null;
+  phone_number?: string | null;
+  enabled?: boolean;
+  updated_by?: number | null;
+  updated_at?: string | null;
 }
 
 export const whatsapp = {
@@ -227,4 +240,26 @@ export const whatsapp = {
       mensagem: string;
       ia_disponivel: boolean;
     }>('/whatsapp/automacoes/preview-ia', payload),
+};
+
+export const whatsappPlatform = {
+  getConfig: () =>
+    api.get<{ sucesso: boolean; config: WhatsAppPlatformConfig }>('/admin/whatsapp-platform/config'),
+  updateConfig: (payload: Partial<WhatsAppPlatformConfig>) =>
+    api.put<{ sucesso: boolean; config: WhatsAppPlatformConfig }>(
+      '/admin/whatsapp-platform/config',
+      payload
+    ),
+  status: () =>
+    api.get<{
+      sucesso: boolean;
+      connected?: boolean;
+      state?: string;
+      configurado?: boolean;
+      provider?: string;
+      config?: WhatsAppPlatformConfig;
+    }>('/admin/whatsapp-platform/status'),
+  connect: () => api.post<{ sucesso: boolean; estado?: string; connected?: boolean }>('/admin/whatsapp-platform/connect'),
+  getQRCode: () => api.get<QRCodeResponse>('/admin/whatsapp-platform/qrcode'),
+  disconnect: () => api.post<{ sucesso: boolean; erro?: string }>('/admin/whatsapp-platform/disconnect'),
 };

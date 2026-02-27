@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+﻿import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
 import { MessageSquare, Users, QrCode, Settings, Loader2, Power, PowerOff, RefreshCw, Smartphone, Bell, Clock3, Save, Wand2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -9,7 +9,6 @@ import {
   whatsapp,
   WhatsAppStatus,
   WhatsAppAutomacaoConfig,
-  WhatsAppAutomacaoUser,
   WhatsAppSenderStatus
 } from '@/services/whatsapp';
 import { clientes } from '@/services/api';
@@ -35,8 +34,7 @@ const WhatsAppPage = () => {
   const [contatos, setContatos] = useState<ContatoWhatsApp[]>([]);
   const [totalClientes, setTotalClientes] = useState(0);
   const [automacaoConfig, setAutomacaoConfig] = useState<WhatsAppAutomacaoConfig | null>(null);
-  const [automacaoUsers, setAutomacaoUsers] = useState<WhatsAppAutomacaoUser[]>([]);
-  const [senderStatus, setSenderStatus] = useState<WhatsAppSenderStatus | null>(null);
+  const [platformStatus, setPlatformStatus] = useState<WhatsAppSenderStatus | null>(null);
   const [isAdminWorkspace, setIsAdminWorkspace] = useState(false);
   const [isSavingAutomacao, setIsSavingAutomacao] = useState(false);
   const [isEnviandoResumoTeste, setIsEnviandoResumoTeste] = useState(false);
@@ -82,8 +80,7 @@ const WhatsAppPage = () => {
     try {
       const response = await whatsapp.getAutomacoesConfig();
       setAutomacaoConfig(response.data.config);
-      setAutomacaoUsers(response.data.usuarios || []);
-      setSenderStatus(response.data.sender_status || null);
+      setPlatformStatus(response.data.sender_status || null);
       setIsAdminWorkspace(Boolean(response.data.is_admin));
     } catch (error) {
       if (!silencioso) {
@@ -187,7 +184,6 @@ const WhatsAppPage = () => {
     try {
       const payload = {
         ...automacaoConfig,
-        sender_user_id: automacaoConfig.sender_user_id || null,
       };
       const response = await whatsapp.updateAutomacoesConfig(payload);
       setAutomacaoConfig(response.data.config);
@@ -246,8 +242,8 @@ const WhatsAppPage = () => {
 
   const isConectado = Boolean(status?.connected ?? status?.conectado);
   const estadoConexao = status?.state || status?.estado || (isConectado ? 'open' : 'disconnected');
-  const senderConectado = Boolean(senderStatus?.connected ?? senderStatus?.conectado);
-  const senderEstado = senderStatus?.state || senderStatus?.estado || (senderConectado ? 'connected' : 'disconnected');
+  const platformConectado = Boolean(platformStatus?.connected ?? platformStatus?.conectado);
+  const platformEstado = platformStatus?.state || platformStatus?.estado || (platformConectado ? 'connected' : 'disconnected');
 
   const cards = [
     { label: 'Clientes com Telefone', value: contatos.length.toString(), icon: Users, color: 'text-primary' },
@@ -375,35 +371,16 @@ const WhatsAppPage = () => {
             )}
 
             <div className="space-y-3 text-sm">
-              <div>
-                <label className="text-xs text-muted-foreground">Sessão remetente (WhatsApp comercial)</label>
-                <select
-                  className="mt-1 w-full rounded-md border border-border bg-secondary/40 px-3 py-2 text-sm"
-                  value={automacaoConfig.sender_user_id || ''}
-                  disabled={!isAdminWorkspace}
-                  onChange={(e) =>
-                    updateAutomacaoField(
-                      'sender_user_id',
-                      e.target.value ? Number(e.target.value) : null
-                    )
-                  }
-                >
-                  <option value="">Selecionar automaticamente (admin do workspace)</option>
-                  {automacaoUsers.map((u) => (
-                    <option key={u.id} value={u.id}>
-                      {u.nome} {u.telefone ? `- ${u.telefone}` : ''}
-                    </option>
-                  ))}
-                </select>
-                {automacaoConfig.sender_user_id ? (
-                  <p className={`mt-2 text-xs ${senderConectado ? 'text-success' : 'text-warning'}`}>
-                    Sessão do remetente: {senderConectado ? 'conectada' : 'desconectada'} ({senderEstado})
-                  </p>
-                ) : (
-                  <p className="mt-2 text-xs text-muted-foreground">
-                    Sem remetente fixo. O sistema usa automaticamente o admin do workspace.
-                  </p>
-                )}
+              <div className="rounded-lg bg-secondary/30 p-3 text-xs text-muted-foreground">
+                <div className="flex items-center justify-between">
+                  <span>WhatsApp oficial da plataforma</span>
+                  <span className={platformConectado ? 'text-success' : 'text-warning'}>
+                    {platformConectado ? 'Conectado' : 'Desconectado'} ({platformEstado})
+                  </span>
+                </div>
+                <p className="mt-2">
+                  Os envios automáticos para usuários são disparados pela plataforma. Se estiver desconectado, contate o suporte.
+                </p>
               </div>
 
               <label className="flex items-center gap-2">
@@ -576,3 +553,4 @@ const WhatsAppPage = () => {
 };
 
 export default WhatsAppPage;
+

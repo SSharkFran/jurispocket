@@ -14,6 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
+import { whatsappPlatform, WhatsAppPlatformConfig } from '@/services/whatsapp';
 import { 
   Users, 
   Crown, 
@@ -22,10 +23,12 @@ import {
   FileText, 
   TrendingUp, 
   AlertTriangle,
+  Loader2,
   Search,
   LogIn,
   Trash2,
   Edit2,
+  QrCode,
   Key,
   RefreshCw,
   DollarSign,
@@ -43,7 +46,8 @@ import {
   Receipt,
   Wallet,
   AlertCircle,
-  Check
+  Check,
+  PowerOff
 } from 'lucide-react';
 
 interface Estatisticas {
@@ -1243,9 +1247,20 @@ function PlanosTab() {
 function ConfiguracoesTab() {
   const [configuracoes, setConfiguracoes] = useState<Configuracao[]>([]);
   const [loading, setLoading] = useState(true);
+  const [platformForm, setPlatformForm] = useState<WhatsAppPlatformConfig | null>(null);
+  const [platformStatus, setPlatformStatus] = useState<{
+    connected?: boolean;
+    state?: string;
+    configurado?: boolean;
+    provider?: string;
+  } | null>(null);
+  const [platformLoading, setPlatformLoading] = useState(false);
+  const [platformQrCode, setPlatformQrCode] = useState<string | null>(null);
+  const [showPlatformQr, setShowPlatformQr] = useState(false);
 
   useEffect(() => {
     carregarConfiguracoes();
+    carregarWhatsAppPlataforma();
   }, []);
 
   const carregarConfiguracoes = async () => {
@@ -1256,6 +1271,94 @@ function ConfiguracoesTab() {
       toast.error('Erro ao carregar configurações');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const carregarWhatsAppPlataforma = async () => {
+    try {
+      setPlatformLoading(true);
+      const [configRes, statusRes] = await Promise.all([
+        whatsappPlatform.getConfig(),
+        whatsappPlatform.status(),
+      ]);
+      setPlatformForm(configRes.data.config);
+      setPlatformStatus({
+        connected: statusRes.data.connected,
+        state: statusRes.data.state,
+        configurado: statusRes.data.configurado,
+        provider: statusRes.data.provider,
+      });
+    } catch (error) {
+      toast.error('Erro ao carregar WhatsApp da plataforma');
+    } finally {
+      setPlatformLoading(false);
+    }
+  };
+
+  const handleSavePlatform = async () => {
+    if (!platformForm) return;
+    try {
+      setPlatformLoading(true);
+      const response = await whatsappPlatform.updateConfig({
+        display_name: platformForm.display_name || '',
+        phone_number: platformForm.phone_number || '',
+        enabled: Boolean(platformForm.enabled),
+      });
+      setPlatformConfig(response.data.config);
+      setPlatformForm(response.data.config);
+      toast.success('WhatsApp da plataforma atualizado');
+    } catch (error) {
+      toast.error('Erro ao salvar WhatsApp da plataforma');
+    } finally {
+      setPlatformLoading(false);
+    }
+  };
+
+  const handlePlatformQr = async () => {
+    setShowPlatformQr(true);
+    setPlatformQrCode(null);
+    try {
+      const response = await whatsappPlatform.getQRCode();
+      const rawQr = response.data?.qrcode as unknown;
+
+      let qrValue: string | undefined;
+      if (typeof rawQr === 'string') {
+        qrValue = rawQr;
+      } else if (rawQr && typeof rawQr === 'object') {
+        qrValue = (rawQr as any).qrcode || (rawQr as any).base64;
+      }
+
+      if (response.data.sucesso && response.data.connected && !qrValue) {
+        toast.success('WhatsApp da plataforma ja conectado');
+        setShowPlatformQr(false);
+      } else if (response.data.sucesso && qrValue) {
+        setPlatformQrCode(qrValue.startsWith('data:image') ? qrValue : `data:image/png;base64,${qrValue}`);
+      } else if (response.data.pending) {
+        toast.info('Preparando QR Code da plataforma. Tente novamente.');
+      } else {
+        toast.error(response.data.erro || 'Erro ao gerar QR Code da plataforma');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao gerar QR Code da plataforma');
+    } finally {
+      carregarWhatsAppPlataforma();
+    }
+  };
+
+  const handlePlatformDisconnect = async () => {
+    try {
+      setPlatformLoading(true);
+      const response = await whatsappPlatform.disconnect();
+      if (response.data?.sucesso) {
+        toast.success('WhatsApp da plataforma desconectado');
+      } else {
+        toast.error(response.data?.erro || 'Nao foi possivel desconectar');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao desconectar WhatsApp da plataforma');
+    } finally {
+      setPlatformLoading(false);
+      carregarWhatsAppPlataforma();
     }
   };
 
@@ -1309,6 +1412,103 @@ function ConfiguracoesTab() {
           </div>
         </CardContent>
       </Card>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white">WhatsApp da Plataforma</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div className="grid gap-4 md:grid-cols-2">
+            <div>
+              <Label className="text-slate-300">Nome de exibição</Label>
+              <Input
+                value={platformForm?.display_name || ''}
+                onChange={(e) =>
+                  setPlatformForm((prev) => ({ ...(prev || {}), display_name: e.target.value }))
+                }
+                className="mt-1 bg-slate-800 border-slate-700"
+                placeholder="JurisPocket"
+              />
+            </div>
+            <div>
+              <Label className="text-slate-300">Telefone</Label>
+              <Input
+                value={platformForm?.phone_number || ''}
+                onChange={(e) =>
+                  setPlatformForm((prev) => ({ ...(prev || {}), phone_number: e.target.value }))
+                }
+                className="mt-1 bg-slate-800 border-slate-700"
+                placeholder="5511999999999"
+              />
+            </div>
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={Boolean(platformForm?.enabled)}
+              onChange={(e) =>
+                setPlatformForm((prev) => ({ ...(prev || {}), enabled: e.target.checked }))
+              }
+            />
+            Ativar WhatsApp da plataforma
+          </label>
+
+          <div className="rounded-lg bg-slate-800/50 p-4 space-y-2 text-sm">
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Status</span>
+              <span className={platformStatus?.connected ? 'text-emerald-400' : 'text-amber-400'}>
+                {platformStatus?.connected ? 'Conectado' : 'Desconectado'}
+              </span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Estado</span>
+              <span className="text-white">{platformStatus?.state || '-'}</span>
+            </div>
+            <div className="flex items-center justify-between">
+              <span className="text-slate-400">Provedor</span>
+              <span className="text-white">{platformStatus?.provider || '-'}</span>
+            </div>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button onClick={handleSavePlatform} disabled={platformLoading}>
+              <Check className="w-4 h-4 mr-2" /> Salvar
+            </Button>
+            <Button variant="outline" onClick={carregarWhatsAppPlataforma} disabled={platformLoading}>
+              <RefreshCw className="w-4 h-4 mr-2" /> Atualizar status
+            </Button>
+            <Button variant="outline" onClick={handlePlatformQr} disabled={platformLoading}>
+              <QrCode className="w-4 h-4 mr-2" /> Gerar QR
+            </Button>
+            <Button variant="outline" onClick={handlePlatformDisconnect} disabled={platformLoading}>
+              <PowerOff className="w-4 h-4 mr-2" /> Desconectar
+            </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Dialog open={showPlatformQr} onOpenChange={setShowPlatformQr}>
+        <DialogContent className="sm:max-w-md">
+          <DialogHeader>
+            <DialogTitle>Conectar WhatsApp da Plataforma</DialogTitle>
+          </DialogHeader>
+          <div className="flex flex-col items-center p-4">
+            <p className="text-sm text-slate-400 mb-4 text-center">
+              Escaneie o QR Code pelo WhatsApp em "Aparelhos conectados".
+            </p>
+            {platformQrCode ? (
+              <div className="bg-white p-4 rounded-lg">
+                <img src={platformQrCode} alt="QR Code WhatsApp" className="w-56 h-56 object-contain" />
+              </div>
+            ) : (
+              <div className="w-56 h-56 flex items-center justify-center">
+                <Loader2 className="h-8 w-8 animate-spin text-primary" />
+              </div>
+            )}
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }
