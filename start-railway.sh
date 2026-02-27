@@ -12,7 +12,7 @@ fi
 
 if [ -n "$NODE_BIN" ]; then
   echo "[startup] Iniciando microservico WhatsApp com $NODE_BIN na porta ${WHATSAPP_SERVICE_PORT:-3001}..."
-  $NODE_BIN /app/whatsapp-service/src/server.js &
+  PORT=${WHATSAPP_SERVICE_PORT:-3001} $NODE_BIN /app/whatsapp-service/src/server.js &
 else
   echo "[startup] AVISO: Node nao encontrado. Continuando apenas com API Flask."
 fi
