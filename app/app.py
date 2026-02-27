@@ -8018,13 +8018,37 @@ def whatsapp_qrcode():
             'state': resultado.get('state', 'connected'),
             'mensagem': 'WhatsApp ja conectado para este usuario.',
         })
+    
+    erro = (resultado.get('error') or 'Nao foi possivel gerar QR code.').strip()
+    erro_lower = erro.lower()
+
+    # Evita ruido de 409 no frontend quando o QR ainda esta sendo preparado
+    if 'ainda nao disponivel' in erro_lower or resultado.get('state') in ('connecting', 'qr_pending'):
+        return jsonify({
+            'sucesso': False,
+            'erro': erro,
+            'pending': True,
+            'connected': resultado.get('connected', False),
+            'state': resultado.get('state'),
+        }), 200
+
+    # Falha real de conectividade com microservico
+    if 'microservico' in erro_lower or 'connection refused' in erro_lower or 'max retries exceeded' in erro_lower:
+        return jsonify({
+            'sucesso': False,
+            'erro': erro,
+            'pending': False,
+            'connected': False,
+            'state': 'offline',
+        }), 503
 
     return jsonify({
         'sucesso': False,
-        'erro': resultado.get('error') or 'Nao foi possivel gerar QR code. Tente novamente em alguns segundos.',
+        'erro': erro,
+        'pending': False,
         'connected': resultado.get('connected', False),
         'state': resultado.get('state'),
-    }), 409
+    }), 500
 
 @app.route('/api/whatsapp/desconectar', methods=['POST'])
 @require_auth

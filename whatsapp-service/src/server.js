@@ -12,9 +12,10 @@ dotenv.config();
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = path.dirname(__filename);
 
-const PORT = Number(process.env.PORT || 3001);
+const PORT = Number(process.env.WHATSAPP_SERVICE_PORT || 3001);
 const HOST = process.env.HOST || '0.0.0.0';
-const SERVICE_API_KEY = process.env.WHATSAPP_SERVICE_API_KEY || '';
+const SERVICE_API_KEY =
+  process.env.WHATSAPP_SERVICE_API_KEY || process.env.WHATSAPP_MICROSERVICE_TOKEN || '';
 const SESSIONS_DIR = process.env.WHATSAPP_SESSIONS_DIR || path.resolve(__dirname, '../sessions');
 const MIN_DELAY_MS = Number(process.env.WHATSAPP_MIN_DELAY_MS || 1200);
 const MAX_DELAY_MS = Number(process.env.WHATSAPP_MAX_DELAY_MS || 2600);

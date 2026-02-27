@@ -87,6 +87,8 @@ const WhatsAppPage = () => {
         setShowQRCode(false);
       } else if (response.data.sucesso && qrValue) {
         setQrCode(normalizeQrCode(qrValue));
+      } else if (response.data.pending) {
+        toast.info('Preparando QR Code, tente novamente em alguns segundos.');
       } else {
         toast.error(response.data.erro || 'Erro ao gerar QR Code');
       }

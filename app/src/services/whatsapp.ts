@@ -17,6 +17,7 @@ export interface QRCodeResponse {
   sucesso: boolean;
   qrcode?: string | null;
   erro?: string;
+  pending?: boolean;
   connected?: boolean;
   state?: string;
   mensagem?: string;

@@ -62,6 +62,11 @@ export function WhatsAppStatusPanel() {
         return;
       }
 
+      if (response.data.pending) {
+        toast.info('Preparando QR code, tente novamente em alguns segundos.');
+        return;
+      }
+
       toast.error(response.data.erro || 'QR code ainda nao disponivel. Tente novamente.');
     } catch (error: any) {
       console.error('Erro ao gerar QR:', error);
