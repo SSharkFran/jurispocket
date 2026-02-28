@@ -10993,7 +10993,8 @@ def whatsapp_inbox_conversas():
     if search:
         query += ' AND (LOWER(COALESCE(cli.nome, "")) LIKE ? OR REPLACE(c.phone, " ", "") LIKE ?)'
         like_value = f'%{search}%'
-        phone_like = f'%{re.sub(r"\D", "", search)}%'
+        search_digits = re.sub(r'\D', '', search)
+        phone_like = f'%{search_digits}%'
         params.extend([like_value, phone_like])
 
     query += ' ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC LIMIT ?'
