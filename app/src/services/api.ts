@@ -34,12 +34,13 @@ api.interceptors.response.use(
 
 export const auth = {
   login: (email: string, password: string) => api.post('/auth/login', { email, password }),
-  register: (data: { email: string; password: string; nome: string; phone?: string }) =>
+  register: (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) =>
     api.post('/auth/register', { 
       email: data.email, 
       password: data.password, 
       nome: data.nome, 
-      telefone: data.phone 
+      telefone: data.phone,
+      workspace_nome: data.workspace_nome,
     }),
   me: () => api.get('/auth/me'),
   updateProfile: (data: Partial<{ nome: string; telefone: string; alerta_email: boolean; alerta_whatsapp: boolean; resumo_diario: boolean }>) =>

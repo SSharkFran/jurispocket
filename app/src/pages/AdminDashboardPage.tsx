@@ -179,27 +179,32 @@ export function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-slate-950">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500" />
+      <div className="flex items-center justify-center h-screen bg-background">
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-slate-950">
+    <div className="min-h-screen bg-background">
+      <div className="pointer-events-none fixed inset-0 -z-10">
+        <div className="absolute -top-16 left-1/3 h-72 w-72 rounded-full bg-primary/10 blur-3xl" />
+        <div className="absolute -bottom-16 right-1/4 h-72 w-72 rounded-full bg-accent/10 blur-3xl" />
+      </div>
+
       {/* Header */}
-      <header className="bg-slate-900 border-b border-slate-800 px-6 py-4">
+      <header className="border-b border-border/60 bg-card/80 px-6 py-4 backdrop-blur">
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-purple-500 to-pink-600 flex items-center justify-center">
-              <Crown className="w-5 h-5 text-white" />
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
+              <Crown className="w-5 h-5 text-foreground" />
             </div>
             <div>
-              <h1 className="text-xl font-bold text-white">Super Admin</h1>
-              <p className="text-xs text-slate-400">Painel de Controle Global</p>
+              <h1 className="text-xl font-bold text-foreground">Super Admin</h1>
+              <p className="text-xs text-muted-foreground">Painel de Controle Global</p>
             </div>
           </div>
-          <Button variant="outline" onClick={() => navigate('/')} className="border-slate-700 text-slate-300">
+          <Button variant="outline" onClick={() => navigate('/')} className="border-border text-foreground">
             Voltar ao Sistema
           </Button>
         </div>
@@ -207,7 +212,7 @@ export function AdminDashboardPage() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 bg-slate-900 border-r border-slate-800 min-h-[calc(100vh-80px)]">
+        <aside className="w-64 shrink-0 border-r border-border/60 bg-card/70 min-h-[calc(100vh-80px)] backdrop-blur">
           <nav className="p-4 space-y-2">
             <SidebarItem 
               icon={<TrendingUp className="w-4 h-4" />} 
@@ -255,7 +260,7 @@ export function AdminDashboardPage() {
         </aside>
 
         {/* Content */}
-        <main className="flex-1 p-6">
+        <main className="flex-1 p-6 md:p-8">
           {activeTab === 'dashboard' && <DashboardTab estatisticas={estatisticas} />}
           {activeTab === 'usuarios' && <UsuariosTab />}
           {activeTab === 'planos' && <PlanosTab />}
@@ -365,31 +370,31 @@ function BackupTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-white">Backup e Restauração</h2>
+      <h2 className="text-xl font-semibold text-foreground">Backup e Restauração</h2>
 
       {/* Cards de Ação */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
         {/* Exportar Backup */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
-              <Download className="w-5 h-5 text-cyan-400" />
+            <CardTitle className="text-foreground text-lg flex items-center gap-2">
+              <Download className="w-5 h-5 text-primary" />
               Exportar Backup
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-slate-400 text-sm">
+            <p className="text-muted-foreground text-sm">
               Exporte todos os dados do sistema em formato JSON. 
               O arquivo inclui workspaces, usuários, processos, clientes e todas as configurações.
             </p>
             
             {backupInfo?.ultimo_backup && (
-              <div className="p-3 bg-slate-800/50 rounded-lg">
-                <p className="text-slate-400 text-xs">Último backup:</p>
-                <p className="text-slate-300 text-sm">
+              <div className="p-3 bg-secondary/40 rounded-lg">
+                <p className="text-muted-foreground text-xs">Último backup:</p>
+                <p className="text-foreground text-sm">
                   {new Date(backupInfo.ultimo_backup.created_at).toLocaleString('pt-BR')}
                 </p>
-                <p className="text-slate-500 text-xs mt-1">
+                <p className="text-muted-foreground text-xs mt-1">
                   por {backupInfo.ultimo_backup.user_nome}
                 </p>
               </div>
@@ -398,7 +403,7 @@ function BackupTab() {
             <Button 
               onClick={handleExportarBackup} 
               disabled={carregando}
-              className="w-full bg-cyan-600 hover:bg-cyan-700"
+              className="w-full bg-primary hover:bg-primary/90"
             >
               {carregando ? (
                 <RefreshCw className="w-4 h-4 mr-2 animate-spin" />
@@ -411,15 +416,15 @@ function BackupTab() {
         </Card>
 
         {/* Restaurar Backup */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardHeader>
-            <CardTitle className="text-white text-lg flex items-center gap-2">
+            <CardTitle className="text-foreground text-lg flex items-center gap-2">
               <Upload className="w-5 h-5 text-amber-400" />
               Restaurar Backup
             </CardTitle>
           </CardHeader>
           <CardContent className="space-y-4">
-            <p className="text-slate-400 text-sm">
+            <p className="text-muted-foreground text-sm">
               Restaure dados de um arquivo de backup anterior. 
               <strong className="text-amber-400"> Atenção:</strong> Esta ação não pode ser desfeita!
             </p>
@@ -433,14 +438,14 @@ function BackupTab() {
                   setVerificacao(null);
                   setResultadoRestauracao(null);
                 }}
-                className="bg-slate-800 border-slate-700 file:text-slate-300"
+                className="bg-secondary border-border file:text-foreground"
               />
               
               {arquivoSelecionado && (
                 <Button 
                   variant="outline" 
                   onClick={handleVerificarArquivo}
-                  className="w-full border-slate-700"
+                  className="w-full border-border"
                 >
                   <CheckCircle className="w-4 h-4 mr-2" />
                   Verificar Arquivo
@@ -454,13 +459,13 @@ function BackupTab() {
                   <CheckCircle className="w-5 h-5 text-green-400" />
                   <span className="text-green-400 font-medium">Arquivo válido!</span>
                 </div>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted-foreground text-sm">
                   Exportado em: {new Date(verificacao.data_exportacao).toLocaleString('pt-BR')}
                 </p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted-foreground text-sm">
                   Por: {verificacao.exportado_por}
                 </p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted-foreground text-sm">
                   Total de registros: {verificacao.total_registros}
                 </p>
                 <Button 
@@ -477,15 +482,15 @@ function BackupTab() {
       </div>
 
       {/* Dicas de Segurança */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardHeader>
-          <CardTitle className="text-white text-lg flex items-center gap-2">
+          <CardTitle className="text-foreground text-lg flex items-center gap-2">
             <AlertTriangle className="w-5 h-5 text-amber-400" />
             Boas Práticas
           </CardTitle>
         </CardHeader>
         <CardContent>
-          <ul className="space-y-2 text-slate-400 text-sm">
+          <ul className="space-y-2 text-muted-foreground text-sm">
             <li className="flex items-start gap-2">
               <CheckCircle className="w-4 h-4 text-green-400 mt-0.5 shrink-0" />
               Faça backup regularmente, pelo menos uma vez por semana
@@ -508,15 +513,15 @@ function BackupTab() {
 
       {/* Resultado da Restauração */}
       {resultadoRestauracao && (
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardHeader>
-            <CardTitle className="text-white text-lg">Resultado da Restauração</CardTitle>
+            <CardTitle className="text-foreground text-lg">Resultado da Restauração</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-2">
               {Object.entries(resultadoRestauracao.resultados).map(([tabela, resultado]: [string, any]) => (
-                <div key={tabela} className="flex items-center justify-between p-2 bg-slate-800/50 rounded">
-                  <span className="text-slate-300 capitalize">{tabela}</span>
+                <div key={tabela} className="flex items-center justify-between p-2 bg-secondary/40 rounded">
+                  <span className="text-foreground capitalize">{tabela}</span>
                   <Badge 
                     variant="outline" 
                     className={resultado.status === 'sucesso' ? 'border-green-500/30 text-green-400' : 'border-amber-500/30 text-amber-400'}
@@ -534,7 +539,7 @@ function BackupTab() {
 
       {/* Dialog de Confirmação */}
       <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-400">
               <AlertTriangle className="w-5 h-5" />
@@ -542,7 +547,7 @@ function BackupTab() {
             </DialogTitle>
           </DialogHeader>
           <div className="space-y-4">
-            <p className="text-slate-300">
+            <p className="text-foreground">
               Você está prestes a restaurar <strong>{verificacao?.total_registros}</strong> registros de um backup.
             </p>
             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
@@ -553,7 +558,7 @@ function BackupTab() {
             </div>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowRestoreDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowRestoreDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -581,8 +586,8 @@ function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode; 
       onClick={onClick}
       className={`w-full flex items-center gap-3 px-4 py-3 rounded-lg transition-colors ${
         active 
-          ? 'bg-purple-500/20 text-purple-400 border border-purple-500/30' 
-          : 'text-slate-400 hover:bg-slate-800 hover:text-white'
+          ? 'bg-primary/15 text-primary border border-primary/25 shadow-sm shadow-primary/10' 
+          : 'text-muted-foreground hover:bg-secondary/70 hover:text-foreground'
       }`}
     >
       {icon}
@@ -596,9 +601,9 @@ function DashboardTab({ estatisticas }: { estatisticas: Estatisticas | null }) {
   if (!estatisticas) return null;
 
   const cards = [
-    { icon: Users, label: 'Total de Usuários', value: estatisticas.total_usuarios, color: 'text-cyan-400', bg: 'bg-cyan-500/20' },
+    { icon: Users, label: 'Total de Usuários', value: estatisticas.total_usuarios, color: 'text-primary', bg: 'bg-primary/20' },
     { icon: DollarSign, label: 'Receita Mensal (MRR)', value: `R$ ${estatisticas.mrr.toFixed(2)}`, color: 'text-green-400', bg: 'bg-green-500/20' },
-    { icon: Activity, label: 'Usuários Ativos', value: estatisticas.usuarios_ativos, color: 'text-purple-400', bg: 'bg-purple-500/20' },
+    { icon: Activity, label: 'Usuários Ativos', value: estatisticas.usuarios_ativos, color: 'text-accent', bg: 'bg-accent/20' },
     { icon: TrendingUp, label: 'Novos (30 dias)', value: estatisticas.usuarios_recentes, color: 'text-amber-400', bg: 'bg-amber-500/20' },
   ];
 
@@ -607,11 +612,11 @@ function DashboardTab({ estatisticas }: { estatisticas: Estatisticas | null }) {
       {/* Cards de Métricas */}
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4">
         {cards.map((card) => (
-          <Card key={card.label} className="bg-slate-900 border-slate-800">
+          <Card key={card.label} className="glass-card border-border/60">
             <CardContent className="p-6">
               <div className="flex items-center justify-between">
                 <div>
-                  <p className="text-slate-400 text-sm">{card.label}</p>
+                  <p className="text-muted-foreground text-sm">{card.label}</p>
                   <p className={`text-2xl font-bold ${card.color} mt-1`}>{card.value}</p>
                 </div>
                 <div className={`p-3 rounded-lg ${card.bg}`}>
@@ -625,16 +630,16 @@ function DashboardTab({ estatisticas }: { estatisticas: Estatisticas | null }) {
 
       <div className="grid grid-cols-1 lg:grid-cols-2 gap-6">
         {/* Distribuição por Plano */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardHeader>
-            <CardTitle className="text-white text-lg">Distribuição por Plano</CardTitle>
+            <CardTitle className="text-foreground text-lg">Distribuição por Plano</CardTitle>
           </CardHeader>
           <CardContent>
             <div className="space-y-3">
               {estatisticas.distribuicao_planos.map((plano) => (
-                <div key={plano.nome} className="flex items-center justify-between p-3 bg-slate-800/50 rounded-lg">
-                  <span className="text-slate-300">{plano.nome}</span>
-                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                <div key={plano.nome} className="flex items-center justify-between p-3 bg-secondary/40 rounded-lg">
+                  <span className="text-foreground">{plano.nome}</span>
+                  <Badge variant="outline" className="border-primary/30 text-primary">
                     {plano.count} usuários
                   </Badge>
                 </div>
@@ -644,25 +649,25 @@ function DashboardTab({ estatisticas }: { estatisticas: Estatisticas | null }) {
         </Card>
 
         {/* Logs Recentes */}
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardHeader>
-            <CardTitle className="text-white text-lg">Atividades Recentes</CardTitle>
+            <CardTitle className="text-foreground text-lg">Atividades Recentes</CardTitle>
           </CardHeader>
           <CardContent>
             <ScrollArea className="h-64">
               <div className="space-y-2">
                 {estatisticas.logs_recentes.length === 0 ? (
-                  <p className="text-slate-500 text-center py-4">Nenhuma atividade recente</p>
+                  <p className="text-muted-foreground text-center py-4">Nenhuma atividade recente</p>
                 ) : (
                   estatisticas.logs_recentes.map((log: any) => (
-                    <div key={log.id} className="p-3 bg-slate-800/50 rounded-lg text-sm">
+                    <div key={log.id} className="p-3 bg-secondary/40 rounded-lg text-sm">
                       <div className="flex items-center justify-between">
-                        <span className="text-slate-300 font-medium">{log.acao}</span>
-                        <span className="text-slate-500 text-xs">
+                        <span className="text-foreground font-medium">{log.acao}</span>
+                        <span className="text-muted-foreground text-xs">
                           {new Date(log.created_at).toLocaleString('pt-BR')}
                         </span>
                       </div>
-                      <p className="text-slate-400 mt-1">
+                      <p className="text-muted-foreground mt-1">
                         {log.user_nome} • {log.entidade}
                       </p>
                     </div>
@@ -795,9 +800,9 @@ function UsuariosTab() {
 
   const getRoleBadge = (role: string) => {
     const styles: Record<string, string> = {
-      superadmin: 'bg-purple-500/20 text-purple-400 border-purple-500/30',
-      admin: 'bg-cyan-500/20 text-cyan-400 border-cyan-500/30',
-      user: 'bg-slate-500/20 text-slate-400 border-slate-500/30',
+      superadmin: 'bg-accent/20 text-accent border-accent/30',
+      admin: 'bg-primary/20 text-primary border-primary/30',
+      user: 'bg-secondary/60 text-muted-foreground border-border/30',
       inativo: 'bg-red-500/20 text-red-400 border-red-500/30',
     };
     return styles[role] || styles.user;
@@ -807,53 +812,53 @@ function UsuariosTab() {
     <div className="space-y-4">
       <div className="flex items-center justify-between">
         <div className="relative w-96">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome ou email..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-slate-900 border-slate-700"
+            className="pl-10 bg-card border-border"
           />
         </div>
-        <Button onClick={carregarUsuarios} variant="outline" className="border-slate-700">
+        <Button onClick={carregarUsuarios} variant="outline" className="border-border">
           <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
       </div>
 
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="text-slate-400">Nome</TableHead>
-                <TableHead className="text-slate-400">Email</TableHead>
-                <TableHead className="text-slate-400">Plano</TableHead>
-                <TableHead className="text-slate-400">Função</TableHead>
-                <TableHead className="text-slate-400">Cadastro</TableHead>
-                <TableHead className="text-slate-400 text-right">Ações</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Nome</TableHead>
+                <TableHead className="text-muted-foreground">Email</TableHead>
+                <TableHead className="text-muted-foreground">Plano</TableHead>
+                <TableHead className="text-muted-foreground">Função</TableHead>
+                <TableHead className="text-muted-foreground">Cadastro</TableHead>
+                <TableHead className="text-muted-foreground text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={6} className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto" />
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : usuarios.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={6} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={6} className="text-center py-8 text-muted-foreground">
                     Nenhum usuário encontrado
                   </TableCell>
                 </TableRow>
               ) : (
                 usuarios.map((usuario) => (
-                  <TableRow key={usuario.id} className="border-slate-800">
-                    <TableCell className="text-white">{usuario.nome}</TableCell>
-                    <TableCell className="text-slate-400">{usuario.email}</TableCell>
+                  <TableRow key={usuario.id} className="border-border">
+                    <TableCell className="text-foreground">{usuario.nome}</TableCell>
+                    <TableCell className="text-muted-foreground">{usuario.email}</TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                      <Badge variant="outline" className="border-primary/30 text-primary">
                         {usuario.plano_nome || 'Gratuito'}
                       </Badge>
                     </TableCell>
@@ -862,7 +867,7 @@ function UsuariosTab() {
                         {usuario.role}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-slate-400">
+                    <TableCell className="text-muted-foreground">
                       {new Date(usuario.created_at).toLocaleDateString('pt-BR')}
                     </TableCell>
                     <TableCell className="text-right">
@@ -871,7 +876,7 @@ function UsuariosTab() {
                           variant="ghost"
                           size="sm"
                           onClick={() => handleImpersonate(usuario.id)}
-                          className="text-cyan-400 hover:text-cyan-300"
+                          className="text-primary hover:text-primary"
                           title="Login como usuário"
                         >
                           <LogIn className="w-4 h-4" />
@@ -901,7 +906,7 @@ function UsuariosTab() {
                           variant="ghost"
                           size="sm"
                           onClick={() => { setUsuarioSelecionado(usuario); setShowResetDialog(true); }}
-                          className="text-purple-400 hover:text-purple-300"
+                          className="text-accent hover:text-accent"
                         >
                           <Key className="w-4 h-4" />
                         </Button>
@@ -926,7 +931,7 @@ function UsuariosTab() {
 
       {/* Paginação */}
       <div className="flex items-center justify-between">
-        <p className="text-slate-400 text-sm">
+        <p className="text-muted-foreground text-sm">
           Página {page} de {totalPages}
         </p>
         <div className="flex gap-2">
@@ -935,7 +940,7 @@ function UsuariosTab() {
             size="sm"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="border-slate-700"
+            className="border-border"
           >
             <ChevronLeft className="w-4 h-4" />
           </Button>
@@ -944,7 +949,7 @@ function UsuariosTab() {
             size="sm"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="border-slate-700"
+            className="border-border"
           >
             <ChevronRight className="w-4 h-4" />
           </Button>
@@ -953,7 +958,7 @@ function UsuariosTab() {
 
       {/* Dialog de Edição */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
@@ -964,7 +969,7 @@ function UsuariosTab() {
                 <Input 
                   defaultValue={usuarioSelecionado.nome}
                   onChange={(e) => usuarioSelecionado.nome = e.target.value}
-                  className="bg-slate-800 border-slate-700 mt-1"
+                  className="bg-secondary border-border mt-1"
                 />
               </div>
               <div>
@@ -972,7 +977,7 @@ function UsuariosTab() {
                 <Input 
                   defaultValue={usuarioSelecionado.email}
                   onChange={(e) => usuarioSelecionado.email = e.target.value}
-                  className="bg-slate-800 border-slate-700 mt-1"
+                  className="bg-secondary border-border mt-1"
                 />
               </div>
               <div>
@@ -981,10 +986,10 @@ function UsuariosTab() {
                   defaultValue={usuarioSelecionado.role}
                   onValueChange={(v) => usuarioSelecionado.role = v}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                  <SelectTrigger className="bg-secondary border-border mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="user">Usuário</SelectItem>
                     <SelectItem value="admin">Administrador</SelectItem>
                     <SelectItem value="superadmin">Super Admin</SelectItem>
@@ -994,7 +999,7 @@ function UsuariosTab() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowEditDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowEditDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -1003,7 +1008,7 @@ function UsuariosTab() {
                 email: usuarioSelecionado?.email,
                 role: usuarioSelecionado?.role
               })}
-              className="bg-cyan-600 hover:bg-cyan-700"
+              className="bg-primary hover:bg-primary/90"
             >
               Salvar
             </Button>
@@ -1013,7 +1018,7 @@ function UsuariosTab() {
 
       {/* Dialog de Alterar Plano */}
       <Dialog open={showPlanoDialog} onOpenChange={setShowPlanoDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-emerald-400" />
@@ -1022,16 +1027,16 @@ function UsuariosTab() {
           </DialogHeader>
           {usuarioSelecionado && (
             <div className="space-y-4">
-              <div className="p-3 bg-slate-800 rounded-lg">
-                <p className="text-slate-400 text-sm">Usuário</p>
-                <p className="text-white font-medium">{usuarioSelecionado.nome}</p>
-                <p className="text-slate-500 text-sm">{usuarioSelecionado.email}</p>
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-muted-foreground text-sm">Usuário</p>
+                <p className="text-foreground font-medium">{usuarioSelecionado.nome}</p>
+                <p className="text-muted-foreground text-sm">{usuarioSelecionado.email}</p>
               </div>
               
               <div>
                 <Label>Plano Atual</Label>
                 <div className="mt-1">
-                  <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                  <Badge variant="outline" className="border-primary/30 text-primary">
                     {usuarioSelecionado.plano_nome || 'Gratuito'}
                   </Badge>
                 </div>
@@ -1043,15 +1048,15 @@ function UsuariosTab() {
                   value={planoSelecionado} 
                   onValueChange={setPlanoSelecionado}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                  <SelectTrigger className="bg-secondary border-border mt-1">
                     <SelectValue placeholder="Selecione um plano" />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     {planos.map((plano) => (
                       <SelectItem key={plano.id} value={plano.id.toString()}>
                         <div className="flex items-center justify-between w-full gap-4">
                           <span>{plano.nome}</span>
-                          <span className="text-slate-500 text-sm">
+                          <span className="text-muted-foreground text-sm">
                             R$ {plano.preco_mensal?.toFixed(2)}/mês
                           </span>
                         </div>
@@ -1067,10 +1072,10 @@ function UsuariosTab() {
                   value={cicloSelecionado} 
                   onValueChange={setCicloSelecionado}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                  <SelectTrigger className="bg-secondary border-border mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="mensal">Mensal</SelectItem>
                     <SelectItem value="anual">Anual</SelectItem>
                   </SelectContent>
@@ -1094,7 +1099,7 @@ function UsuariosTab() {
             </div>
           )}
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPlanoDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowPlanoDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -1110,23 +1115,23 @@ function UsuariosTab() {
 
       {/* Dialog de Reset de Senha */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle>Resetar Senha</DialogTitle>
           </DialogHeader>
-          <p className="text-slate-400">
-            Tem certeza que deseja resetar a senha de <strong className="text-white">{usuarioSelecionado?.nome}</strong>?
+          <p className="text-muted-foreground">
+            Tem certeza que deseja resetar a senha de <strong className="text-foreground">{usuarioSelecionado?.nome}</strong>?
           </p>
           <div>
             <Label>Nova Senha (opcional)</Label>
             <Input 
               placeholder="Deixe em branco para senha padrão"
               id="nova-senha"
-              className="bg-slate-800 border-slate-700 mt-1"
+              className="bg-secondary border-border mt-1"
             />
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowResetDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowResetDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -1134,7 +1139,7 @@ function UsuariosTab() {
                 const senha = (document.getElementById('nova-senha') as HTMLInputElement)?.value || 'Juris@123';
                 handleResetSenha(senha);
               }}
-              className="bg-purple-600 hover:bg-purple-700"
+              className="bg-accent hover:bg-accent/90"
             >
               Resetar Senha
             </Button>
@@ -1144,19 +1149,19 @@ function UsuariosTab() {
 
       {/* Dialog de Exclusão */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white">
+        <DialogContent className="bg-card border-border text-foreground">
           <DialogHeader>
             <DialogTitle>Desativar Usuário</DialogTitle>
           </DialogHeader>
           <div className="flex items-center gap-3 p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
             <AlertTriangle className="w-6 h-6 text-red-400" />
-            <p className="text-slate-300">
-              Esta ação irá desativar o usuário <strong className="text-white">{usuarioSelecionado?.nome}</strong>. 
+            <p className="text-foreground">
+              Esta ação irá desativar o usuário <strong className="text-foreground">{usuarioSelecionado?.nome}</strong>. 
               O usuário não poderá mais acessar o sistema.
             </p>
           </div>
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowDeleteDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -1195,8 +1200,8 @@ function PlanosTab() {
   return (
     <div className="space-y-6">
       <div className="flex justify-between">
-        <h2 className="text-xl font-semibold text-white">Planos e Preços</h2>
-        <Button className="bg-cyan-600 hover:bg-cyan-700">
+        <h2 className="text-xl font-semibold text-foreground">Planos e Preços</h2>
+        <Button className="bg-primary hover:bg-primary/90">
           <DollarSign className="w-4 h-4 mr-2" />
           Novo Plano
         </Button>
@@ -1204,35 +1209,35 @@ function PlanosTab() {
 
       <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
         {planos.map((plano) => (
-          <Card key={plano.id} className="bg-slate-900 border-slate-800">
+          <Card key={plano.id} className="glass-card border-border/60">
             <CardHeader>
               <div className="flex items-center justify-between">
-                <CardTitle className="text-white">{plano.nome}</CardTitle>
+                <CardTitle className="text-foreground">{plano.nome}</CardTitle>
                 {plano.ativo ? (
                   <Badge className="bg-green-500/20 text-green-400">Ativo</Badge>
                 ) : (
                   <Badge className="bg-red-500/20 text-red-400">Inativo</Badge>
                 )}
               </div>
-              <p className="text-slate-400 text-sm">{plano.descricao}</p>
+              <p className="text-muted-foreground text-sm">{plano.descricao}</p>
             </CardHeader>
             <CardContent className="space-y-4">
               <div className="space-y-2">
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Mensal:</span>
-                  <span className="text-white font-medium">
+                  <span className="text-muted-foreground">Mensal:</span>
+                  <span className="text-foreground font-medium">
                     R$ {plano.preco_mensal.toFixed(2)}
                   </span>
                 </div>
                 <div className="flex justify-between">
-                  <span className="text-slate-400">Anual:</span>
-                  <span className="text-white font-medium">
+                  <span className="text-muted-foreground">Anual:</span>
+                  <span className="text-foreground font-medium">
                     R$ {plano.preco_anual?.toFixed(2) || '-'}
                   </span>
                 </div>
               </div>
               <div className="flex gap-2 pt-4">
-                <Button variant="outline" size="sm" className="flex-1 border-slate-700">
+                <Button variant="outline" size="sm" className="flex-1 border-border">
                   <Edit2 className="w-4 h-4 mr-1" />
                   Editar
                 </Button>
@@ -1509,16 +1514,16 @@ function ConfiguracoesTab() {
 
   return (
     <div className="space-y-6">
-      <h2 className="text-xl font-semibold text-white">Configurações Globais</h2>
+      <h2 className="text-xl font-semibold text-foreground">Configurações Globais</h2>
 
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardContent className="p-6">
           <div className="space-y-6">
             {configuracoes.map((config) => (
-              <div key={config.chave} className="flex items-center justify-between p-4 bg-slate-800/50 rounded-lg">
+              <div key={config.chave} className="flex items-center justify-between p-4 bg-secondary/40 rounded-lg">
                 <div>
-                  <p className="text-white font-medium">{config.chave}</p>
-                  <p className="text-slate-400 text-sm">{config.descricao}</p>
+                  <p className="text-foreground font-medium">{config.chave}</p>
+                  <p className="text-muted-foreground text-sm">{config.descricao}</p>
                 </div>
                 <div className="flex items-center gap-3">
                   {config.chave === 'modo_manutencao' ? (
@@ -1526,10 +1531,10 @@ function ConfiguracoesTab() {
                       value={config.valor} 
                       onValueChange={(v) => handleUpdateConfig(config.chave, v)}
                     >
-                      <SelectTrigger className="w-32 bg-slate-800 border-slate-700">
+                      <SelectTrigger className="w-32 bg-secondary border-border">
                         <SelectValue />
                       </SelectTrigger>
-                      <SelectContent className="bg-slate-800 border-slate-700">
+                      <SelectContent className="bg-secondary border-border">
                         <SelectItem value="true">Ativado</SelectItem>
                         <SelectItem value="false">Desativado</SelectItem>
                       </SelectContent>
@@ -1538,7 +1543,7 @@ function ConfiguracoesTab() {
                     <Input
                       value={config.valor}
                       onChange={(e) => handleUpdateConfig(config.chave, e.target.value)}
-                      className="w-48 bg-slate-800 border-slate-700"
+                      className="w-48 bg-secondary border-border"
                     />
                   )}
                 </div>
@@ -1548,37 +1553,37 @@ function ConfiguracoesTab() {
         </CardContent>
       </Card>
 
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardHeader>
-          <CardTitle className="text-white">WhatsApp da Plataforma</CardTitle>
+          <CardTitle className="text-foreground">WhatsApp da Plataforma</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div className="grid gap-4 md:grid-cols-2">
             <div>
-              <Label className="text-slate-300">Nome de exibição</Label>
+              <Label className="text-foreground">Nome de exibição</Label>
               <Input
                 value={platformForm?.display_name || ''}
                 onChange={(e) =>
                   setPlatformForm((prev) => ({ ...(prev || {}), display_name: e.target.value }))
                 }
-                className="mt-1 bg-slate-800 border-slate-700"
+                className="mt-1 bg-secondary border-border"
                 placeholder="JurisPocket"
               />
             </div>
             <div>
-              <Label className="text-slate-300">Telefone</Label>
+              <Label className="text-foreground">Telefone</Label>
               <Input
                 value={platformForm?.phone_number || ''}
                 onChange={(e) =>
                   setPlatformForm((prev) => ({ ...(prev || {}), phone_number: e.target.value }))
                 }
-                className="mt-1 bg-slate-800 border-slate-700"
+                className="mt-1 bg-secondary border-border"
                 placeholder="5511999999999"
               />
             </div>
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-foreground">
             <input
               type="checkbox"
               checked={Boolean(platformForm?.enabled)}
@@ -1589,20 +1594,20 @@ function ConfiguracoesTab() {
             Ativar WhatsApp da plataforma
           </label>
 
-          <div className="rounded-lg bg-slate-800/50 p-4 space-y-2 text-sm">
+          <div className="rounded-lg bg-secondary/40 p-4 space-y-2 text-sm">
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Status</span>
+              <span className="text-muted-foreground">Status</span>
               <span className={platformStatus?.connected ? 'text-emerald-400' : 'text-amber-400'}>
                 {platformStatus?.connected ? 'Conectado' : 'Desconectado'}
               </span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Estado</span>
-              <span className="text-white">{platformStatus?.state || '-'}</span>
+              <span className="text-muted-foreground">Estado</span>
+              <span className="text-foreground">{platformStatus?.state || '-'}</span>
             </div>
             <div className="flex items-center justify-between">
-              <span className="text-slate-400">Provedor</span>
-              <span className="text-white">{platformStatus?.provider || '-'}</span>
+              <span className="text-muted-foreground">Provedor</span>
+              <span className="text-foreground">{platformStatus?.provider || '-'}</span>
             </div>
           </div>
 
@@ -1623,23 +1628,23 @@ function ConfiguracoesTab() {
         </CardContent>
       </Card>
 
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardHeader>
-          <CardTitle className="text-white">Aviso Manual via WhatsApp</CardTitle>
+          <CardTitle className="text-foreground">Aviso Manual via WhatsApp</CardTitle>
         </CardHeader>
         <CardContent className="space-y-4">
           <div>
-            <Label className="text-slate-300">Mensagem do aviso</Label>
+            <Label className="text-foreground">Mensagem do aviso</Label>
             <Textarea
               value={mensagemAviso}
               onChange={(e) => setMensagemAviso(e.target.value)}
               rows={5}
-              className="mt-1 bg-slate-800 border-slate-700"
+              className="mt-1 bg-secondary border-border"
               placeholder="Ex: Sistema em manutenção hoje às 22h. Previsão de retorno às 23h30."
             />
           </div>
 
-          <label className="flex items-center gap-2 text-sm text-slate-300">
+          <label className="flex items-center gap-2 text-sm text-foreground">
             <input
               type="checkbox"
               checked={somenteAdminsAviso}
@@ -1650,7 +1655,7 @@ function ConfiguracoesTab() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-slate-300">
+              <Label className="text-foreground">
                 Workspaces alvo ({workspaceIdsAviso.length || workspacesAviso.length})
               </Label>
               <div className="flex gap-2">
@@ -1658,7 +1663,7 @@ function ConfiguracoesTab() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="border-slate-700 text-slate-300"
+                  className="border-border text-foreground"
                   onClick={() => setWorkspaceIdsAviso(workspacesAviso.map((w) => w.id))}
                 >
                   Marcar todos
@@ -1667,19 +1672,19 @@ function ConfiguracoesTab() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="border-slate-700 text-slate-300"
+                  className="border-border text-foreground"
                   onClick={() => setWorkspaceIdsAviso([])}
                 >
                   Todos (sem filtro)
                 </Button>
               </div>
             </div>
-            <ScrollArea className="h-40 rounded-md border border-slate-700 p-2">
+            <ScrollArea className="h-40 rounded-md border border-border p-2">
               <div className="space-y-1">
                 {workspacesAviso.map((workspace) => (
                   <label
                     key={workspace.id}
-                    className="flex items-center justify-between gap-3 rounded px-2 py-1 text-sm text-slate-300 hover:bg-slate-800/60"
+                    className="flex items-center justify-between gap-3 rounded px-2 py-1 text-sm text-foreground hover:bg-secondary/60"
                   >
                     <span className="truncate">{workspace.nome}</span>
                     <input
@@ -1691,7 +1696,7 @@ function ConfiguracoesTab() {
                 ))}
               </div>
             </ScrollArea>
-            <p className="text-xs text-slate-400">
+            <p className="text-xs text-muted-foreground">
               Se nenhum workspace estiver marcado, o envio cobre todos.
             </p>
           </div>
@@ -1711,18 +1716,18 @@ function ConfiguracoesTab() {
             </Button>
           </div>
 
-          <div className="rounded-lg border border-slate-700 p-4 space-y-3">
-            <Label className="text-slate-300">Agendar envio</Label>
+          <div className="rounded-lg border border-border p-4 space-y-3">
+            <Label className="text-foreground">Agendar envio</Label>
             <Input
               type="datetime-local"
               value={agendamentoAviso}
               onChange={(e) => setAgendamentoAviso(e.target.value)}
-              className="bg-slate-800 border-slate-700"
+              className="bg-secondary border-border"
             />
             <Button
               type="button"
               variant="outline"
-              className="border-slate-700 text-slate-200"
+              className="border-border text-foreground"
               onClick={handleAgendarAvisoWhatsapp}
               disabled={agendandoAviso || !mensagemAviso.trim() || !agendamentoAviso}
             >
@@ -1737,12 +1742,12 @@ function ConfiguracoesTab() {
 
           <div className="space-y-2">
             <div className="flex items-center justify-between">
-              <Label className="text-slate-300">Campanhas agendadas</Label>
+              <Label className="text-foreground">Campanhas agendadas</Label>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="border-slate-700 text-slate-300"
+                className="border-border text-foreground"
                 onClick={carregarCampanhasWhatsapp}
                 disabled={loadingCampanhas}
               >
@@ -1750,10 +1755,10 @@ function ConfiguracoesTab() {
                 Atualizar
               </Button>
             </div>
-            <ScrollArea className="h-48 rounded-md border border-slate-700 p-2">
+            <ScrollArea className="h-48 rounded-md border border-border p-2">
               <div className="space-y-2">
                 {campanhasWhatsapp.length === 0 ? (
-                  <p className="text-sm text-slate-400 px-2 py-2">Nenhuma campanha registrada.</p>
+                  <p className="text-sm text-muted-foreground px-2 py-2">Nenhuma campanha registrada.</p>
                 ) : (
                   campanhasWhatsapp.map((campanha) => {
                     const statusColor =
@@ -1764,20 +1769,20 @@ function ConfiguracoesTab() {
                         : campanha.status === 'falhou'
                         ? 'text-red-400 border-red-700'
                         : campanha.status === 'cancelado'
-                        ? 'text-slate-400 border-slate-700'
-                        : 'text-cyan-300 border-cyan-700';
+                        ? 'text-muted-foreground border-border'
+                        : 'text-primary border-primary/40';
 
                     return (
                       <div
                         key={campanha.id}
-                        className="rounded-md border border-slate-700 bg-slate-800/40 p-3 space-y-2"
+                        className="rounded-md border border-border bg-secondary/40 p-3 space-y-2"
                       >
                         <div className="flex items-start justify-between gap-2">
                           <div className="min-w-0">
-                            <p className="text-sm text-slate-100 font-medium truncate">
+                            <p className="text-sm text-foreground font-medium truncate">
                               #{campanha.id} - {campanha.mensagem}
                             </p>
-                            <p className="text-xs text-slate-400">
+                            <p className="text-xs text-muted-foreground">
                               Agendado para:{' '}
                               {campanha.scheduled_for
                                 ? new Date(String(campanha.scheduled_for).replace(' ', 'T')).toLocaleString('pt-BR')
@@ -1789,7 +1794,7 @@ function ConfiguracoesTab() {
                           </Badge>
                         </div>
                         {campanha.result_summary && (
-                          <p className="text-xs text-slate-400">
+                          <p className="text-xs text-muted-foreground">
                             Processados: {campanha.result_summary.processados || 0} | Confirmados:{' '}
                             {campanha.result_summary.confirmados || 0} | Falhas:{' '}
                             {campanha.result_summary.falhas || 0}
@@ -1826,7 +1831,7 @@ function ConfiguracoesTab() {
             <DialogTitle>Conectar WhatsApp da Plataforma</DialogTitle>
           </DialogHeader>
           <div className="flex flex-col items-center p-4">
-            <p className="text-sm text-slate-400 mb-4 text-center">
+            <p className="text-sm text-muted-foreground mb-4 text-center">
               Escaneie o QR Code pelo WhatsApp em "Aparelhos conectados".
             </p>
             {platformQrCode ? (
@@ -1867,39 +1872,39 @@ function AuditoriaTab() {
 
   return (
     <div className="space-y-4">
-      <h2 className="text-xl font-semibold text-white">Logs de Auditoria</h2>
+      <h2 className="text-xl font-semibold text-foreground">Logs de Auditoria</h2>
 
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="text-slate-400">Data</TableHead>
-                <TableHead className="text-slate-400">Usuário</TableHead>
-                <TableHead className="text-slate-400">Ação</TableHead>
-                <TableHead className="text-slate-400">Entidade</TableHead>
-                <TableHead className="text-slate-400">IP</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Data</TableHead>
+                <TableHead className="text-muted-foreground">Usuário</TableHead>
+                <TableHead className="text-muted-foreground">Ação</TableHead>
+                <TableHead className="text-muted-foreground">Entidade</TableHead>
+                <TableHead className="text-muted-foreground">IP</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {logs.map((log) => (
-                <TableRow key={log.id} className="border-slate-800">
-                  <TableCell className="text-slate-400 text-sm">
+                <TableRow key={log.id} className="border-border">
+                  <TableCell className="text-muted-foreground text-sm">
                     {new Date(log.created_at).toLocaleString('pt-BR')}
                   </TableCell>
                   <TableCell>
                     <div>
-                      <p className="text-white text-sm">{log.user_nome}</p>
-                      <p className="text-slate-500 text-xs">{log.user_email}</p>
+                      <p className="text-foreground text-sm">{log.user_nome}</p>
+                      <p className="text-muted-foreground text-xs">{log.user_email}</p>
                     </div>
                   </TableCell>
                   <TableCell>
-                    <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                    <Badge variant="outline" className="border-primary/30 text-primary">
                       {log.acao}
                     </Badge>
                   </TableCell>
-                  <TableCell className="text-slate-300">{log.entidade}</TableCell>
-                  <TableCell className="text-slate-500 text-sm">{log.ip_address}</TableCell>
+                  <TableCell className="text-foreground">{log.entidade}</TableCell>
+                  <TableCell className="text-muted-foreground text-sm">{log.ip_address}</TableCell>
                 </TableRow>
               ))}
             </TableBody>
@@ -2056,29 +2061,29 @@ function AssinaturasTab() {
     <div className="space-y-6">
       {/* Header com Resumo */}
       <div className="grid grid-cols-1 md:grid-cols-4 gap-4">
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-blue-500/20 flex items-center justify-center">
                 <CreditCard className="w-5 h-5 text-blue-400" />
               </div>
               <div>
-                <p className="text-slate-400 text-sm">Assinaturas Ativas</p>
-                <p className="text-2xl font-bold text-white">{resumo?.total_assinaturas_ativas || 0}</p>
+                <p className="text-muted-foreground text-sm">Assinaturas Ativas</p>
+                <p className="text-2xl font-bold text-foreground">{resumo?.total_assinaturas_ativas || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-green-500/20 flex items-center justify-center">
                 <DollarSign className="w-5 h-5 text-green-400" />
               </div>
               <div>
-                <p className="text-slate-400 text-sm">Recebido no Mês</p>
-                <p className="text-2xl font-bold text-white">
+                <p className="text-muted-foreground text-sm">Recebido no Mês</p>
+                <p className="text-2xl font-bold text-foreground">
                   R$ {(resumo?.total_recebido_mes || 0).toFixed(2)}
                 </p>
               </div>
@@ -2086,29 +2091,29 @@ function AssinaturasTab() {
           </CardContent>
         </Card>
         
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-lg bg-amber-500/20 flex items-center justify-center">
                 <AlertCircle className="w-5 h-5 text-amber-400" />
               </div>
               <div>
-                <p className="text-slate-400 text-sm">Pendentes</p>
-                <p className="text-2xl font-bold text-white">{resumo?.assinaturas_pendentes_mes || 0}</p>
+                <p className="text-muted-foreground text-sm">Pendentes</p>
+                <p className="text-2xl font-bold text-foreground">{resumo?.assinaturas_pendentes_mes || 0}</p>
               </div>
             </div>
           </CardContent>
         </Card>
         
-        <Card className="bg-slate-900 border-slate-800">
+        <Card className="glass-card border-border/60">
           <CardContent className="p-4">
             <div className="flex items-center gap-3">
-              <div className="w-10 h-10 rounded-lg bg-purple-500/20 flex items-center justify-center">
-                <TrendingUp className="w-5 h-5 text-purple-400" />
+              <div className="w-10 h-10 rounded-lg bg-accent/20 flex items-center justify-center">
+                <TrendingUp className="w-5 h-5 text-accent" />
               </div>
               <div>
-                <p className="text-slate-400 text-sm">MRR</p>
-                <p className="text-2xl font-bold text-white">
+                <p className="text-muted-foreground text-sm">MRR</p>
+                <p className="text-2xl font-bold text-foreground">
                   R$ {(resumo?.mrr || 0).toFixed(2)}
                 </p>
               </div>
@@ -2120,19 +2125,19 @@ function AssinaturasTab() {
       {/* Filtros */}
       <div className="flex gap-4">
         <div className="relative flex-1 max-w-md">
-          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" />
+          <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por workspace ou responsável..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
-            className="pl-10 bg-slate-900 border-slate-700"
+            className="pl-10 bg-card border-border"
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40 bg-slate-900 border-slate-700">
+          <SelectTrigger className="w-40 bg-card border-border">
             <SelectValue placeholder="Todos status" />
           </SelectTrigger>
-          <SelectContent className="bg-slate-900 border-slate-700">
+          <SelectContent className="bg-card border-border">
             <SelectItem value="todos">Todos</SelectItem>
             <SelectItem value="ativo">Ativo</SelectItem>
             <SelectItem value="pendente">Pendente</SelectItem>
@@ -2140,56 +2145,56 @@ function AssinaturasTab() {
             <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={carregarDados} variant="outline" className="border-slate-700">
+        <Button onClick={carregarDados} variant="outline" className="border-border">
           <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
       </div>
 
       {/* Tabela */}
-      <Card className="bg-slate-900 border-slate-800">
+      <Card className="glass-card border-border/60">
         <CardContent className="p-0">
           <Table>
             <TableHeader>
-              <TableRow className="border-slate-800 hover:bg-transparent">
-                <TableHead className="text-slate-400">Workspace</TableHead>
-                <TableHead className="text-slate-400">Plano</TableHead>
-                <TableHead className="text-slate-400">Ciclo</TableHead>
-                <TableHead className="text-slate-400">Valor</TableHead>
-                <TableHead className="text-slate-400">Status</TableHead>
-                <TableHead className="text-slate-400">Pagamento</TableHead>
-                <TableHead className="text-slate-400 text-right">Ações</TableHead>
+              <TableRow className="border-border hover:bg-transparent">
+                <TableHead className="text-muted-foreground">Workspace</TableHead>
+                <TableHead className="text-muted-foreground">Plano</TableHead>
+                <TableHead className="text-muted-foreground">Ciclo</TableHead>
+                <TableHead className="text-muted-foreground">Valor</TableHead>
+                <TableHead className="text-muted-foreground">Status</TableHead>
+                <TableHead className="text-muted-foreground">Pagamento</TableHead>
+                <TableHead className="text-muted-foreground text-right">Ações</TableHead>
               </TableRow>
             </TableHeader>
             <TableBody>
               {loading ? (
                 <TableRow>
                   <TableCell colSpan={7} className="text-center py-8">
-                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-cyan-500 mx-auto" />
+                    <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-primary mx-auto" />
                   </TableCell>
                 </TableRow>
               ) : !assinaturas || assinaturas.length === 0 ? (
                 <TableRow>
-                  <TableCell colSpan={7} className="text-center py-8 text-slate-500">
+                  <TableCell colSpan={7} className="text-center py-8 text-muted-foreground">
                     Nenhuma assinatura encontrada
                   </TableCell>
                 </TableRow>
               ) : (
                 assinaturas?.map((assinatura) => (
-                  <TableRow key={assinatura.id} className="border-slate-800">
+                  <TableRow key={assinatura.id} className="border-border">
                     <TableCell>
                       <div>
-                        <p className="text-white font-medium">{assinatura.workspace_nome}</p>
-                        <p className="text-slate-500 text-sm">{assinatura.responsavel_email}</p>
+                        <p className="text-foreground font-medium">{assinatura.workspace_nome}</p>
+                        <p className="text-muted-foreground text-sm">{assinatura.responsavel_email}</p>
                       </div>
                     </TableCell>
                     <TableCell>
-                      <Badge variant="outline" className="border-cyan-500/30 text-cyan-400">
+                      <Badge variant="outline" className="border-primary/30 text-primary">
                         {assinatura.plano_nome}
                       </Badge>
                     </TableCell>
-                    <TableCell className="text-slate-300 capitalize">{assinatura.ciclo}</TableCell>
-                    <TableCell className="text-slate-300">
+                    <TableCell className="text-foreground capitalize">{assinatura.ciclo}</TableCell>
+                    <TableCell className="text-foreground">
                       R$ {assinatura.valor?.toFixed(2)}
                     </TableCell>
                     <TableCell>
@@ -2235,7 +2240,7 @@ function AssinaturasTab() {
                             setAssinaturaSelecionada(assinatura);
                             setShowHistoricoDialog(true);
                           }}
-                          className="text-cyan-400 hover:text-cyan-300"
+                          className="text-primary hover:text-primary"
                           title="Ver Histórico"
                         >
                           <Receipt className="w-4 h-4" />
@@ -2264,7 +2269,7 @@ function AssinaturasTab() {
 
       {/* Dialog Registrar Pagamento */}
       <Dialog open={showPagamentoDialog} onOpenChange={setShowPagamentoDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+        <DialogContent className="bg-card border-border text-foreground max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-green-400" />
@@ -2274,10 +2279,10 @@ function AssinaturasTab() {
           
           {assinaturaSelecionada && (
             <div className="space-y-4">
-              <div className="p-3 bg-slate-800 rounded-lg">
-                <p className="text-slate-400 text-sm">Workspace</p>
-                <p className="text-white font-medium">{assinaturaSelecionada.workspace_nome}</p>
-                <p className="text-slate-400 text-sm mt-1">Plano: {assinaturaSelecionada.plano_nome}</p>
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-muted-foreground text-sm">Workspace</p>
+                <p className="text-foreground font-medium">{assinaturaSelecionada.workspace_nome}</p>
+                <p className="text-muted-foreground text-sm mt-1">Plano: {assinaturaSelecionada.plano_nome}</p>
               </div>
 
               <div className="grid grid-cols-2 gap-4">
@@ -2289,7 +2294,7 @@ function AssinaturasTab() {
                     value={pagamentoForm.valor_pago}
                     onChange={(e) => setPagamentoForm({ ...pagamentoForm, valor_pago: e.target.value })}
                     placeholder="0,00"
-                    className="bg-slate-800 border-slate-700 mt-1"
+                    className="bg-secondary border-border mt-1"
                   />
                 </div>
                 <div>
@@ -2298,7 +2303,7 @@ function AssinaturasTab() {
                     type="month"
                     value={pagamentoForm.mes_referencia}
                     onChange={(e) => setPagamentoForm({ ...pagamentoForm, mes_referencia: e.target.value })}
-                    className="bg-slate-800 border-slate-700 mt-1"
+                    className="bg-secondary border-border mt-1"
                   />
                 </div>
               </div>
@@ -2309,10 +2314,10 @@ function AssinaturasTab() {
                   value={pagamentoForm.metodo_pagamento}
                   onValueChange={(v) => setPagamentoForm({ ...pagamentoForm, metodo_pagamento: v })}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                  <SelectTrigger className="bg-secondary border-border mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="pix">PIX</SelectItem>
                     <SelectItem value="cartao">Cartão de Crédito</SelectItem>
                     <SelectItem value="boleto">Boleto</SelectItem>
@@ -2327,10 +2332,10 @@ function AssinaturasTab() {
                   value={pagamentoForm.status}
                   onValueChange={(v) => setPagamentoForm({ ...pagamentoForm, status: v })}
                 >
-                  <SelectTrigger className="bg-slate-800 border-slate-700 mt-1">
+                  <SelectTrigger className="bg-secondary border-border mt-1">
                     <SelectValue />
                   </SelectTrigger>
-                  <SelectContent className="bg-slate-800 border-slate-700">
+                  <SelectContent className="bg-secondary border-border">
                     <SelectItem value="confirmado">Confirmado</SelectItem>
                     <SelectItem value="pendente">Pendente</SelectItem>
                   </SelectContent>
@@ -2343,9 +2348,9 @@ function AssinaturasTab() {
                   type="file"
                   accept=".pdf,.jpg,.jpeg,.png"
                   onChange={(e) => setComprovanteFile(e.target.files?.[0] || null)}
-                  className="bg-slate-800 border-slate-700 mt-1 file:text-slate-300"
+                  className="bg-secondary border-border mt-1 file:text-foreground"
                 />
-                <p className="text-xs text-slate-500 mt-1">
+                <p className="text-xs text-muted-foreground mt-1">
                   PDF, JPG ou PNG (máx. 5MB)
                 </p>
               </div>
@@ -2357,14 +2362,14 @@ function AssinaturasTab() {
                   onChange={(e) => setPagamentoForm({ ...pagamentoForm, observacoes: e.target.value })}
                   placeholder="Informações adicionais..."
                   rows={2}
-                  className="bg-slate-800 border-slate-700 mt-1 resize-none"
+                  className="bg-secondary border-border mt-1 resize-none"
                 />
               </div>
             </div>
           )}
           
           <DialogFooter>
-            <Button variant="outline" onClick={() => setShowPagamentoDialog(false)} className="border-slate-700">
+            <Button variant="outline" onClick={() => setShowPagamentoDialog(false)} className="border-border">
               Cancelar
             </Button>
             <Button 
@@ -2380,27 +2385,27 @@ function AssinaturasTab() {
 
       {/* Dialog Histórico */}
       <Dialog open={showHistoricoDialog} onOpenChange={setShowHistoricoDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
-              <Receipt className="w-5 h-5 text-cyan-400" />
+              <Receipt className="w-5 h-5 text-primary" />
               Histórico de Pagamentos
             </DialogTitle>
           </DialogHeader>
           
           {assinaturaSelecionada && (
             <div className="space-y-4">
-              <div className="p-3 bg-slate-800 rounded-lg">
-                <p className="text-slate-400 text-sm">Workspace</p>
-                <p className="text-white font-medium">{assinaturaSelecionada.workspace_nome}</p>
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-muted-foreground text-sm">Workspace</p>
+                <p className="text-foreground font-medium">{assinaturaSelecionada.workspace_nome}</p>
               </div>
 
               {!assinaturaSelecionada?.pagamentos || assinaturaSelecionada.pagamentos.length === 0 ? (
-                <p className="text-slate-500 text-center py-4">Nenhum pagamento registrado</p>
+                <p className="text-muted-foreground text-center py-4">Nenhum pagamento registrado</p>
               ) : (
                 <div className="space-y-2">
                   {assinaturaSelecionada?.pagamentos?.map((pagamento) => (
-                    <div key={pagamento.id} className="p-3 bg-slate-800 rounded-lg flex items-center justify-between">
+                    <div key={pagamento.id} className="p-3 bg-secondary rounded-lg flex items-center justify-between">
                       <div className="flex items-center gap-3">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                           pagamento.status === 'confirmado' ? 'bg-green-500/20' : 'bg-amber-500/20'
@@ -2412,24 +2417,24 @@ function AssinaturasTab() {
                           )}
                         </div>
                         <div>
-                          <p className="text-white font-medium">
+                          <p className="text-foreground font-medium">
                             R$ {pagamento.valor_pago?.toFixed(2)}
                           </p>
-                          <p className="text-slate-400 text-sm">
+                          <p className="text-muted-foreground text-sm">
                             {getMetodoLabel(pagamento.metodo_pagamento)} • {pagamento.mes_referencia}
                           </p>
                           {pagamento.observacoes && (
-                            <p className="text-slate-500 text-xs">{pagamento.observacoes}</p>
+                            <p className="text-muted-foreground text-xs">{pagamento.observacoes}</p>
                           )}
                         </div>
                       </div>
                       <div className="flex items-center gap-3">
                         <div className="text-right">
-                          <p className="text-slate-400 text-sm">
+                          <p className="text-muted-foreground text-sm">
                             {new Date(pagamento.data_pagamento).toLocaleDateString('pt-BR')}
                           </p>
                           {pagamento.registrado_por_nome && (
-                            <p className="text-slate-500 text-xs">por {pagamento.registrado_por_nome}</p>
+                            <p className="text-muted-foreground text-xs">por {pagamento.registrado_por_nome}</p>
                           )}
                         </div>
                         <Button
@@ -2453,7 +2458,7 @@ function AssinaturasTab() {
           )}
           
           <DialogFooter>
-            <Button onClick={() => setShowHistoricoDialog(false)} className="border-slate-700">
+            <Button onClick={() => setShowHistoricoDialog(false)} className="border-border">
               Fechar
             </Button>
           </DialogFooter>
@@ -2462,7 +2467,7 @@ function AssinaturasTab() {
 
       {/* Dialog Confirmar Exclusão de Pagamento */}
       <Dialog open={showDeletePagamentoDialog} onOpenChange={setShowDeletePagamentoDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+        <DialogContent className="bg-card border-border text-foreground max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Trash2 className="w-5 h-5" />
@@ -2471,22 +2476,22 @@ function AssinaturasTab() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <p className="text-slate-300">
+            <p className="text-foreground">
               Tem certeza que deseja excluir este pagamento?
             </p>
             
             {pagamentoParaDeletar && (
-              <div className="p-3 bg-slate-800 rounded-lg">
-                <p className="text-white font-medium">
+              <div className="p-3 bg-secondary rounded-lg">
+                <p className="text-foreground font-medium">
                   R$ {pagamentoParaDeletar.valor_pago?.toFixed(2)}
                 </p>
-                <p className="text-slate-400 text-sm">
+                <p className="text-muted-foreground text-sm">
                   {getMetodoLabel(pagamentoParaDeletar.metodo_pagamento)} • {pagamentoParaDeletar.mes_referencia}
                 </p>
               </div>
             )}
             
-            <p className="text-slate-500 text-sm">
+            <p className="text-muted-foreground text-sm">
               Esta ação não pode ser desfeita.
             </p>
           </div>
@@ -2495,7 +2500,7 @@ function AssinaturasTab() {
             <Button 
               variant="outline" 
               onClick={() => setShowDeletePagamentoDialog(false)} 
-              className="border-slate-700"
+              className="border-border"
             >
               Cancelar
             </Button>
@@ -2511,7 +2516,7 @@ function AssinaturasTab() {
 
       {/* Dialog Confirmar Exclusão de Assinatura */}
       <Dialog open={showDeleteAssinaturaDialog} onOpenChange={setShowDeleteAssinaturaDialog}>
-        <DialogContent className="bg-slate-900 border-slate-800 text-white max-w-md">
+        <DialogContent className="bg-card border-border text-foreground max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Trash2 className="w-5 h-5" />
@@ -2520,16 +2525,16 @@ function AssinaturasTab() {
           </DialogHeader>
           
           <div className="space-y-4">
-            <p className="text-slate-300">
+            <p className="text-foreground">
               Tem certeza que deseja excluir esta assinatura permanentemente?
             </p>
             
             {assinaturaParaExcluir && (
-              <div className="p-3 bg-slate-800 rounded-lg space-y-1">
-                <p className="text-white font-medium">{assinaturaParaExcluir.workspace_nome}</p>
-                <p className="text-slate-400 text-sm">Plano: {assinaturaParaExcluir.plano_nome}</p>
-                <p className="text-slate-400 text-sm">Responsável: {assinaturaParaExcluir.responsavel_email}</p>
-                <p className="text-slate-400 text-sm">Valor: R$ {assinaturaParaExcluir.valor?.toFixed(2)}/{assinaturaParaExcluir.ciclo}</p>
+              <div className="p-3 bg-secondary rounded-lg space-y-1">
+                <p className="text-foreground font-medium">{assinaturaParaExcluir.workspace_nome}</p>
+                <p className="text-muted-foreground text-sm">Plano: {assinaturaParaExcluir.plano_nome}</p>
+                <p className="text-muted-foreground text-sm">Responsável: {assinaturaParaExcluir.responsavel_email}</p>
+                <p className="text-muted-foreground text-sm">Valor: R$ {assinaturaParaExcluir.valor?.toFixed(2)}/{assinaturaParaExcluir.ciclo}</p>
               </div>
             )}
             
@@ -2545,7 +2550,7 @@ function AssinaturasTab() {
             <Button 
               variant="outline" 
               onClick={() => setShowDeleteAssinaturaDialog(false)} 
-              className="border-slate-700"
+              className="border-border"
             >
               Cancelar
             </Button>

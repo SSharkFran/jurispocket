@@ -6627,7 +6627,12 @@ def register():
     nome = data.get('nome')
     email = data.get('email')
     password = data.get('password')
-    workspace_nome = data.get('workspace_nome', f'Escritório de {nome}')
+    workspace_nome = (
+        data.get('workspace_nome')
+        or data.get('workshop')  # compatibilidade com frontend legado
+        or data.get('workspace')
+        or f'Escritório de {nome}'
+    )
     
     if not all([nome, email, password]):
         return jsonify({'error': 'Dados incompletos'}), 400

@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, type MouseEvent } from 'react';
 import { Link } from 'react-router-dom';
 import { motion } from 'framer-motion';
 import { 
@@ -113,6 +113,19 @@ const LandingPage = () => {
     return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
   };
 
+  const smoothScrollToSection = (
+    event: MouseEvent<HTMLAnchorElement>,
+    sectionId: string
+  ) => {
+    event.preventDefault();
+    const target = document.getElementById(sectionId);
+    if (!target) return;
+
+    const offsetTop = 92; // compensa navbar fixa
+    const top = target.getBoundingClientRect().top + window.scrollY - offsetTop;
+    window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+  };
+
   return (
     <div className="min-h-screen bg-background">
       {/* Navbar */}
@@ -128,9 +141,27 @@ const LandingPage = () => {
             <span className="text-xl font-bold text-foreground">JurisPocket</span>
           </div>
           <div className="hidden md:flex items-center gap-8">
-            <a href="#features" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Funcionalidades</a>
-            <a href="#differentials" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Diferenciais</a>
-            <a href="#pricing" className="text-sm text-muted-foreground hover:text-foreground transition-colors">Planos</a>
+            <a
+              href="#features"
+              onClick={(e) => smoothScrollToSection(e, 'features')}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Funcionalidades
+            </a>
+            <a
+              href="#differentials"
+              onClick={(e) => smoothScrollToSection(e, 'differentials')}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Diferenciais
+            </a>
+            <a
+              href="#pricing"
+              onClick={(e) => smoothScrollToSection(e, 'pricing')}
+              className="text-sm text-muted-foreground hover:text-foreground transition-colors"
+            >
+              Planos
+            </a>
           </div>
           <div className="flex items-center gap-3">
             <Link to="/login">
@@ -185,7 +216,7 @@ const LandingPage = () => {
                 Começar Gratuitamente <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <a href="#features">
+            <a href="#features" onClick={(e) => smoothScrollToSection(e, 'features')}>
               <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-secondary px-8 text-base">
                 Ver Funcionalidades
               </Button>

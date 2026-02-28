@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { Scale, Mail, Lock, User, Building, ArrowRight, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Scale, Mail, Lock, User, Building, ArrowRight, ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -16,7 +16,7 @@ export function RegisterPage() {
     email: '',
     password: '',
     confirmPassword: '',
-    workshop: '',
+    workspace_nome: '',
   });
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
@@ -43,7 +43,7 @@ export function RegisterPage() {
         nome: form.nome,
         email: form.email,
         password: form.password,
-        workshop: form.workshop,
+        workspace_nome: form.workspace_nome.trim() || undefined,
       });
       toast.success('Conta criada com sucesso!');
       navigate('/app');
@@ -125,8 +125,8 @@ export function RegisterPage() {
                 <Input
                   placeholder="Escritório Silva & Associados"
                   className="pl-10 bg-secondary border-border"
-                  name="workshop"
-                  value={form.workshop}
+                  name="workspace_nome"
+                  value={form.workspace_nome}
                   onChange={handleChange}
                   disabled={isLoading}
                 />
@@ -197,6 +197,13 @@ export function RegisterPage() {
             Fazer login
           </Link>
         </p>
+
+        <div className="mt-3 text-center">
+          <Link to="/" className="inline-flex items-center gap-1 text-sm text-muted-foreground hover:text-foreground transition-colors">
+            <ArrowLeft className="h-4 w-4" />
+            Voltar para a landing page
+          </Link>
+        </div>
       </motion.div>
     </div>
   );
