@@ -260,6 +260,7 @@ def init_db():
             avatar_url TEXT,
             alerta_email BOOLEAN DEFAULT 1,
             alerta_whatsapp BOOLEAN DEFAULT 0,
+            resumo_diario BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (workspace_id) REFERENCES workspaces (id)
         )
@@ -895,6 +896,12 @@ def init_db():
         db.execute('SELECT fase FROM processos LIMIT 1')
     except:
         db.execute('ALTER TABLE processos ADD COLUMN fase TEXT')
+
+    # Migration: garantir coluna resumo_diario em users
+    try:
+        db.execute('SELECT resumo_diario FROM users LIMIT 1')
+    except:
+        db.execute('ALTER TABLE users ADD COLUMN resumo_diario BOOLEAN DEFAULT 0')
 
     # Migration: garantir colunas novas em workspace_whatsapp_config
     try:
@@ -2960,7 +2967,10 @@ def enviar_whatsapp_para_destinatarios(
     Envia mensagem para lista de destinatarios e retorna relatorio consolidado.
     """
     resultados = []
+    processados = 0
     enviados = 0
+    confirmados = 0
+    pendentes_confirmacao = 0
     falhas = 0
 
     for dest in destinatarios:
@@ -2978,8 +2988,16 @@ def enviar_whatsapp_para_destinatarios(
 
         resposta = whatsapp_service.send_text_message(sender_key, telefone, mensagem)
         sucesso = bool(resposta.get('success'))
+        delivery_confirmed = resposta.get('delivery_confirmed')
+        warning = resposta.get('warning')
+
         if sucesso:
-            enviados += 1
+            processados += 1
+            if delivery_confirmed is True:
+                enviados += 1
+                confirmados += 1
+            else:
+                pendentes_confirmacao += 1
         else:
             falhas += 1
 
@@ -2997,7 +3015,13 @@ def enviar_whatsapp_para_destinatarios(
                 recipient_phone=telefone,
                 message_text=mensagem,
                 provider_message_id=resposta.get('message_id'),
-                status='sent' if sucesso else 'failed',
+                status=(
+                    'sent'
+                    if sucesso and delivery_confirmed is True
+                    else 'pending_confirmation'
+                    if sucesso
+                    else 'failed'
+                ),
                 commit=False,
             )
         except Exception as log_error:
@@ -3012,6 +3036,8 @@ def enviar_whatsapp_para_destinatarios(
             'message_id': resposta.get('message_id'),
             'modo': resposta.get('modo'),
             'url_wame': resposta.get('url_wame'),
+            'delivery_confirmed': delivery_confirmed,
+            'warning': warning,
         })
 
     try:
@@ -3021,7 +3047,10 @@ def enviar_whatsapp_para_destinatarios(
 
     return {
         'total': len(destinatarios),
+        'processados': processados,
         'enviados': enviados,
+        'confirmados': confirmados,
+        'pendentes_confirmacao': pendentes_confirmacao,
         'falhas': falhas,
         'resultados': resultados,
     }
@@ -3299,11 +3328,16 @@ def dispatch_platform_whatsapp_message(
         channel='platform',
         recipient_kind='user',
     )
-    success = report.get('enviados', 0) > 0
+    processados = int(report.get('processados', 0) or 0)
+    success = processados > 0
     payload = {'success': success, **report}
+    if success and int(payload.get('enviados', 0) or 0) == 0 and int(payload.get('pendentes_confirmacao', 0) or 0) > 0:
+        payload['warning'] = (
+            'Mensagens processadas, mas ainda sem confirmacao de entrega no WhatsApp.'
+        )
     if not success and not payload.get('error'):
         payload['error'] = (
-            'Nenhuma mensagem teve confirmacao de entrega no WhatsApp. '
+            'Nenhuma mensagem foi processada no WhatsApp. '
             'Verifique telefone dos destinatarios e a sessao conectada.'
         )
     return payload
@@ -4091,14 +4125,18 @@ def update_me():
     db = get_db()
     
     # Atualiza os campos permitidos
-    campos_permitidos = ['nome', 'telefone', 'oab', 'alerta_email', 'alerta_whatsapp']
+    campos_permitidos = ['nome', 'telefone', 'oab', 'alerta_email', 'alerta_whatsapp', 'resumo_diario']
+    campos_booleanos = {'alerta_email', 'alerta_whatsapp', 'resumo_diario'}
     updates = []
     params = []
     
     for campo in campos_permitidos:
         if campo in data:
             updates.append(f"{campo} = ?")
-            params.append(data[campo])
+            if campo in campos_booleanos:
+                params.append(1 if parse_bool(data[campo]) else 0)
+            else:
+                params.append(data[campo])
     
     if updates:
         params.append(g.auth['user_id'])
@@ -9465,7 +9503,7 @@ def enviar_whatsapp_processo(id):
             message=mensagem_personalizada,
             recipients=integrantes,
         )
-        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+        return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
     # destino padrao: cliente
     if not processo['cliente_telefone']:
@@ -9557,7 +9595,7 @@ def enviar_whatsapp_tarefa(id):
             message=mensagem,
             recipients=integrantes,
         )
-        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+        return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
     # destino padrao: responsavel
     telefone_responsavel = tarefa_dict.get('responsavel_telefone')
@@ -9575,7 +9613,7 @@ def enviar_whatsapp_tarefa(id):
         message=mensagem,
         recipients=recipient,
     )
-    return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+    return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
 @app.route('/api/processos/<int:id>/movimentacoes/<int:movimentacao_id>/whatsapp/enviar', methods=['POST'])
 @require_auth
@@ -9658,7 +9696,7 @@ def enviar_whatsapp_movimentacao(id, movimentacao_id):
             message=mensagem,
             recipients=integrantes,
         )
-        return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+        return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
     # destino padrao: cliente
     if not processo_dict.get('cliente_telefone'):
@@ -9816,7 +9854,7 @@ def whatsapp_workspace_enviar():
         recipients=contatos,
     )
 
-    return jsonify({'sucesso': relatorio['enviados'] > 0, **relatorio})
+    return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
 @app.route('/api/whatsapp/automacoes/config', methods=['GET'])
 @require_auth
@@ -10392,7 +10430,3 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     app.run(debug=debug, host='0.0.0.0', port=port)
-
-
-
-

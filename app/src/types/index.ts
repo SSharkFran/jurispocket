@@ -7,6 +7,7 @@ export interface User {
   telefone?: string;
   alerta_email?: boolean;
   alerta_whatsapp?: boolean;
+  resumo_diario?: boolean;
   avatar_url?: string;
   workspace_id: number;
 }

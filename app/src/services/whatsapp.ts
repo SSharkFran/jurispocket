@@ -52,8 +52,12 @@ export interface WorkspaceContato {
 export interface WorkspaceEnvioResponse {
   sucesso: boolean;
   total: number;
+  processados?: number;
   enviados: number;
+  confirmados?: number;
+  pendentes_confirmacao?: number;
   falhas: number;
+  warning?: string;
   resultados: Array<{
     id?: number;
     nome?: string;
@@ -63,6 +67,8 @@ export interface WorkspaceEnvioResponse {
     message_id?: string;
     modo?: string;
     url_wame?: string;
+    delivery_confirmed?: boolean | null;
+    warning?: string | null;
   }>;
 }
 
@@ -222,10 +228,15 @@ export const whatsapp = {
   enviarResumoTeste: () =>
     api.post<{
       sucesso: boolean;
+      processados?: number;
       enviados?: number;
+      confirmados?: number;
+      pendentes_confirmacao?: number;
       falhas?: number;
       total?: number;
+      warning?: string;
       error?: string;
+      resultados?: WorkspaceEnvioResponse['resultados'];
     }>('/whatsapp/automacoes/teste-resumo'),
 
   // Sugere texto com IA

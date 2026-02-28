@@ -205,7 +205,22 @@ const WhatsAppPage = () => {
     try {
       const response = await whatsapp.enviarResumoTeste();
       if (response.data.sucesso) {
-        toast.success(`Resumo enviado: ${response.data.enviados || 0} mensagem(ns)`);
+        const confirmadas = response.data.confirmados ?? response.data.enviados ?? 0;
+        const pendentes = response.data.pendentes_confirmacao ?? 0;
+        const processadas = response.data.processados ?? (confirmadas + pendentes);
+
+        if (confirmadas > 0) {
+          const sufixoPendentes = pendentes > 0 ? `, ${pendentes} pendente(s) de confirmacao` : '';
+          toast.success(
+            `Resumo processado: ${processadas} mensagem(ns), ${confirmadas} confirmada(s)${sufixoPendentes}`
+          );
+        } else if (processadas > 0) {
+          toast.warning(
+            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao de entrega no WhatsApp`
+          );
+        } else {
+          toast.error(response.data.error || 'Resumo não enviado');
+        }
       } else {
         toast.error(response.data.error || 'Resumo não enviado');
       }
@@ -553,4 +568,3 @@ const WhatsAppPage = () => {
 };
 
 export default WhatsAppPage;
-

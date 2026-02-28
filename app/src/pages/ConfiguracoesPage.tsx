@@ -61,6 +61,7 @@ export function ConfiguracoesPage() {
         telefone: formData.telefone,
         alerta_email: notificacoes.email,
         alerta_whatsapp: notificacoes.whatsapp,
+        resumo_diario: notificacoes.resumoDiario,
       });
       await refreshUser();
       toast.success('Configuracoes salvas com sucesso!');
