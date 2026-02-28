@@ -225,8 +225,12 @@ const WhatsAppPage = () => {
           );
         } else if (processadas > 0) {
           const detalheInvalido = invalidos ? ` Numeros sem WhatsApp: ${invalidos}.` : '';
+          const jids = (response.data.resultados || [])
+            .map((r) => r.recipient_jid)
+            .filter(Boolean)
+            .join(', ');
           toast.warning(
-            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao. Destinos: ${destinos || 'N/A'}.${detalheInvalido}`
+            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao. Destinos: ${destinos || 'N/A'}.${detalheInvalido}${jids ? ` JIDs: ${jids}` : ''}`
           );
         } else {
           toast.error(response.data.error || 'Resumo não enviado');

@@ -345,12 +345,14 @@ class WhatsAppService:
                     'message_id': data.get('messageId'),
                     'timestamp': data.get('timestamp'),
                     'phone': formatted_phone,
+                    'recipient_jid': data.get('to'),
                     'delay_ms': data.get('delayMs'),
                     'delivery_confirmed': None if delivery_confirmed is None else bool(delivery_confirmed),
                     'recipient_exists': recipient_exists,
                     'ack_status': ack_status,
                     'ack_source': ack_source,
                     'ack_timestamp': ack_timestamp,
+                    'warning': warning,
                 }
 
             not_connected = response.status_code == 409

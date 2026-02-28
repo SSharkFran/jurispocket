@@ -67,6 +67,7 @@ export interface WorkspaceEnvioResponse {
     message_id?: string;
     modo?: string;
     url_wame?: string;
+    recipient_jid?: string | null;
     delivery_confirmed?: boolean | null;
     recipient_exists?: boolean | null;
     ack_status?: string | number | null;

@@ -546,16 +546,20 @@ export class SessionManager {
       const delayMs = this._randomDelay();
       await sleep(delayMs);
 
-      const jid = this._toJid(to);
+      const fallbackJid = this._toJid(to);
+      let recipientJid = fallbackJid;
       let recipientExists = null;
       try {
-        const existsResult = await session.socket.onWhatsApp(jid);
+        const existsResult = await session.socket.onWhatsApp(fallbackJid);
         if (Array.isArray(existsResult) && existsResult.length > 0) {
           recipientExists = Boolean(existsResult[0]?.exists);
+          if (existsResult[0]?.jid && typeof existsResult[0].jid === 'string') {
+            recipientJid = existsResult[0].jid;
+          }
         }
       } catch (error) {
         this.logger.warn(
-          { userId: normalized, to: jid, error: error.message },
+          { userId: normalized, to: fallbackJid, error: error.message },
           'Falha ao validar existencia do numero no WhatsApp',
         );
       }
@@ -565,7 +569,7 @@ export class SessionManager {
           success: false,
           error: 'Numero destino nao possui WhatsApp',
           messageId: null,
-          to: jid,
+          to: recipientJid,
           delayMs,
           timestamp: new Date().toISOString(),
           deliveryConfirmed: false,
@@ -576,7 +580,7 @@ export class SessionManager {
         };
       }
 
-      const response = await session.socket.sendMessage(jid, {
+      const response = await session.socket.sendMessage(recipientJid, {
         text: String(message || ''),
       });
       const messageId = response?.key?.id || null;
@@ -591,7 +595,7 @@ export class SessionManager {
           success: false,
           error: 'Mensagem rejeitada pelo WhatsApp',
           messageId,
-          to: jid,
+          to: recipientJid,
           delayMs,
           timestamp: new Date().toISOString(),
           deliveryConfirmed: false,
@@ -611,7 +615,7 @@ export class SessionManager {
       return {
         success: true,
         messageId,
-        to: jid,
+        to: recipientJid,
         delayMs,
         timestamp: new Date().toISOString(),
         deliveryConfirmed,
