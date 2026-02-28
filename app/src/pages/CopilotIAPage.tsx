@@ -9,6 +9,7 @@ const sugestoes = [
   { icon: Scale, text: 'Liste os prazos críticos dos próximos 7 dias e os atrasados.' },
   { icon: FileText, text: 'Faça um resumo 360 do processo 1009019-92.2025.4.01.3000.' },
   { icon: Lightbulb, text: 'Gere uma mensagem de WhatsApp para atualizar o cliente do processo 1009019-92.2025.4.01.3000.' },
+  { icon: Lightbulb, text: 'Crie uma tarefa para pedir documentos do processo BPC LOAS e atribua para Francisco.' },
 ];
 
 interface Message {
@@ -111,7 +112,7 @@ const CopilotIAPage = () => {
             <Bot className="h-16 w-16 text-accent/30 mb-4" />
             <h3 className="text-lg font-semibold mb-2">Como posso ajudar?</h3>
             <p className="text-sm text-muted-foreground mb-8 max-w-md">
-              Pergunte sobre processos, peça análises jurídicas ou gere documentos com inteligência artificial.
+              Pergunte sobre processos, peça análises jurídicas ou solicite ações reais (com confirmação via CONFIRMAR/CANCELAR ACAO).
             </p>
             <div className="grid gap-3 w-full max-w-lg">
               {sugestoes.map(s => (

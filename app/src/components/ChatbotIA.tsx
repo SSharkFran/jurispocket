@@ -35,8 +35,11 @@ Sou seu assistente virtual especializado em gestão jurídica. Posso ajudar voc�
 • 📅 **Verificar prazos** e tarefas pendentes
 • 💰 **Analisar o financeiro** do escritório
 • 💬 **Gerar mensagens de WhatsApp** contextuais para cliente ou equipe
+• ✅ **Executar ações reais com confirmação** (criar tarefa, lançar entrada, enviar WhatsApp)
 • ⚖️ **Tirar dúvidas** sobre seus casos
 • 📝 **Sugerir ações** e organizar sua agenda
+
+Quando eu preparar uma ação real, confirme com \`CONFIRMAR ACAO <id>\` ou cancele com \`CANCELAR ACAO <id>\`.
 
 Como posso ser útil para você hoje?`;
 

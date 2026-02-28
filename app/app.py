@@ -594,6 +594,28 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+
+    # Acoes pendentes solicitadas via IA (somente executa com confirmacao explicita)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS ia_pending_actions (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            session_id TEXT NOT NULL,
+            action_type TEXT NOT NULL, -- criar_tarefa | lancar_financeiro_entrada | enviar_whatsapp
+            payload TEXT NOT NULL, -- JSON com dados normalizados
+            status TEXT NOT NULL DEFAULT 'pending', -- pending | confirmed | executed | canceled | failed
+            preview TEXT,
+            confirmed_at TIMESTAMP,
+            executed_at TIMESTAMP,
+            error_message TEXT,
+            result_summary TEXT, -- JSON resumido do resultado
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id),
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
     
     # Templates de Documentos
     db.execute('''
@@ -2550,6 +2572,67 @@ class AssistenteIA:
                     }
                 }
             }
+        },
+        {
+            "name": "solicitar_criacao_tarefa",
+            "description": "Prepara criação de tarefa real no sistema (exige confirmação explícita do usuário antes de executar)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "titulo": {"type": "string", "description": "Título da tarefa"},
+                    "descricao": {"type": "string", "description": "Descrição detalhada"},
+                    "prioridade": {
+                        "type": "string",
+                        "enum": ["baixa", "media", "alta", "urgente"],
+                        "description": "Prioridade da tarefa"
+                    },
+                    "data_vencimento": {"type": "string", "description": "Data de vencimento no formato YYYY-MM-DD"},
+                    "processo_id": {"type": "integer", "description": "ID do processo (opcional)"},
+                    "processo_numero": {"type": "string", "description": "Número/CNJ do processo (opcional)"},
+                    "processo_titulo": {"type": "string", "description": "Título do processo (opcional)"},
+                    "responsavel_id": {"type": "integer", "description": "ID do responsável (opcional)"},
+                    "responsavel_nome": {"type": "string", "description": "Nome do responsável (opcional)"}
+                },
+                "required": ["titulo"]
+            }
+        },
+        {
+            "name": "solicitar_lancamento_financeiro_entrada",
+            "description": "Prepara lançamento de entrada financeira no caixa (exige confirmação explícita do usuário antes de executar)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "valor": {"type": "number", "description": "Valor da entrada"},
+                    "descricao": {"type": "string", "description": "Descrição da entrada"},
+                    "categoria": {"type": "string", "description": "Categoria financeira"},
+                    "data": {"type": "string", "description": "Data no formato YYYY-MM-DD"},
+                    "status": {"type": "string", "description": "Status do lançamento (padrão: pendente)"},
+                    "processo_id": {"type": "integer", "description": "ID do processo (opcional)"},
+                    "processo_numero": {"type": "string", "description": "Número/CNJ do processo (opcional)"},
+                    "cliente_id": {"type": "integer", "description": "ID do cliente (opcional)"},
+                    "cliente_nome": {"type": "string", "description": "Nome do cliente (opcional)"}
+                },
+                "required": ["valor", "descricao"]
+            }
+        },
+        {
+            "name": "solicitar_envio_whatsapp",
+            "description": "Prepara envio de mensagem de WhatsApp real (exige confirmação explícita do usuário antes de executar)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "mensagem": {"type": "string", "description": "Conteúdo da mensagem"},
+                    "destino": {"type": "string", "enum": ["cliente", "equipe", "telefone"], "description": "Destino da mensagem"},
+                    "cliente_id": {"type": "integer", "description": "ID do cliente (quando destino=cliente)"},
+                    "cliente_nome": {"type": "string", "description": "Nome do cliente (quando destino=cliente)"},
+                    "processo_numero": {"type": "string", "description": "Número/CNJ do processo para inferir cliente (opcional)"},
+                    "responsavel_id": {"type": "integer", "description": "ID do membro da equipe (quando destino=equipe)"},
+                    "responsavel_nome": {"type": "string", "description": "Nome do membro da equipe (quando destino=equipe)"},
+                    "enviar_para_toda_equipe": {"type": "boolean", "description": "Se true, envia para toda equipe com telefone"},
+                    "telefone": {"type": "string", "description": "Telefone direto (quando destino=telefone)"}
+                },
+                "required": ["mensagem", "destino"]
+            }
         }
     ]
     
@@ -2702,6 +2785,515 @@ class AssistenteIA:
                 max(int(total_duration_ms or 0), 0),
             ),
         )
+
+    @staticmethod
+    def extrair_comando_acao(mensagem: str) -> Dict[str, Any]:
+        """Extrai comando de confirmação/cancelamento de ação pendente."""
+        texto = str(mensagem or '').strip().lower()
+        if not texto:
+            return {'tipo': None}
+
+        normalized = (
+            texto
+            .replace('ação', 'acao')
+            .replace('ações', 'acoes')
+            .replace('  ', ' ')
+        )
+        confirm_match = re.match(r'^\s*confirmar(?:\s+acao)?\s+#?(\d+)\s*$', normalized)
+        if confirm_match:
+            return {'tipo': 'confirmar', 'acao_id': int(confirm_match.group(1))}
+
+        cancel_match = re.match(r'^\s*cancelar(?:\s+acao)?\s+#?(\d+)\s*$', normalized)
+        if cancel_match:
+            return {'tipo': 'cancelar', 'acao_id': int(cancel_match.group(1))}
+
+        return {'tipo': None}
+
+    @staticmethod
+    def buscar_processo_para_acao(
+        db,
+        workspace_id: int,
+        processo_id: Optional[int] = None,
+        numero: str = '',
+        titulo: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve processo por id, número ou título."""
+        if processo_id:
+            row = db.execute(
+                '''SELECT p.*, c.nome as cliente_nome
+                   FROM processos p
+                   LEFT JOIN clientes c ON c.id = p.cliente_id AND c.workspace_id = p.workspace_id
+                   WHERE p.id = ? AND p.workspace_id = ?
+                   LIMIT 1''',
+                (processo_id, workspace_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+        numero = str(numero or '').strip()
+        if numero:
+            row = db.execute(
+                '''SELECT p.*, c.nome as cliente_nome
+                   FROM processos p
+                   LEFT JOIN clientes c ON c.id = p.cliente_id AND c.workspace_id = p.workspace_id
+                   WHERE p.workspace_id = ?
+                     AND (p.numero LIKE ? OR COALESCE(p.numero_cnj, '') LIKE ?)
+                   ORDER BY p.created_at DESC
+                   LIMIT 1''',
+                (workspace_id, f'%{numero}%', f'%{numero}%'),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+        titulo = str(titulo or '').strip()
+        if titulo:
+            row = db.execute(
+                '''SELECT p.*, c.nome as cliente_nome
+                   FROM processos p
+                   LEFT JOIN clientes c ON c.id = p.cliente_id AND c.workspace_id = p.workspace_id
+                   WHERE p.workspace_id = ? AND LOWER(COALESCE(p.titulo, '')) LIKE ?
+                   ORDER BY p.created_at DESC
+                   LIMIT 1''',
+                (workspace_id, f'%{titulo.lower()}%'),
+            ).fetchone()
+            return dict(row) if row else None
+
+        return None
+
+    @staticmethod
+    def buscar_usuario_para_acao(
+        db,
+        workspace_id: int,
+        user_id: Optional[int] = None,
+        nome: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve usuário por id ou nome no workspace."""
+        if user_id:
+            row = db.execute(
+                'SELECT id, nome, email, telefone, role FROM users WHERE id = ? AND workspace_id = ? LIMIT 1',
+                (user_id, workspace_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+        nome = str(nome or '').strip()
+        if nome:
+            row = db.execute(
+                '''SELECT id, nome, email, telefone, role
+                   FROM users
+                   WHERE workspace_id = ? AND LOWER(COALESCE(nome, '')) = ?
+                   LIMIT 1''',
+                (workspace_id, nome.lower()),
+            ).fetchone()
+            if row:
+                return dict(row)
+            row = db.execute(
+                '''SELECT id, nome, email, telefone, role
+                   FROM users
+                   WHERE workspace_id = ? AND LOWER(COALESCE(nome, '')) LIKE ?
+                   ORDER BY id ASC
+                   LIMIT 1''',
+                (workspace_id, f'%{nome.lower()}%'),
+            ).fetchone()
+            return dict(row) if row else None
+        return None
+
+    @staticmethod
+    def buscar_cliente_para_acao(
+        db,
+        workspace_id: int,
+        cliente_id: Optional[int] = None,
+        nome: str = '',
+    ) -> Optional[Dict[str, Any]]:
+        """Resolve cliente por id ou nome no workspace."""
+        if cliente_id:
+            row = db.execute(
+                '''SELECT id, nome, telefone, email
+                   FROM clientes
+                   WHERE id = ? AND workspace_id = ?
+                   LIMIT 1''',
+                (cliente_id, workspace_id),
+            ).fetchone()
+            return dict(row) if row else None
+
+        nome = str(nome or '').strip()
+        if nome:
+            row = db.execute(
+                '''SELECT id, nome, telefone, email
+                   FROM clientes
+                   WHERE workspace_id = ? AND LOWER(COALESCE(nome, '')) = ?
+                   LIMIT 1''',
+                (workspace_id, nome.lower()),
+            ).fetchone()
+            if row:
+                return dict(row)
+
+            row = db.execute(
+                '''SELECT id, nome, telefone, email
+                   FROM clientes
+                   WHERE workspace_id = ? AND LOWER(COALESCE(nome, '')) LIKE ?
+                   ORDER BY id ASC
+                   LIMIT 1''',
+                (workspace_id, f'%{nome.lower()}%'),
+            ).fetchone()
+            return dict(row) if row else None
+
+        return None
+
+    @staticmethod
+    def criar_acao_pendente(
+        db,
+        workspace_id: int,
+        user_id: int,
+        session_id: str,
+        action_type: str,
+        payload: Dict[str, Any],
+        preview: str,
+    ) -> Dict[str, Any]:
+        """Cria uma ação pendente e retorna metadados para confirmação."""
+        now_value = now_sql_timestamp()
+        cursor = db.execute(
+            '''INSERT INTO ia_pending_actions
+               (workspace_id, user_id, session_id, action_type, payload, status, preview, created_at, updated_at)
+               VALUES (?, ?, ?, ?, ?, 'pending', ?, ?, ?)''',
+            (
+                workspace_id,
+                user_id,
+                session_id,
+                action_type,
+                json.dumps(payload, ensure_ascii=False),
+                (preview or '')[:800],
+                now_value,
+                now_value,
+            ),
+        )
+        action_id = int(cursor.lastrowid)
+        return {
+            'id': action_id,
+            'action_type': action_type,
+            'preview': preview,
+            'status': 'pending',
+            'comando_confirmacao': f'CONFIRMAR ACAO {action_id}',
+            'comando_cancelamento': f'CANCELAR ACAO {action_id}',
+        }
+
+    @staticmethod
+    def processar_comando_acao(
+        db,
+        workspace_id: int,
+        user_id: int,
+        session_id: str,
+        mensagem: str,
+    ) -> Optional[Dict[str, Any]]:
+        """Processa comando textual de confirmação/cancelamento de ação."""
+        comando = AssistenteIA.extrair_comando_acao(mensagem)
+        tipo = comando.get('tipo')
+        action_id = comando.get('acao_id')
+
+        if not tipo or not action_id:
+            return None
+
+        row = db.execute(
+            '''SELECT *
+               FROM ia_pending_actions
+               WHERE id = ? AND workspace_id = ? AND user_id = ?
+               LIMIT 1''',
+            (action_id, workspace_id, user_id),
+        ).fetchone()
+        if not row:
+            return {
+                'resposta': f'Não encontrei a ação #{action_id} para este usuário.',
+                'status': 'error',
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
+            }
+
+        action = dict(row)
+        status_atual = (action.get('status') or '').lower()
+        if status_atual not in {'pending', 'confirmed', 'executed', 'canceled', 'failed'}:
+            status_atual = 'pending'
+
+        if tipo == 'cancelar':
+            if status_atual != 'pending':
+                return {
+                    'resposta': f'A ação #{action_id} está em status "{status_atual}" e não pode ser cancelada.',
+                    'status': 'error',
+                    'funcoes_chamadas': [],
+                    'acoes_sugeridas': [],
+                    'session_id': session_id,
+                }
+
+            db.execute(
+                '''UPDATE ia_pending_actions
+                   SET status = 'canceled',
+                       updated_at = ?
+                   WHERE id = ?''',
+                (now_sql_timestamp(), action_id),
+            )
+            return {
+                'resposta': f'Ação #{action_id} cancelada com sucesso.',
+                'status': 'success',
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
+            }
+
+        if status_atual != 'pending':
+            return {
+                'resposta': f'A ação #{action_id} está em status "{status_atual}" e não pode ser confirmada novamente.',
+                'status': 'error',
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
+            }
+
+        payload_raw = action.get('payload') or '{}'
+        try:
+            payload = json.loads(payload_raw)
+        except (TypeError, ValueError, json.JSONDecodeError):
+            payload = {}
+
+        action_type = action.get('action_type')
+        now_value = now_sql_timestamp()
+
+        try:
+            if action_type == 'criar_tarefa':
+                titulo = (payload.get('titulo') or '').strip()
+                if not titulo:
+                    raise ValueError('Título da tarefa ausente na ação')
+
+                prioridade = (payload.get('prioridade') or 'media').strip().lower()
+                if prioridade not in ('baixa', 'media', 'alta', 'urgente'):
+                    prioridade = 'media'
+
+                assigned_to = payload.get('assigned_to_id')
+                if assigned_to:
+                    user_row = db.execute(
+                        'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+                        (assigned_to, workspace_id),
+                    ).fetchone()
+                    if not user_row:
+                        assigned_to = user_id
+                else:
+                    assigned_to = user_id
+
+                processo_id = payload.get('processo_id')
+                if processo_id:
+                    processo_row = db.execute(
+                        'SELECT id FROM processos WHERE id = ? AND workspace_id = ?',
+                        (processo_id, workspace_id),
+                    ).fetchone()
+                    if not processo_row:
+                        processo_id = None
+
+                cursor = db.execute(
+                    '''INSERT INTO tarefas
+                       (workspace_id, processo_id, assigned_to, titulo, descricao, prioridade, status, data_vencimento)
+                       VALUES (?, ?, ?, ?, ?, ?, 'pendente', ?)''',
+                    (
+                        workspace_id,
+                        processo_id,
+                        assigned_to,
+                        titulo,
+                        payload.get('descricao'),
+                        prioridade,
+                        payload.get('data_vencimento'),
+                    ),
+                )
+                tarefa_id = int(cursor.lastrowid)
+                summary = {
+                    'tarefa_id': tarefa_id,
+                    'titulo': titulo,
+                    'assigned_to_id': assigned_to,
+                    'processo_id': processo_id,
+                }
+                resposta = f'Ação #{action_id} executada: tarefa #{tarefa_id} criada com sucesso.'
+
+            elif action_type == 'lancar_financeiro_entrada':
+                try:
+                    valor = float(payload.get('valor'))
+                except (TypeError, ValueError):
+                    raise ValueError('Valor inválido para lançamento financeiro')
+                if valor <= 0:
+                    raise ValueError('Valor deve ser maior que zero')
+
+                data_valor = (payload.get('data') or datetime.now().strftime('%Y-%m-%d')).strip()
+                status_fin = (payload.get('status') or 'pendente').strip().lower()
+                if status_fin not in ('pendente', 'pago', 'cancelado'):
+                    status_fin = 'pendente'
+
+                cursor = db.execute(
+                    '''INSERT INTO financeiro
+                       (workspace_id, processo_id, cliente_id, tipo, categoria, valor, data, descricao, status)
+                       VALUES (?, ?, ?, 'entrada', ?, ?, ?, ?, ?)''',
+                    (
+                        workspace_id,
+                        payload.get('processo_id'),
+                        payload.get('cliente_id'),
+                        payload.get('categoria'),
+                        valor,
+                        data_valor,
+                        payload.get('descricao'),
+                        status_fin,
+                    ),
+                )
+                fin_id = int(cursor.lastrowid)
+                summary = {
+                    'financeiro_id': fin_id,
+                    'tipo': 'entrada',
+                    'valor': valor,
+                    'data': data_valor,
+                }
+                resposta = f'Ação #{action_id} executada: entrada financeira #{fin_id} criada no valor de R$ {valor:.2f}.'
+
+            elif action_type == 'enviar_whatsapp':
+                if not whatsapp_service.is_configured():
+                    raise RuntimeError('Serviço WhatsApp não configurado')
+
+                mensagem_envio = (payload.get('mensagem') or '').strip()
+                if not mensagem_envio:
+                    raise ValueError('Mensagem vazia para envio WhatsApp')
+
+                destino = (payload.get('destino') or '').strip().lower()
+                if destino not in ('cliente', 'equipe', 'telefone'):
+                    raise ValueError('Destino WhatsApp inválido')
+
+                if destino == 'cliente':
+                    cliente_id = payload.get('cliente_id')
+                    cliente_row = db.execute(
+                        'SELECT id, nome, telefone FROM clientes WHERE id = ? AND workspace_id = ? LIMIT 1',
+                        (cliente_id, workspace_id),
+                    ).fetchone()
+                    if not cliente_row:
+                        raise ValueError('Cliente não encontrado para envio')
+                    cliente = dict(cliente_row)
+                    telefone_cliente = (cliente.get('telefone') or '').strip()
+                    if not telefone_cliente:
+                        raise ValueError('Cliente selecionado não possui telefone')
+
+                    resultado = send_workspace_whatsapp_message(
+                        db=db,
+                        workspace_id=workspace_id,
+                        phone=telefone_cliente,
+                        message=mensagem_envio,
+                        client_id=cliente.get('id'),
+                        sender_user_id=user_id,
+                    )
+                    if not resultado.get('success'):
+                        raise RuntimeError(resultado.get('error') or 'Falha no envio WhatsApp')
+                    summary = {
+                        'destino': 'cliente',
+                        'cliente_id': cliente.get('id'),
+                        'telefone': telefone_cliente,
+                        'message_id': resultado.get('message_id'),
+                        'delivery_confirmed': resultado.get('delivery_confirmed'),
+                    }
+                    resposta = f'Ação #{action_id} executada: mensagem enviada para o cliente {cliente.get("nome")}.'
+
+                elif destino == 'equipe':
+                    user_ids = payload.get('user_ids') or []
+                    destinatarios = listar_usuarios_workspace_com_telefone(
+                        db=db,
+                        workspace_id=workspace_id,
+                        user_ids=user_ids if user_ids else None,
+                        somente_alerta_whatsapp=False,
+                    )
+                    if not destinatarios:
+                        raise ValueError('Nenhum destinatário da equipe com telefone')
+
+                    processados = 0
+                    falhas = 0
+                    for contato in destinatarios:
+                        resultado = send_workspace_whatsapp_message(
+                            db=db,
+                            workspace_id=workspace_id,
+                            phone=contato.get('telefone'),
+                            message=mensagem_envio,
+                            client_id=None,
+                            sender_user_id=user_id,
+                        )
+                        if resultado.get('success'):
+                            processados += 1
+                        else:
+                            falhas += 1
+                    if processados == 0:
+                        raise RuntimeError('Falha ao enviar mensagem para equipe')
+                    summary = {
+                        'destino': 'equipe',
+                        'total': len(destinatarios),
+                        'processados': processados,
+                        'falhas': falhas,
+                    }
+                    resposta = f'Ação #{action_id} executada: envio para equipe concluído ({processados} processadas, {falhas} falhas).'
+
+                else:  # telefone
+                    telefone = (payload.get('telefone') or '').strip()
+                    if not telefone:
+                        raise ValueError('Telefone não informado')
+                    cliente = find_workspace_client_by_phone(db, workspace_id, telefone)
+                    resultado = send_workspace_whatsapp_message(
+                        db=db,
+                        workspace_id=workspace_id,
+                        phone=telefone,
+                        message=mensagem_envio,
+                        client_id=cliente.get('id') if cliente else None,
+                        sender_user_id=user_id,
+                    )
+                    if not resultado.get('success'):
+                        raise RuntimeError(resultado.get('error') or 'Falha no envio WhatsApp')
+                    summary = {
+                        'destino': 'telefone',
+                        'telefone': telefone,
+                        'message_id': resultado.get('message_id'),
+                        'delivery_confirmed': resultado.get('delivery_confirmed'),
+                    }
+                    resposta = f'Ação #{action_id} executada: mensagem enviada para {telefone}.'
+
+            else:
+                raise ValueError(f'Tipo de ação não suportado: {action_type}')
+
+            db.execute(
+                '''UPDATE ia_pending_actions
+                   SET status = 'executed',
+                       confirmed_at = ?,
+                       executed_at = ?,
+                       error_message = NULL,
+                       result_summary = ?,
+                       updated_at = ?
+                   WHERE id = ?''',
+                (
+                    now_value,
+                    now_value,
+                    json.dumps(summary, ensure_ascii=False),
+                    now_value,
+                    action_id,
+                ),
+            )
+
+            return {
+                'resposta': resposta,
+                'status': 'success',
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
+                'resultado_acao': summary,
+            }
+        except Exception as exec_error:
+            db.execute(
+                '''UPDATE ia_pending_actions
+                   SET status = 'failed',
+                       confirmed_at = ?,
+                       error_message = ?,
+                       updated_at = ?
+                   WHERE id = ?''',
+                (now_value, str(exec_error), now_value, action_id),
+            )
+            return {
+                'resposta': f'Falha ao executar ação #{action_id}: {exec_error}',
+                'status': 'error',
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
+            }
     
     @staticmethod
     def processar_mensagem(mensagem: str, workspace_id: int, user_id: int, session_id: str) -> Dict[str, Any]:
@@ -2714,6 +3306,48 @@ class AssistenteIA:
         funcoes_chamadas: List[Dict[str, Any]] = []
         rastreio_funcoes: List[Dict[str, Any]] = []
         db = get_db()
+
+        comando_acao_resultado = AssistenteIA.processar_comando_acao(
+            db=db,
+            workspace_id=workspace_id,
+            user_id=user_id,
+            session_id=session_id,
+            mensagem=mensagem,
+        )
+        if comando_acao_resultado is not None:
+            resposta_comando = str(comando_acao_resultado.get('resposta') or '').strip()
+            if not resposta_comando:
+                resposta_comando = 'Comando de ação processado.'
+
+            db.execute(
+                'INSERT INTO chat_history (workspace_id, user_id, session_id, role, content) VALUES (?, ?, ?, ?, ?)',
+                (workspace_id, user_id, session_id, 'user', mensagem),
+            )
+            db.execute(
+                'INSERT INTO chat_history (workspace_id, user_id, session_id, role, content) VALUES (?, ?, ?, ?, ?)',
+                (workspace_id, user_id, session_id, 'assistant', resposta_comando),
+            )
+
+            total_duration_ms = int((datetime.now() - started_at).total_seconds() * 1000)
+            status_interacao = 'success' if comando_acao_resultado.get('status') == 'success' else 'error'
+            AssistenteIA.registrar_log_interacao(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                provider=ia_provider,
+                model=modelo,
+                input_message=mensagem,
+                response_text=resposta_comando,
+                function_calls=[],
+                status=status_interacao,
+                error_message='' if status_interacao == 'success' else resposta_comando[:300],
+                total_duration_ms=total_duration_ms,
+            )
+            db.commit()
+
+            comando_acao_resultado['session_id'] = session_id
+            return comando_acao_resultado
 
         if not ia_client:
             resposta_sem_ia = '''🤖 **Copiloto Jurídico não configurado**
@@ -2769,6 +3403,8 @@ COMO RESPONDER:
 - Mantenha respostas concisas mas completas
 - Sempre responda em portugues do Brasil
 - Nao invente dados de cliente, processo, prazo ou movimentacao
+- Sempre que o usuario pedir para executar uma acao real (criar tarefa, lancar financeiro, enviar WhatsApp), use primeiro uma funcao `solicitar_*` para preparar a acao com confirmacao explicita.
+- Nunca execute acao operacional sem confirmacao textual do usuario.
 
 Use as funcoes disponiveis para buscar informacoes em tempo real quando necessario."""}
             ]
@@ -2822,7 +3458,13 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
                 func_started_at = datetime.now()
                 func_error_msg = ''
                 try:
-                    resultado = AssistenteIA.executar_funcao(func_name, func_args, workspace_id)
+                    resultado = AssistenteIA.executar_funcao(
+                        func_name,
+                        func_args,
+                        workspace_id,
+                        user_id=user_id,
+                        session_id=session_id,
+                    )
                 except Exception as function_error:
                     func_error_msg = str(function_error)
                     resultado = {'erro': func_error_msg}
@@ -2842,16 +3484,26 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
                     "content": json.dumps(resultado, ensure_ascii=False),
                 })
 
-                response = ia_client.chat.completions.create(
-                    model=modelo,
-                    messages=messages,
-                    temperature=0.7,
-                    max_tokens=500,
-                )
-                message = response.choices[0].message
+                if isinstance(resultado, dict) and resultado.get('_final_resposta'):
+                    resposta_base = str(resultado.get('_final_resposta')).strip()
+                    acoes_sugeridas = resultado.get('_acoes_sugeridas') or []
+                    if not isinstance(acoes_sugeridas, list):
+                        acoes_sugeridas = []
+                    message = None
+                else:
+                    response = ia_client.chat.completions.create(
+                        model=modelo,
+                        messages=messages,
+                        temperature=0.7,
+                        max_tokens=500,
+                    )
+                    message = response.choices[0].message
+                    resposta_base = message.content or "Não entendi. Pode reformular?"
+                    acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+            else:
+                resposta_base = message.content or "Não entendi. Pode reformular?"
+                acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
 
-            resposta_base = message.content or "Não entendi. Pode reformular?"
-            acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
             resposta_final = AssistenteIA.anexar_acoes_sugeridas(resposta_base, acoes_sugeridas)
 
             db.execute(
@@ -2880,12 +3532,15 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
             )
             db.commit()
 
-            return {
+            retorno = {
                 'resposta': resposta_final,
                 'funcoes_chamadas': funcoes_chamadas,
                 'acoes_sugeridas': acoes_sugeridas,
                 'session_id': session_id,
             }
+            if function_call and isinstance(resultado, dict) and resultado.get('_acao_pendente'):
+                retorno['acao_pendente'] = resultado.get('_acao_pendente')
+            return retorno
 
         except Exception as error:
             error_msg = str(error)
@@ -2936,9 +3591,24 @@ Parece que você atingiu o limite da sua API Key atual.
             }
     
     @staticmethod
-    def executar_funcao(nome: str, args: Dict, workspace_id: int) -> Dict:
+    def executar_funcao(
+        nome: str,
+        args: Dict,
+        workspace_id: int,
+        user_id: Optional[int] = None,
+        session_id: str = 'default',
+    ) -> Dict:
         """Executa função chamada pelo modelo"""
         db = get_db()
+        session_id = AssistenteIA.normalizar_session_id(session_id)
+
+        def _to_int(raw_value: Any) -> Optional[int]:
+            try:
+                if raw_value in (None, ''):
+                    return None
+                return int(raw_value)
+            except (TypeError, ValueError):
+                return None
         
         if nome == 'listar_processos':
             query = '''
@@ -3499,6 +4169,281 @@ Parece que você atingiu o limite da sua API Key atual.
                 'tom': tom,
                 'processo': processo_preview,
                 'cliente_nome': cliente_nome or None,
+            }
+
+        elif nome == 'solicitar_criacao_tarefa':
+            if user_id is None:
+                return {'erro': 'Não foi possível identificar o usuário para preparar a ação'}
+
+            titulo = str(args.get('titulo') or '').strip()
+            if not titulo:
+                return {'erro': 'Título da tarefa é obrigatório'}
+
+            prioridade = str(args.get('prioridade') or 'media').strip().lower()
+            if prioridade not in {'baixa', 'media', 'alta', 'urgente'}:
+                prioridade = 'media'
+
+            processo = AssistenteIA.buscar_processo_para_acao(
+                db=db,
+                workspace_id=workspace_id,
+                processo_id=_to_int(args.get('processo_id')),
+                numero=str(args.get('processo_numero') or '').strip(),
+                titulo=str(args.get('processo_titulo') or '').strip(),
+            )
+            responsavel = AssistenteIA.buscar_usuario_para_acao(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=_to_int(args.get('responsavel_id')),
+                nome=str(args.get('responsavel_nome') or '').strip(),
+            )
+
+            payload = {
+                'titulo': titulo,
+                'descricao': str(args.get('descricao') or '').strip() or None,
+                'prioridade': prioridade,
+                'data_vencimento': str(args.get('data_vencimento') or '').strip() or None,
+                'processo_id': int(processo['id']) if processo else None,
+                'assigned_to_id': int(responsavel['id']) if responsavel else int(user_id),
+            }
+
+            preview_linhas = [
+                'Criar tarefa',
+                f"Título: {titulo}",
+                f"Prioridade: {prioridade}",
+            ]
+            if payload.get('descricao'):
+                preview_linhas.append(f"Descrição: {payload.get('descricao')}")
+            if payload.get('data_vencimento'):
+                preview_linhas.append(f"Vencimento: {payload.get('data_vencimento')}")
+            if processo:
+                preview_linhas.append(
+                    f"Processo: {processo.get('numero') or processo.get('numero_cnj') or processo.get('id')} - {processo.get('titulo') or 'sem título'}"
+                )
+            if responsavel:
+                preview_linhas.append(f"Responsável: {responsavel.get('nome') or responsavel.get('email')}")
+
+            preview = '\n'.join(preview_linhas)
+            acao = AssistenteIA.criar_acao_pendente(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                action_type='criar_tarefa',
+                payload=payload,
+                preview=preview,
+            )
+
+            resposta = (
+                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
+                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
+                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+            )
+            return {
+                'ok': True,
+                'acao_pendente': acao,
+                '_acao_pendente': acao,
+                '_final_resposta': resposta,
+                '_acoes_sugeridas': [],
+            }
+
+        elif nome == 'solicitar_lancamento_financeiro_entrada':
+            if user_id is None:
+                return {'erro': 'Não foi possível identificar o usuário para preparar a ação'}
+
+            try:
+                valor = float(args.get('valor'))
+            except (TypeError, ValueError):
+                return {'erro': 'Valor inválido para lançamento financeiro'}
+            if valor <= 0:
+                return {'erro': 'Valor deve ser maior que zero'}
+
+            descricao = str(args.get('descricao') or '').strip()
+            if not descricao:
+                return {'erro': 'Descrição é obrigatória para lançamento financeiro'}
+
+            processo = AssistenteIA.buscar_processo_para_acao(
+                db=db,
+                workspace_id=workspace_id,
+                processo_id=_to_int(args.get('processo_id')),
+                numero=str(args.get('processo_numero') or '').strip(),
+                titulo='',
+            )
+            cliente = AssistenteIA.buscar_cliente_para_acao(
+                db=db,
+                workspace_id=workspace_id,
+                cliente_id=_to_int(args.get('cliente_id')),
+                nome=str(args.get('cliente_nome') or '').strip(),
+            )
+            if not cliente and processo and processo.get('cliente_id'):
+                cliente = AssistenteIA.buscar_cliente_para_acao(
+                    db=db,
+                    workspace_id=workspace_id,
+                    cliente_id=_to_int(processo.get('cliente_id')),
+                    nome='',
+                )
+
+            data_lancamento = str(args.get('data') or datetime.now().strftime('%Y-%m-%d')).strip()
+            categoria = str(args.get('categoria') or 'geral').strip() or 'geral'
+            status_lancamento = str(args.get('status') or 'pendente').strip().lower()
+            if status_lancamento not in {'pendente', 'pago', 'cancelado'}:
+                status_lancamento = 'pendente'
+
+            payload = {
+                'valor': valor,
+                'descricao': descricao,
+                'categoria': categoria,
+                'data': data_lancamento,
+                'status': status_lancamento,
+                'processo_id': int(processo['id']) if processo else None,
+                'cliente_id': int(cliente['id']) if cliente else None,
+            }
+
+            valor_fmt = f'{valor:,.2f}'.replace(',', '_').replace('.', ',').replace('_', '.')
+            preview_linhas = [
+                'Lançar entrada financeira',
+                f'Valor: R$ {valor_fmt}',
+                f'Descrição: {descricao}',
+                f'Categoria: {categoria}',
+                f'Data: {data_lancamento}',
+                f'Status: {status_lancamento}',
+            ]
+            if processo:
+                preview_linhas.append(
+                    f"Processo: {processo.get('numero') or processo.get('numero_cnj') or processo.get('id')} - {processo.get('titulo') or 'sem título'}"
+                )
+            if cliente:
+                preview_linhas.append(f"Cliente: {cliente.get('nome') or cliente.get('id')}")
+            preview = '\n'.join(preview_linhas)
+
+            acao = AssistenteIA.criar_acao_pendente(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                action_type='lancar_financeiro_entrada',
+                payload=payload,
+                preview=preview,
+            )
+
+            resposta = (
+                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
+                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
+                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+            )
+            return {
+                'ok': True,
+                'acao_pendente': acao,
+                '_acao_pendente': acao,
+                '_final_resposta': resposta,
+                '_acoes_sugeridas': [],
+            }
+
+        elif nome == 'solicitar_envio_whatsapp':
+            if user_id is None:
+                return {'erro': 'Não foi possível identificar o usuário para preparar a ação'}
+            if not whatsapp_service.is_configured():
+                return {'erro': 'Serviço WhatsApp não configurado'}
+
+            mensagem_envio = str(args.get('mensagem') or '').strip()
+            if not mensagem_envio:
+                return {'erro': 'Mensagem é obrigatória para envio no WhatsApp'}
+
+            destino = str(args.get('destino') or '').strip().lower()
+            if destino not in {'cliente', 'equipe', 'telefone'}:
+                return {'erro': 'Destino inválido para envio WhatsApp'}
+
+            payload: Dict[str, Any] = {
+                'mensagem': mensagem_envio,
+                'destino': destino,
+            }
+            preview_linhas = [
+                f'Enviar WhatsApp para {destino}',
+                f"Mensagem: {mensagem_envio[:400]}",
+            ]
+
+            if destino == 'cliente':
+                processo = AssistenteIA.buscar_processo_para_acao(
+                    db=db,
+                    workspace_id=workspace_id,
+                    processo_id=None,
+                    numero=str(args.get('processo_numero') or '').strip(),
+                    titulo='',
+                )
+                cliente = AssistenteIA.buscar_cliente_para_acao(
+                    db=db,
+                    workspace_id=workspace_id,
+                    cliente_id=_to_int(args.get('cliente_id')),
+                    nome=str(args.get('cliente_nome') or '').strip(),
+                )
+                if not cliente and processo and processo.get('cliente_id'):
+                    cliente = AssistenteIA.buscar_cliente_para_acao(
+                        db=db,
+                        workspace_id=workspace_id,
+                        cliente_id=_to_int(processo.get('cliente_id')),
+                        nome='',
+                    )
+                if not cliente:
+                    return {'erro': 'Cliente não encontrado para envio de WhatsApp'}
+
+                payload['cliente_id'] = int(cliente['id'])
+                preview_linhas.append(f"Cliente: {cliente.get('nome') or cliente.get('id')}")
+                if cliente.get('telefone'):
+                    preview_linhas.append(f"Telefone: {cliente.get('telefone')}")
+                if processo:
+                    preview_linhas.append(
+                        f"Processo referência: {processo.get('numero') or processo.get('numero_cnj') or processo.get('id')}"
+                    )
+
+            elif destino == 'equipe':
+                enviar_para_toda_equipe = parse_bool(args.get('enviar_para_toda_equipe', False))
+                if enviar_para_toda_equipe:
+                    payload['user_ids'] = []
+                    preview_linhas.append('Destino: toda a equipe com telefone')
+                else:
+                    responsavel = AssistenteIA.buscar_usuario_para_acao(
+                        db=db,
+                        workspace_id=workspace_id,
+                        user_id=_to_int(args.get('responsavel_id')),
+                        nome=str(args.get('responsavel_nome') or '').strip(),
+                    )
+                    if responsavel:
+                        payload['user_ids'] = [int(responsavel['id'])]
+                        preview_linhas.append(
+                            f"Destino: {responsavel.get('nome') or responsavel.get('email')}"
+                        )
+                    else:
+                        payload['user_ids'] = []
+                        preview_linhas.append('Destino: toda a equipe com telefone')
+
+            else:  # telefone
+                telefone = str(args.get('telefone') or '').strip()
+                if not telefone:
+                    return {'erro': 'Telefone é obrigatório quando destino=telefone'}
+                payload['telefone'] = telefone
+                preview_linhas.append(f'Telefone: {telefone}')
+
+            preview = '\n'.join(preview_linhas)
+            acao = AssistenteIA.criar_acao_pendente(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                action_type='enviar_whatsapp',
+                payload=payload,
+                preview=preview,
+            )
+
+            resposta = (
+                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
+                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
+                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+            )
+            return {
+                'ok': True,
+                'acao_pendente': acao,
+                '_acao_pendente': acao,
+                '_final_resposta': resposta,
+                '_acoes_sugeridas': [],
             }
         
         return {'erro': 'Função não implementada'}
