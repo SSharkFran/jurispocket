@@ -3273,8 +3273,10 @@ def maybe_generate_whatsapp_message_with_ai(
 
     model = 'llama-3.3-70b-versatile' if ia_provider == 'groq' else 'gpt-3.5-turbo'
     system_prompt = (
-        "Voce escreve mensagens curtas e profissionais para WhatsApp de escritorio juridico. "
-        "Use portugues brasileiro, tom objetivo e claro."
+        "Voce escreve mensagens para WhatsApp de escritorio juridico com tom humano e profissional, "
+        "como uma secretaria executiva atenciosa. "
+        "Use portugues brasileiro natural, com clareza, cordialidade e objetividade. "
+        "Evite linguagem robotica, floreios excessivos e informacoes inventadas."
     )
     if ai_prompt:
         system_prompt += f" Preferencias do escritorio: {ai_prompt}"
@@ -3495,8 +3497,9 @@ def build_workspace_daily_summary_message(
     ai_prompt: str = '',
 ) -> str:
     """Monta mensagem de resumo diário do escritório."""
-    hoje = datetime.now().strftime('%Y-%m-%d')
-    amanha = (datetime.now() + timedelta(days=1)).strftime('%Y-%m-%d')
+    now = datetime.now()
+    hoje = now.strftime('%Y-%m-%d')
+    amanha = (now + timedelta(days=1)).strftime('%Y-%m-%d')
 
     total_processos_ativos = db.execute(
         "SELECT COUNT(*) as count FROM processos WHERE workspace_id = ? AND status = 'ativo'",
@@ -3525,20 +3528,54 @@ def build_workspace_daily_summary_message(
         (workspace_id, hoje),
     ).fetchone()['count']
 
+    workspace = db.execute(
+        'SELECT nome FROM workspaces WHERE id = ?',
+        (workspace_id,),
+    ).fetchone()
+    workspace_nome = (
+        workspace['nome']
+        if workspace and 'nome' in workspace.keys() and workspace['nome']
+        else 'escritorio'
+    )
+    data_br = now.strftime('%d/%m/%Y')
+    hora_br = now.strftime('%H:%M')
+
+    destaques: List[str] = []
+    if prazos_hoje > 0:
+        destaques.append(f"Prioridade alta: {prazos_hoje} prazo(s) vencendo hoje.")
+    elif prazos_amanha > 0:
+        destaques.append(f"Atencao para amanha: {prazos_amanha} prazo(s) previsto(s).")
+
+    if tarefas_pendentes > 0:
+        destaques.append(f"Temos {tarefas_pendentes} tarefa(s) pendente(s)/em andamento.")
+    else:
+        destaques.append("Sem tarefas pendentes no momento.")
+
+    if movimentacoes_hoje > 0:
+        destaques.append(f"Foram registradas {movimentacoes_hoje} nova(s) movimentacao(oes) hoje.")
+    else:
+        destaques.append("Nenhuma nova movimentacao registrada hoje.")
+
+    linha_destaques = '\n'.join(f"- {item}" for item in destaques)
+
     message = (
-        "Resumo diario do escritorio\n\n"
+        f"Bom dia! Aqui vai o resumo diario do {workspace_nome} "
+        f"({data_br}, {hora_br}).\n\n"
+        "Panorama geral:\n"
         f"- Processos ativos: {total_processos_ativos}\n"
         f"- Tarefas pendentes/em andamento: {tarefas_pendentes}\n"
         f"- Prazos para hoje: {prazos_hoje}\n"
         f"- Prazos para amanha: {prazos_amanha}\n"
         f"- Novas movimentacoes hoje: {movimentacoes_hoje}\n\n"
-        "JurisPocket - acompanhamento diario"
+        "Destaques do dia:\n"
+        f"{linha_destaques}\n\n"
+        "Se quiser, eu organizo os pontos criticos em ordem de prioridade."
     )
 
     if ai_enabled:
         message = maybe_generate_whatsapp_message_with_ai(
             base_message=message,
-            objective='Enviar resumo diario do escritorio via WhatsApp',
+            objective='Enviar resumo diario do escritorio via WhatsApp com tom de secretaria pessoal, humano e acolhedor',
             ai_prompt=ai_prompt,
         )
 
