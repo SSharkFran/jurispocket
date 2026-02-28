@@ -20,6 +20,8 @@ const SESSIONS_DIR = process.env.WHATSAPP_SESSIONS_DIR || path.resolve(__dirname
 const MIN_DELAY_MS = Number(process.env.WHATSAPP_MIN_DELAY_MS || 1200);
 const MAX_DELAY_MS = Number(process.env.WHATSAPP_MAX_DELAY_MS || 2600);
 const MAX_RECONNECT_ATTEMPTS = Number(process.env.WHATSAPP_MAX_RECONNECT_ATTEMPTS || 8);
+const ACK_WAIT_MS = Number(process.env.WHATSAPP_ACK_WAIT_MS || 12000);
+const ACK_POLL_MS = Number(process.env.WHATSAPP_ACK_POLL_MS || 250);
 const WEBHOOK_URL = process.env.WHATSAPP_INBOUND_WEBHOOK_URL || '';
 const WEBHOOK_SECRET = process.env.WHATSAPP_INBOUND_WEBHOOK_SECRET || '';
 const WEBHOOK_TIMEOUT_MS = Number(process.env.WHATSAPP_WEBHOOK_TIMEOUT_MS || 8000);
@@ -40,6 +42,8 @@ const manager = new SessionManager({
   minDelayMs: MIN_DELAY_MS,
   maxDelayMs: MAX_DELAY_MS,
   maxReconnectAttempts: MAX_RECONNECT_ATTEMPTS,
+  ackWaitMs: ACK_WAIT_MS,
+  ackPollMs: ACK_POLL_MS,
   webhookClient,
   logger,
 });

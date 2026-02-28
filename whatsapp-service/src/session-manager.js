@@ -22,6 +22,8 @@ export class SessionManager {
     minDelayMs,
     maxDelayMs,
     maxReconnectAttempts,
+    ackWaitMs,
+    ackPollMs,
     logger,
     webhookClient,
   }) {
@@ -29,6 +31,8 @@ export class SessionManager {
     this.minDelayMs = minDelayMs;
     this.maxDelayMs = Math.max(maxDelayMs, minDelayMs);
     this.maxReconnectAttempts = Math.max(Number(maxReconnectAttempts || 8), 1);
+    this.ackWaitMs = Math.max(Number(ackWaitMs ?? 12000), 0);
+    this.ackPollMs = Math.max(Number(ackPollMs ?? 250), 50);
     this.logger = logger;
     this.webhookClient = webhookClient;
 
@@ -105,6 +109,71 @@ export class SessionManager {
 
   _randomDelay() {
     return Math.floor(Math.random() * (this.maxDelayMs - this.minDelayMs + 1)) + this.minDelayMs;
+  }
+
+  _findAckByMessageId(userId, messageId) {
+    if (!messageId) return null;
+    const session = this._getOrCreateSession(userId);
+    return session.recentAcks.find((item) => item?.messageId === messageId) || null;
+  }
+
+  _parseAckStatus(rawStatus) {
+    if (rawStatus === null || rawStatus === undefined) return null;
+    if (typeof rawStatus === 'number') return rawStatus;
+
+    const text = String(rawStatus).trim();
+    if (/^-?\d+$/.test(text)) {
+      return Number(text);
+    }
+    return text.toLowerCase();
+  }
+
+  _isAckFailure(status) {
+    if (status === null || status === undefined) return false;
+    if (typeof status === 'number') return status <= 0;
+
+    const text = String(status).toLowerCase();
+    return ['error', 'failed', 'failure'].some((token) => text.includes(token));
+  }
+
+  _isAckConfirmed(status) {
+    if (status === null || status === undefined) return false;
+    if (typeof status === 'number') return status >= 2;
+
+    const text = String(status).toLowerCase();
+    return ['server', 'delivery', 'read', 'played', 'sent', 'ack'].some((token) =>
+      text.includes(token),
+    );
+  }
+
+  async _waitForAck(userId, messageId) {
+    if (!messageId) {
+      return { found: false };
+    }
+
+    if (this.ackWaitMs <= 0) {
+      return { found: false, skipped: true };
+    }
+
+    const startedAt = Date.now();
+    while (Date.now() - startedAt < this.ackWaitMs) {
+      const ack = this._findAckByMessageId(userId, messageId);
+      if (ack) {
+        const parsedStatus = this._parseAckStatus(ack.status);
+        return {
+          found: true,
+          status: parsedStatus,
+          source: ack.source || null,
+          timestamp: ack.timestamp || null,
+          failed: this._isAckFailure(parsedStatus),
+          confirmed: this._isAckConfirmed(parsedStatus),
+        };
+      }
+
+      await sleep(this.ackPollMs);
+    }
+
+    return { found: false };
   }
 
   _normalizePhone(phone) {
@@ -464,13 +533,44 @@ export class SessionManager {
       const response = await session.socket.sendMessage(jid, {
         text: String(message || ''),
       });
+      const messageId = response?.key?.id || null;
+      if (!messageId) {
+        throw new Error('Envio sem messageId retornado pelo WhatsApp');
+      }
+
+      const ack = await this._waitForAck(normalized, messageId);
+      const deliveryConfirmed = ack.skipped ? null : Boolean(ack.confirmed);
+      const warning =
+        deliveryConfirmed === false
+          ? 'Mensagem enviada sem confirmacao de entrega no WhatsApp'
+          : null;
+
+      if (ack.failed) {
+        return {
+          success: false,
+          error: 'Mensagem rejeitada pelo WhatsApp',
+          messageId,
+          to: jid,
+          delayMs,
+          timestamp: new Date().toISOString(),
+          deliveryConfirmed: false,
+          ackStatus: ack.status,
+          ackSource: ack.source,
+          ackTimestamp: ack.timestamp,
+        };
+      }
 
       return {
         success: true,
-        messageId: response?.key?.id || null,
+        messageId,
         to: jid,
         delayMs,
         timestamp: new Date().toISOString(),
+        deliveryConfirmed,
+        ackStatus: ack.found ? ack.status : null,
+        ackSource: ack.found ? ack.source : null,
+        ackTimestamp: ack.found ? ack.timestamp : null,
+        warning,
       };
     });
 

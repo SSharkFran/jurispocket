@@ -309,6 +309,33 @@ class WhatsAppService:
             data = response.json() if response.text else {}
 
             if response.status_code == 200 and data.get('success'):
+                delivery_confirmed = data.get('deliveryConfirmed')
+                ack_status = data.get('ackStatus')
+                ack_source = data.get('ackSource')
+                ack_timestamp = data.get('ackTimestamp')
+                warning = data.get('warning')
+
+                if delivery_confirmed is False:
+                    warning_text = (
+                        warning
+                        or 'Mensagem enviada sem confirmacao de entrega no WhatsApp.'
+                    )
+                    return {
+                        'success': False,
+                        'sucesso': False,
+                        'error': warning_text,
+                        'erro': warning_text,
+                        'modo': 'api_unconfirmed',
+                        'message_id': data.get('messageId'),
+                        'timestamp': data.get('timestamp'),
+                        'phone': formatted_phone,
+                        'delay_ms': data.get('delayMs'),
+                        'delivery_confirmed': False,
+                        'ack_status': ack_status,
+                        'ack_source': ack_source,
+                        'ack_timestamp': ack_timestamp,
+                    }
+
                 return {
                     'success': True,
                     'sucesso': True,
@@ -317,6 +344,10 @@ class WhatsAppService:
                     'timestamp': data.get('timestamp'),
                     'phone': formatted_phone,
                     'delay_ms': data.get('delayMs'),
+                    'delivery_confirmed': True if delivery_confirmed is None else bool(delivery_confirmed),
+                    'ack_status': ack_status,
+                    'ack_source': ack_source,
+                    'ack_timestamp': ack_timestamp,
                 }
 
             not_connected = response.status_code == 409

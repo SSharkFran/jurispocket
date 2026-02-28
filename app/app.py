@@ -2856,16 +2856,39 @@ def send_workspace_whatsapp_message(
     phone: str,
     message: str,
     client_id: Optional[int] = None,
+    sender_user_id: Optional[int] = None,
 ) -> Dict[str, Any]:
-    """Envia mensagem via WhatsApp do workspace (uso exclusivo com clientes)."""
+    """Envia mensagem para cliente usando o WhatsApp de um usuario do workspace."""
     if not whatsapp_service.is_configured():
         return {'success': False, 'error': 'Servico WhatsApp nao configurado'}
 
-    config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    if not config.get('enabled'):
-        return {'success': False, 'error': 'WhatsApp do workspace desativado'}
+    resolved_sender_user_id: Optional[int] = None
+    if sender_user_id is not None:
+        try:
+            parsed_sender_id = int(sender_user_id)
+        except (TypeError, ValueError):
+            return {'success': False, 'error': 'sender_user_id invalido'}
 
-    sender_key = config.get('session_key') or f'workspace-{workspace_id}'
+        sender_row = db.execute(
+            'SELECT id FROM users WHERE id = ? AND workspace_id = ?',
+            (parsed_sender_id, workspace_id),
+        ).fetchone()
+        if not sender_row:
+            return {
+                'success': False,
+                'error': 'Usuario remetente nao pertence ao workspace',
+            }
+        resolved_sender_user_id = int(sender_row['id'])
+    else:
+        resolved_sender_user_id = resolve_workspace_whatsapp_sender_user_id(db, workspace_id)
+
+    if not resolved_sender_user_id:
+        return {
+            'success': False,
+            'error': 'Nenhum usuario remetente disponivel para enviar mensagem ao cliente',
+        }
+
+    sender_key = str(resolved_sender_user_id)
     response = whatsapp_service.send_text_message(sender_key, phone, message)
     success = bool(response.get('success'))
 
@@ -2874,7 +2897,7 @@ def send_workspace_whatsapp_message(
             db=db,
             workspace_id=workspace_id,
             client_id=client_id,
-            user_id=None,
+            user_id=resolved_sender_user_id,
             channel='workspace',
             direction='outbound',
             sender_key=sender_key,
@@ -2887,7 +2910,11 @@ def send_workspace_whatsapp_message(
     except Exception as log_error:
         print(f"[whatsapp] Falha ao registrar log de envio workspace: {log_error}")
 
-    return response
+    return {
+        **response,
+        'sender_user_id': resolved_sender_user_id,
+        'sender_key': sender_key,
+    }
 
 def listar_usuarios_workspace_com_telefone(
     db,
@@ -3272,7 +3299,14 @@ def dispatch_platform_whatsapp_message(
         channel='platform',
         recipient_kind='user',
     )
-    return {'success': report.get('enviados', 0) > 0, **report}
+    success = report.get('enviados', 0) > 0
+    payload = {'success': success, **report}
+    if not success and not payload.get('error'):
+        payload['error'] = (
+            'Nenhuma mensagem teve confirmacao de entrega no WhatsApp. '
+            'Verifique telefone dos destinatarios e a sessao conectada.'
+        )
+    return payload
 
 def trigger_whatsapp_on_new_deadline(workspace_id: int, prazo_id: int) -> Dict[str, Any]:
     """Dispara WhatsApp automático ao criar um novo prazo."""
@@ -8957,18 +8991,9 @@ def email_notificar_movimentacao():
 @require_auth
 def whatsapp_conectar():
     """
-    Inicializa a sessao WhatsApp do workspace autenticado.
+    Inicializa a sessao WhatsApp do usuario autenticado.
     """
-    if g.auth.get('role') not in ('admin', 'superadmin'):
-        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode conectar o WhatsApp do workspace'}), 403
-
-    db = get_db()
-    workspace_id = g.auth['workspace_id']
-    config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    if not config.get('enabled'):
-        return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
-
-    session_key = config.get('session_key') or f'workspace-{workspace_id}'
+    session_key = str(g.auth['user_id'])
     resultado = whatsapp_service.connect_user(session_key) or {}
 
     if resultado.get('success'):
@@ -8976,6 +9001,8 @@ def whatsapp_conectar():
             'sucesso': True,
             'estado': resultado.get('state'),
             'connected': resultado.get('connected', False),
+            'sender_scope': 'user',
+            'sender_user_id': g.auth['user_id'],
         })
 
     return jsonify({
@@ -8988,12 +9015,9 @@ def whatsapp_conectar():
 @require_auth
 def whatsapp_status():
     """
-    Retorna status da conexao com WhatsApp do workspace
+    Retorna status da conexao com WhatsApp do usuario autenticado.
     """
-    db = get_db()
-    workspace_id = g.auth['workspace_id']
-    config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    session_key = config.get('session_key') or f'workspace-{workspace_id}'
+    session_key = str(g.auth['user_id'])
 
     status = whatsapp_service.get_connection_status(session_key) or {}
     connected = status.get('connected')
@@ -9010,9 +9034,8 @@ def whatsapp_status():
         'estado': state,
         'configurado': whatsapp_service.is_configured(),
         'provider': whatsapp_service.provider,
-        'workspace_enabled': config.get('enabled', True),
-        'display_name': config.get('display_name'),
-        'phone_number': config.get('phone_number'),
+        'sender_scope': 'user',
+        'sender_user_id': g.auth['user_id'],
     })
 
 
@@ -9020,18 +9043,9 @@ def whatsapp_status():
 @require_auth
 def whatsapp_qrcode():
     """
-    Gera QR code para conexao da sessao WhatsApp do workspace autenticado
+    Gera QR code para conexao da sessao WhatsApp do usuario autenticado.
     """
-    if g.auth.get('role') not in ('admin', 'superadmin'):
-        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode conectar o WhatsApp do workspace'}), 403
-
-    db = get_db()
-    workspace_id = g.auth['workspace_id']
-    config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    if not config.get('enabled'):
-        return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
-
-    session_key = config.get('session_key') or f'workspace-{workspace_id}'
+    session_key = str(g.auth['user_id'])
     resultado = whatsapp_service.generate_qr_code(session_key) or {}
 
     if resultado.get('success') or resultado.get('sucesso'):
@@ -9039,7 +9053,7 @@ def whatsapp_qrcode():
             return jsonify({
                 'sucesso': True,
                 'connected': True,
-                'mensagem': 'WhatsApp ja conectado para este workspace.',
+                'mensagem': 'WhatsApp ja conectado para este usuario.',
             })
 
         return jsonify({
@@ -9060,15 +9074,9 @@ def whatsapp_qrcode():
 @require_auth
 def whatsapp_desconectar():
     """
-    Desconecta a instancia do WhatsApp do workspace
+    Desconecta a sessao WhatsApp do usuario autenticado.
     """
-    if g.auth.get('role') not in ('admin', 'superadmin'):
-        return jsonify({'sucesso': False, 'erro': 'Apenas admin pode desconectar o WhatsApp do workspace'}), 403
-
-    db = get_db()
-    workspace_id = g.auth['workspace_id']
-    config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    session_key = config.get('session_key') or f'workspace-{workspace_id}'
+    session_key = str(g.auth['user_id'])
     resultado = whatsapp_service.logout(session_key) or {}
 
     if resultado.get('success'):
@@ -9322,9 +9330,6 @@ def whatsapp_enviar():
 
     db = get_db()
     workspace_id = g.auth['workspace_id']
-    workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    if not workspace_config.get('enabled'):
-        return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
 
     cliente = find_workspace_client_by_phone(db, workspace_id, telefone)
     if not cliente:
@@ -9336,6 +9341,7 @@ def whatsapp_enviar():
         phone=telefone,
         message=mensagem,
         client_id=cliente.get('id'),
+        sender_user_id=g.auth['user_id'],
     )
 
     if resultado.get('success'):
@@ -9384,12 +9390,6 @@ def enviar_whatsapp_processo(id):
     data = request.get_json() or {}
     mensagem_personalizada = data.get('mensagem')
     destino = (data.get('destino') or 'cliente').lower()
-
-    # Validacoes de escopo
-    if destino in ('cliente', 'telefone'):
-        workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
-        if not workspace_config.get('enabled'):
-            return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
 
     if destino == 'equipe':
         platform_config = ensure_platform_whatsapp_config(db)
@@ -9443,6 +9443,7 @@ def enviar_whatsapp_processo(id):
             phone=telefone_destino,
             message=mensagem_personalizada,
             client_id=cliente.get('id'),
+            sender_user_id=g.auth['user_id'],
         )
         if resultado.get('success'):
             return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
@@ -9476,6 +9477,7 @@ def enviar_whatsapp_processo(id):
         phone=processo['cliente_telefone'],
         message=mensagem_personalizada,
         client_id=processo.get('cliente_id'),
+        sender_user_id=g.auth['user_id'],
     )
     if resultado.get('success'):
         return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
@@ -9524,10 +9526,6 @@ def enviar_whatsapp_tarefa(id):
         if not telefone:
             return jsonify({'sucesso': False, 'erro': 'Telefone obrigatorio para destino=telefone'}), 400
 
-        workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
-        if not workspace_config.get('enabled'):
-            return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
-
         cliente = find_workspace_client_by_phone(db, workspace_id, telefone)
         if not cliente:
             return jsonify({'sucesso': False, 'erro': 'Telefone nao vinculado a cliente do workspace'}), 400
@@ -9538,6 +9536,7 @@ def enviar_whatsapp_tarefa(id):
             phone=telefone,
             message=mensagem,
             client_id=cliente.get('id'),
+            sender_user_id=g.auth['user_id'],
         )
         if resultado.get('success'):
             return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
@@ -9628,10 +9627,6 @@ def enviar_whatsapp_movimentacao(id, movimentacao_id):
         if not telefone:
             return jsonify({'sucesso': False, 'erro': 'Telefone obrigatorio para destino=telefone'}), 400
 
-        workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
-        if not workspace_config.get('enabled'):
-            return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
-
         cliente = find_workspace_client_by_phone(db, workspace_id, telefone)
         if not cliente:
             return jsonify({'sucesso': False, 'erro': 'Telefone nao vinculado a cliente do workspace'}), 400
@@ -9642,6 +9637,7 @@ def enviar_whatsapp_movimentacao(id, movimentacao_id):
             phone=telefone,
             message=mensagem,
             client_id=cliente.get('id'),
+            sender_user_id=g.auth['user_id'],
         )
         if resultado.get('success'):
             return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
@@ -9674,6 +9670,7 @@ def enviar_whatsapp_movimentacao(id, movimentacao_id):
         phone=processo_dict.get('cliente_telefone'),
         message=mensagem,
         client_id=processo_dict.get('cliente_id'),
+        sender_user_id=g.auth['user_id'],
     )
     if resultado.get('success'):
         return jsonify({'sucesso': True, 'message_id': resultado.get('message_id')})
@@ -10012,10 +10009,6 @@ def enviar_boas_vindas_cliente(id):
             'erro': 'Cliente não possui telefone cadastrado'
         }), 400
 
-    workspace_config = get_workspace_whatsapp_connection_config(db, workspace_id)
-    if not workspace_config.get('enabled'):
-        return jsonify({'sucesso': False, 'erro': 'WhatsApp do workspace desativado'}), 400
-
     mensagem = (
         f"Ola, *{cliente['nome']}*!\n\n"
         "Seja bem-vindo ao *JurisPocket*!\n\n"
@@ -10029,6 +10022,7 @@ def enviar_boas_vindas_cliente(id):
         phone=cliente['telefone'],
         message=mensagem,
         client_id=cliente['id'],
+        sender_user_id=g.auth['user_id'],
     )
 
     sucesso = bool(resultado.get('success'))
@@ -10192,6 +10186,7 @@ def whatsapp_inbound_webhook():
         return jsonify({'sucesso': True})
 
     workspace_id = None
+    session_user_id = None
     if session_key.startswith('workspace-') or session_key.startswith('workspace:'):
         try:
             if session_key.startswith('workspace-'):
@@ -10210,6 +10205,21 @@ def whatsapp_inbound_webhook():
             workspace_id = int(row['workspace_id'])
 
     if not workspace_id:
+        try:
+            possible_user_id = int(session_key)
+        except (TypeError, ValueError):
+            possible_user_id = None
+
+        if possible_user_id:
+            user_row = db.execute(
+                'SELECT id, workspace_id FROM users WHERE id = ? LIMIT 1',
+                (possible_user_id,),
+            ).fetchone()
+            if user_row:
+                session_user_id = int(user_row['id'])
+                workspace_id = int(user_row['workspace_id'])
+
+    if not workspace_id:
         return jsonify({'sucesso': True})
 
     client = find_workspace_client_by_phone(db, workspace_id, from_phone)
@@ -10220,7 +10230,7 @@ def whatsapp_inbound_webhook():
             db=db,
             workspace_id=workspace_id,
             client_id=client_id,
-            user_id=None,
+            user_id=session_user_id,
             channel='workspace',
             direction='inbound',
             sender_key=session_key,
@@ -10382,15 +10392,6 @@ if __name__ == '__main__':
     port = int(os.environ.get('PORT', 5000))
     debug = os.environ.get('FLASK_ENV') != 'production'
     app.run(debug=debug, host='0.0.0.0', port=port)
-
-
-
-
-
-
-
-
-
 
 
 
