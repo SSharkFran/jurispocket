@@ -539,12 +539,6 @@ export class SessionManager {
       }
 
       const ack = await this._waitForAck(normalized, messageId);
-      const deliveryConfirmed = ack.skipped ? null : Boolean(ack.confirmed);
-      const warning =
-        deliveryConfirmed === false
-          ? 'Mensagem enviada sem confirmacao de entrega no WhatsApp'
-          : null;
-
       if (ack.failed) {
         return {
           success: false,
@@ -559,6 +553,12 @@ export class SessionManager {
           ackTimestamp: ack.timestamp,
         };
       }
+
+      const deliveryConfirmed = ack.confirmed ? true : null;
+      const warning =
+        deliveryConfirmed === null
+          ? 'Mensagem enviada sem confirmacao de entrega no WhatsApp'
+          : null;
 
       return {
         success: true,

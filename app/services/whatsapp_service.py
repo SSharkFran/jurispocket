@@ -344,7 +344,7 @@ class WhatsAppService:
                     'timestamp': data.get('timestamp'),
                     'phone': formatted_phone,
                     'delay_ms': data.get('delayMs'),
-                    'delivery_confirmed': True if delivery_confirmed is None else bool(delivery_confirmed),
+                    'delivery_confirmed': None if delivery_confirmed is None else bool(delivery_confirmed),
                     'ack_status': ack_status,
                     'ack_source': ack_source,
                     'ack_timestamp': ack_timestamp,
