@@ -2,6 +2,7 @@
 set -u
 
 echo "[startup] Iniciando JurisPocket..."
+echo "[startup] PORT=${PORT:-8080} WHATSAPP_SERVICE_PORT=${WHATSAPP_SERVICE_PORT:-3001}"
 
 # Se houver volume persistente no Railway, prioriza esse path para dados.
 if [ -z "${DATABASE_PATH:-}" ]; then
@@ -49,6 +50,11 @@ else
 fi
 
 echo "[startup] Iniciando Gunicorn na porta ${PORT:-8080}..."
+if ! command -v gunicorn >/dev/null 2>&1; then
+  echo "[startup] ERRO: gunicorn não encontrado no PATH. Iniciando fallback com Flask."
+  exec python /app/app.py
+fi
+
 exec gunicorn -w 1 -b 0.0.0.0:${PORT:-8080} \
   --access-logfile - \
   --error-logfile - \

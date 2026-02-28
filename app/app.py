@@ -4560,73 +4560,102 @@ def enviar_resumo_diario_whatsapp_job():
                 f"mensagens enviadas: {total_enviados}"
             )
 
-# Agenda jobs
-scheduler.add_job(monitorar_processos_job, 'cron', hour=6, minute=0, id='pje_monitor')
-scheduler.add_job(verificar_prazos_job, 'cron', hour=8, minute=0, id='verificar_prazos')
+BACKGROUND_JOBS_ENABLED = parse_bool(os.environ.get('ENABLE_BACKGROUND_JOBS', 'true'))
 
-# ============================================================================
-# AGENDAMENTO DO MONITORAMENTO DATAJUD (NOVO)
-# ============================================================================
-# Configura o job para rodar 2x ao dia: 08:00 e 17:30
-# Você pode alterar os horários abaixo conforme necessário
-scheduler.add_job(
-    monitorar_datajud_job, 
-    'cron', 
-    hour='8,17',      # 08:00 e 17:00 (24h format)
-    minute='0,30',    # 00 e 30 minutos
-    id='datajud_monitor_manha',
-    replace_existing=True
-)
-# Job específico para 17:30
-scheduler.add_job(
-    monitorar_datajud_job, 
-    'cron', 
-    hour=17, 
-    minute=30, 
-    id='datajud_monitor_tarde',
-    replace_existing=True
-)
+if BACKGROUND_JOBS_ENABLED:
+    try:
+        # Agenda jobs
+        scheduler.add_job(
+            monitorar_processos_job,
+            'cron',
+            hour=6,
+            minute=0,
+            id='pje_monitor',
+            replace_existing=True,
+        )
+        scheduler.add_job(
+            verificar_prazos_job,
+            'cron',
+            hour=8,
+            minute=0,
+            id='verificar_prazos',
+            replace_existing=True,
+        )
 
-# Job de manhã às 08:00
-scheduler.add_job(
-    monitorar_datajud_job, 
-    'cron', 
-    hour=8, 
-    minute=0, 
-    id='datajud_monitor_manha_8h',
-    replace_existing=True
-)
+        # ============================================================================
+        # AGENDAMENTO DO MONITORAMENTO DATAJUD (NOVO)
+        # ============================================================================
+        # Configura o job para rodar 2x ao dia: 08:00 e 17:30
+        # Você pode alterar os horários abaixo conforme necessário
+        scheduler.add_job(
+            monitorar_datajud_job,
+            'cron',
+            hour='8,17',      # 08:00 e 17:00 (24h format)
+            minute='0,30',    # 00 e 30 minutos
+            id='datajud_monitor_manha',
+            replace_existing=True
+        )
+        # Job específico para 17:30
+        scheduler.add_job(
+            monitorar_datajud_job,
+            'cron',
+            hour=17,
+            minute=30,
+            id='datajud_monitor_tarde',
+            replace_existing=True
+        )
 
-# Job de resumo diário WhatsApp (verifica a cada minuto o horário configurado por workspace)
-scheduler.add_job(
-    enviar_resumo_diario_whatsapp_job,
-    'cron',
-    minute='*',
-    id='whatsapp_resumo_diario',
-    replace_existing=True
-)
+        # Job de manhã às 08:00
+        scheduler.add_job(
+            monitorar_datajud_job,
+            'cron',
+            hour=8,
+            minute=0,
+            id='datajud_monitor_manha_8h',
+            replace_existing=True
+        )
 
-# Job de campanhas agendadas WhatsApp (checa a cada minuto)
-scheduler.add_job(
-    processar_campanhas_whatsapp_agendadas_job,
-    'cron',
-    minute='*',
-    id='whatsapp_campanhas_agendadas',
-    replace_existing=True
-)
+        # Job de resumo diário WhatsApp (verifica a cada minuto o horário configurado por workspace)
+        scheduler.add_job(
+            enviar_resumo_diario_whatsapp_job,
+            'cron',
+            minute='*',
+            id='whatsapp_resumo_diario',
+            replace_existing=True
+        )
 
-print(f"[{datetime.now()}] Agendador iniciado. Jobs configurados:")
-print(f"  - PJe Monitor: 06:00 diariamente")
-print(f"  - Verificar Prazos: 08:00 diariamente")
-print(f"  - Datajud Monitor: 08:00 e 17:30 diariamente")
-print(f"  - WhatsApp Resumo Diário: checagem a cada minuto")
-print(f"  - WhatsApp Campanhas Agendadas: checagem a cada minuto")
+        # Job de campanhas agendadas WhatsApp (checa a cada minuto)
+        scheduler.add_job(
+            processar_campanhas_whatsapp_agendadas_job,
+            'cron',
+            minute='*',
+            id='whatsapp_campanhas_agendadas',
+            replace_existing=True
+        )
 
-scheduler.start()
+        print(f"[{datetime.now()}] Agendador iniciado. Jobs configurados:")
+        print(f"  - PJe Monitor: 06:00 diariamente")
+        print(f"  - Verificar Prazos: 08:00 diariamente")
+        print(f"  - Datajud Monitor: 08:00 e 17:30 diariamente")
+        print(f"  - WhatsApp Resumo Diário: checagem a cada minuto")
+        print(f"  - WhatsApp Campanhas Agendadas: checagem a cada minuto")
+        scheduler.start()
 
-# Graceful shutdown do scheduler
-import atexit
-atexit.register(lambda: scheduler.shutdown())
+        # Graceful shutdown do scheduler
+        import atexit
+
+        def _shutdown_scheduler():
+            try:
+                if scheduler.running:
+                    scheduler.shutdown(wait=False)
+            except Exception as shutdown_error:
+                print(f"[scheduler] Erro ao encerrar scheduler: {shutdown_error}")
+
+        atexit.register(_shutdown_scheduler)
+    except Exception as scheduler_error:
+        print(f"[scheduler] Falha ao inicializar agendador: {scheduler_error}")
+else:
+    print("[scheduler] Jobs em background desativados por ENABLE_BACKGROUND_JOBS=false")
 
 # ============================================================================
 # API ROUTES - AUTH
