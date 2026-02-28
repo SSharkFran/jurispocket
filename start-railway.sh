@@ -3,6 +3,37 @@ set -u
 
 echo "[startup] Iniciando JurisPocket..."
 
+# Se houver volume persistente no Railway, prioriza esse path para dados.
+if [ -z "${DATABASE_PATH:-}" ]; then
+  if [ -n "${RAILWAY_VOLUME_MOUNT_PATH:-}" ]; then
+    export DATABASE_PATH="${RAILWAY_VOLUME_MOUNT_PATH}/jurispocket.db"
+  elif [ -d "/data" ]; then
+    export DATABASE_PATH="/data/jurispocket.db"
+  fi
+fi
+
+if [ -n "${DATABASE_PATH:-}" ]; then
+  DB_DIR=$(dirname "$DATABASE_PATH")
+  mkdir -p "$DB_DIR" 2>/dev/null || true
+  echo "[startup] DATABASE_PATH=$DATABASE_PATH"
+fi
+
+if [ -z "${WHATSAPP_SESSIONS_DIR:-}" ]; then
+  if [ -n "${RAILWAY_VOLUME_MOUNT_PATH:-}" ]; then
+    SESSIONS_BASE="$RAILWAY_VOLUME_MOUNT_PATH"
+  elif [ -n "${DATABASE_PATH:-}" ]; then
+    SESSIONS_BASE=$(dirname "$DATABASE_PATH")
+  elif [ -d "/data" ]; then
+    SESSIONS_BASE="/data"
+  else
+    SESSIONS_BASE="/app/data"
+  fi
+  export WHATSAPP_SESSIONS_DIR="$SESSIONS_BASE/whatsapp-sessions"
+fi
+
+mkdir -p "$WHATSAPP_SESSIONS_DIR" 2>/dev/null || true
+echo "[startup] WHATSAPP_SESSIONS_DIR=$WHATSAPP_SESSIONS_DIR"
+
 NODE_BIN=""
 if command -v node >/dev/null 2>&1; then
   NODE_BIN="node"

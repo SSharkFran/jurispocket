@@ -14,7 +14,7 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { whatsappPlatform, WhatsAppPlatformConfig } from '@/services/whatsapp';
+import { whatsappPlatform, WhatsAppCampaign, WhatsAppPlatformConfig } from '@/services/whatsapp';
 import { 
   Users, 
   Crown, 
@@ -47,7 +47,8 @@ import {
   Wallet,
   AlertCircle,
   Check,
-  PowerOff
+  PowerOff,
+  SendHorizontal
 } from 'lucide-react';
 
 interface Estatisticas {
@@ -1257,10 +1258,21 @@ function ConfiguracoesTab() {
   const [platformLoading, setPlatformLoading] = useState(false);
   const [platformQrCode, setPlatformQrCode] = useState<string | null>(null);
   const [showPlatformQr, setShowPlatformQr] = useState(false);
+  const [workspacesAviso, setWorkspacesAviso] = useState<Workspace[]>([]);
+  const [workspaceIdsAviso, setWorkspaceIdsAviso] = useState<number[]>([]);
+  const [somenteAdminsAviso, setSomenteAdminsAviso] = useState(true);
+  const [mensagemAviso, setMensagemAviso] = useState('');
+  const [enviandoAviso, setEnviandoAviso] = useState(false);
+  const [agendamentoAviso, setAgendamentoAviso] = useState('');
+  const [agendandoAviso, setAgendandoAviso] = useState(false);
+  const [campanhasWhatsapp, setCampanhasWhatsapp] = useState<WhatsAppCampaign[]>([]);
+  const [loadingCampanhas, setLoadingCampanhas] = useState(false);
 
   useEffect(() => {
     carregarConfiguracoes();
     carregarWhatsAppPlataforma();
+    carregarWorkspacesAviso();
+    carregarCampanhasWhatsapp();
   }, []);
 
   const carregarConfiguracoes = async () => {
@@ -1292,6 +1304,27 @@ function ConfiguracoesTab() {
       toast.error('Erro ao carregar WhatsApp da plataforma');
     } finally {
       setPlatformLoading(false);
+    }
+  };
+
+  const carregarWorkspacesAviso = async () => {
+    try {
+      const response = await api.get('/admin/workspaces');
+      setWorkspacesAviso(response.data || []);
+    } catch (error) {
+      toast.error('Erro ao carregar workspaces para envio de aviso');
+    }
+  };
+
+  const carregarCampanhasWhatsapp = async () => {
+    try {
+      setLoadingCampanhas(true);
+      const response = await whatsappPlatform.listarCampanhas({ limit: 20 });
+      setCampanhasWhatsapp(response.data.campanhas || []);
+    } catch (error) {
+      toast.error('Erro ao carregar campanhas agendadas');
+    } finally {
+      setLoadingCampanhas(false);
     }
   };
 
@@ -1359,6 +1392,107 @@ function ConfiguracoesTab() {
     } finally {
       setPlatformLoading(false);
       carregarWhatsAppPlataforma();
+    }
+  };
+
+  const toggleWorkspaceAviso = (workspaceId: number) => {
+    setWorkspaceIdsAviso((prev) =>
+      prev.includes(workspaceId)
+        ? prev.filter((id) => id !== workspaceId)
+        : [...prev, workspaceId]
+    );
+  };
+
+  const handleEnviarAvisoWhatsapp = async () => {
+    const mensagem = mensagemAviso.trim();
+    if (!mensagem) {
+      toast.error('Escreva a mensagem do aviso');
+      return;
+    }
+
+    setEnviandoAviso(true);
+    try {
+      const response = await whatsappPlatform.enviarAviso({
+        mensagem,
+        workspace_ids: workspaceIdsAviso,
+        somente_admins: somenteAdminsAviso,
+      });
+
+      if (response.data.sucesso) {
+        const processados = response.data.processados ?? 0;
+        const confirmados = response.data.confirmados ?? response.data.enviados ?? 0;
+        const pendentes = response.data.pendentes_confirmacao ?? 0;
+        const sufixoPendentes = pendentes > 0 ? `, ${pendentes} pendente(s)` : '';
+        toast.success(
+          `Aviso enviado para ${processados} destino(s), ${confirmados} confirmada(s)${sufixoPendentes}`
+        );
+        setMensagemAviso('');
+      } else {
+        toast.error(response.data.erro || 'Falha no envio do aviso');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao enviar aviso via WhatsApp');
+    } finally {
+      setEnviandoAviso(false);
+    }
+  };
+
+  const handleAgendarAvisoWhatsapp = async () => {
+    const mensagem = mensagemAviso.trim();
+    if (!mensagem) {
+      toast.error('Escreva a mensagem do aviso antes de agendar');
+      return;
+    }
+    if (!agendamentoAviso) {
+      toast.error('Escolha data e hora do agendamento');
+      return;
+    }
+
+    const agendamentoDate = new Date(agendamentoAviso);
+    if (Number.isNaN(agendamentoDate.getTime())) {
+      toast.error('Data/hora inválida');
+      return;
+    }
+
+    if (agendamentoDate.getTime() <= Date.now()) {
+      toast.error('O agendamento precisa estar no futuro');
+      return;
+    }
+
+    setAgendandoAviso(true);
+    try {
+      const response = await whatsappPlatform.agendarCampanha({
+        mensagem,
+        scheduled_for: agendamentoDate.toISOString(),
+        workspace_ids: workspaceIdsAviso,
+        somente_admins: somenteAdminsAviso,
+      });
+
+      if (response.data.sucesso) {
+        toast.success('Campanha agendada com sucesso');
+        setAgendamentoAviso('');
+        await carregarCampanhasWhatsapp();
+      } else {
+        toast.error('Não foi possível agendar a campanha');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao agendar campanha WhatsApp');
+    } finally {
+      setAgendandoAviso(false);
+    }
+  };
+
+  const handleCancelarCampanha = async (campaignId: number) => {
+    try {
+      const response = await whatsappPlatform.cancelarCampanha(campaignId);
+      if (response.data.sucesso) {
+        toast.success('Campanha cancelada');
+        await carregarCampanhasWhatsapp();
+      } else {
+        toast.error(response.data.erro || 'Falha ao cancelar campanha');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao cancelar campanha');
     }
   };
 
@@ -1484,6 +1618,203 @@ function ConfiguracoesTab() {
             <Button variant="outline" onClick={handlePlatformDisconnect} disabled={platformLoading}>
               <PowerOff className="w-4 h-4 mr-2" /> Desconectar
             </Button>
+          </div>
+        </CardContent>
+      </Card>
+
+      <Card className="bg-slate-900 border-slate-800">
+        <CardHeader>
+          <CardTitle className="text-white">Aviso Manual via WhatsApp</CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          <div>
+            <Label className="text-slate-300">Mensagem do aviso</Label>
+            <Textarea
+              value={mensagemAviso}
+              onChange={(e) => setMensagemAviso(e.target.value)}
+              rows={5}
+              className="mt-1 bg-slate-800 border-slate-700"
+              placeholder="Ex: Sistema em manutenção hoje às 22h. Previsão de retorno às 23h30."
+            />
+          </div>
+
+          <label className="flex items-center gap-2 text-sm text-slate-300">
+            <input
+              type="checkbox"
+              checked={somenteAdminsAviso}
+              onChange={(e) => setSomenteAdminsAviso(e.target.checked)}
+            />
+            Enviar apenas para admins/superadmins
+          </label>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-300">
+                Workspaces alvo ({workspaceIdsAviso.length || workspacesAviso.length})
+              </Label>
+              <div className="flex gap-2">
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700 text-slate-300"
+                  onClick={() => setWorkspaceIdsAviso(workspacesAviso.map((w) => w.id))}
+                >
+                  Marcar todos
+                </Button>
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-slate-700 text-slate-300"
+                  onClick={() => setWorkspaceIdsAviso([])}
+                >
+                  Todos (sem filtro)
+                </Button>
+              </div>
+            </div>
+            <ScrollArea className="h-40 rounded-md border border-slate-700 p-2">
+              <div className="space-y-1">
+                {workspacesAviso.map((workspace) => (
+                  <label
+                    key={workspace.id}
+                    className="flex items-center justify-between gap-3 rounded px-2 py-1 text-sm text-slate-300 hover:bg-slate-800/60"
+                  >
+                    <span className="truncate">{workspace.nome}</span>
+                    <input
+                      type="checkbox"
+                      checked={workspaceIdsAviso.includes(workspace.id)}
+                      onChange={() => toggleWorkspaceAviso(workspace.id)}
+                    />
+                  </label>
+                ))}
+              </div>
+            </ScrollArea>
+            <p className="text-xs text-slate-400">
+              Se nenhum workspace estiver marcado, o envio cobre todos.
+            </p>
+          </div>
+
+          <div className="flex flex-wrap gap-2">
+            <Button
+              type="button"
+              onClick={handleEnviarAvisoWhatsapp}
+              disabled={enviandoAviso || !mensagemAviso.trim()}
+            >
+              {enviandoAviso ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <SendHorizontal className="w-4 h-4 mr-2" />
+              )}
+              Enviar aviso agora
+            </Button>
+          </div>
+
+          <div className="rounded-lg border border-slate-700 p-4 space-y-3">
+            <Label className="text-slate-300">Agendar envio</Label>
+            <Input
+              type="datetime-local"
+              value={agendamentoAviso}
+              onChange={(e) => setAgendamentoAviso(e.target.value)}
+              className="bg-slate-800 border-slate-700"
+            />
+            <Button
+              type="button"
+              variant="outline"
+              className="border-slate-700 text-slate-200"
+              onClick={handleAgendarAvisoWhatsapp}
+              disabled={agendandoAviso || !mensagemAviso.trim() || !agendamentoAviso}
+            >
+              {agendandoAviso ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : (
+                <Calendar className="w-4 h-4 mr-2" />
+              )}
+              Agendar campanha
+            </Button>
+          </div>
+
+          <div className="space-y-2">
+            <div className="flex items-center justify-between">
+              <Label className="text-slate-300">Campanhas agendadas</Label>
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-slate-700 text-slate-300"
+                onClick={carregarCampanhasWhatsapp}
+                disabled={loadingCampanhas}
+              >
+                <RefreshCw className={`w-4 h-4 mr-2 ${loadingCampanhas ? 'animate-spin' : ''}`} />
+                Atualizar
+              </Button>
+            </div>
+            <ScrollArea className="h-48 rounded-md border border-slate-700 p-2">
+              <div className="space-y-2">
+                {campanhasWhatsapp.length === 0 ? (
+                  <p className="text-sm text-slate-400 px-2 py-2">Nenhuma campanha registrada.</p>
+                ) : (
+                  campanhasWhatsapp.map((campanha) => {
+                    const statusColor =
+                      campanha.status === 'enviado'
+                        ? 'text-emerald-400 border-emerald-700'
+                        : campanha.status === 'parcial'
+                        ? 'text-amber-400 border-amber-700'
+                        : campanha.status === 'falhou'
+                        ? 'text-red-400 border-red-700'
+                        : campanha.status === 'cancelado'
+                        ? 'text-slate-400 border-slate-700'
+                        : 'text-cyan-300 border-cyan-700';
+
+                    return (
+                      <div
+                        key={campanha.id}
+                        className="rounded-md border border-slate-700 bg-slate-800/40 p-3 space-y-2"
+                      >
+                        <div className="flex items-start justify-between gap-2">
+                          <div className="min-w-0">
+                            <p className="text-sm text-slate-100 font-medium truncate">
+                              #{campanha.id} - {campanha.mensagem}
+                            </p>
+                            <p className="text-xs text-slate-400">
+                              Agendado para:{' '}
+                              {campanha.scheduled_for
+                                ? new Date(String(campanha.scheduled_for).replace(' ', 'T')).toLocaleString('pt-BR')
+                                : '-'}
+                            </p>
+                          </div>
+                          <Badge variant="outline" className={statusColor}>
+                            {campanha.status}
+                          </Badge>
+                        </div>
+                        {campanha.result_summary && (
+                          <p className="text-xs text-slate-400">
+                            Processados: {campanha.result_summary.processados || 0} | Confirmados:{' '}
+                            {campanha.result_summary.confirmados || 0} | Falhas:{' '}
+                            {campanha.result_summary.falhas || 0}
+                          </p>
+                        )}
+                        {campanha.last_error && (
+                          <p className="text-xs text-red-400">Erro: {campanha.last_error}</p>
+                        )}
+                        {(campanha.status === 'pendente' || campanha.status === 'falhou') && (
+                          <Button
+                            type="button"
+                            variant="outline"
+                            size="sm"
+                            className="border-red-700 text-red-300"
+                            onClick={() => handleCancelarCampanha(campanha.id)}
+                          >
+                            <Trash2 className="w-4 h-4 mr-2" />
+                            Cancelar
+                          </Button>
+                        )}
+                      </div>
+                    );
+                  })
+                )}
+              </div>
+            </ScrollArea>
           </div>
         </CardContent>
       </Card>

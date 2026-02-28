@@ -77,6 +77,74 @@ export interface WorkspaceEnvioResponse {
   }>;
 }
 
+export interface WhatsAppEnvioPersonalizadoPayload {
+  mensagem: string;
+  destino: 'cliente' | 'equipe' | 'telefone';
+  cliente_id?: number;
+  telefone?: string;
+  user_ids?: number[];
+  somente_alerta_whatsapp?: boolean;
+}
+
+export interface WhatsAppInboxConversation {
+  id: number;
+  workspace_id: number;
+  phone: string;
+  client_id?: number | null;
+  cliente_nome?: string | null;
+  status: 'novo' | 'aguardando' | 'resolvido';
+  unread_count: number;
+  first_inbound_at?: string | null;
+  last_inbound_at?: string | null;
+  first_response_at?: string | null;
+  last_outbound_at?: string | null;
+  last_message_text?: string | null;
+  last_message_direction?: 'inbound' | 'outbound' | null;
+  last_message_at?: string | null;
+  resolved_at?: string | null;
+  assigned_user_id?: number | null;
+  assigned_user_nome?: string | null;
+  sla_minutes?: number | null;
+  sla_label?: string;
+  sla_level?: 'ok' | 'attention' | 'critical' | 'resolved';
+  response_minutes?: number | null;
+  response_label?: string;
+}
+
+export interface WhatsAppInboxMessage {
+  id: number;
+  direction: 'inbound' | 'outbound';
+  sender_phone?: string | null;
+  recipient_phone?: string | null;
+  message_text?: string | null;
+  status?: string | null;
+  created_at: string;
+  provider_message_id?: string | null;
+}
+
+export interface WhatsAppCampaign {
+  id: number;
+  mensagem: string;
+  workspace_ids: number[];
+  somente_admins: boolean;
+  scheduled_for: string;
+  status: 'pendente' | 'processando' | 'enviado' | 'parcial' | 'falhou' | 'cancelado';
+  result_summary?: {
+    total?: number;
+    processados?: number;
+    enviados?: number;
+    confirmados?: number;
+    pendentes_confirmacao?: number;
+    falhas?: number;
+  };
+  last_error?: string | null;
+  processed_at?: string | null;
+  created_by?: number | null;
+  created_by_nome?: string | null;
+  created_at?: string;
+  updated_at?: string;
+}
+
 export interface WhatsAppAutomacaoConfig {
   sender_user_id?: number | null;
   auto_nova_movimentacao: boolean;
@@ -134,6 +202,14 @@ export const whatsapp = {
   // Enviar mensagem genérica
   enviarMensagem: (data: EnviarMensagemRequest) =>
     api.post<EnviarMensagemResponse>('/whatsapp/enviar', data),
+
+  // Enviar mensagem manual usando a sessão conectada do próprio usuário
+  enviarMensagemPersonalizada: (payload: WhatsAppEnvioPersonalizadoPayload) =>
+    api.post<
+      WorkspaceEnvioResponse & {
+        erro?: string;
+      }
+    >('/whatsapp/enviar-personalizado', payload),
 
   // Enviar mensagem para cliente do processo
   enviarProcesso: (
@@ -216,6 +292,32 @@ export const whatsapp = {
     somente_alerta_whatsapp?: boolean;
   }) => api.post<WorkspaceEnvioResponse>('/whatsapp/workspace/enviar', payload),
 
+  // Caixa de entrada WhatsApp
+  listarInboxConversas: (params?: {
+    status?: 'novo' | 'aguardando' | 'resolvido';
+    search?: string;
+    limit?: number;
+  }) =>
+    api.get<{ sucesso: boolean; total: number; conversas: WhatsAppInboxConversation[] }>(
+      '/whatsapp/inbox/conversas',
+      { params }
+    ),
+
+  listarInboxMensagens: (conversationId: number, limit = 80) =>
+    api.get<{ sucesso: boolean; mensagens: WhatsAppInboxMessage[] }>(
+      `/whatsapp/inbox/conversas/${conversationId}/mensagens`,
+      { params: { limit } }
+    ),
+
+  atualizarInboxStatus: (
+    conversationId: number,
+    status: 'novo' | 'aguardando' | 'resolvido'
+  ) =>
+    api.put<{ sucesso: boolean; conversa: WhatsAppInboxConversation }>(
+      `/whatsapp/inbox/conversas/${conversationId}/status`,
+      { status }
+    ),
+
   // Configuração de automações por workspace
   getAutomacoesConfig: () =>
     api.get<{
@@ -284,4 +386,37 @@ export const whatsappPlatform = {
   connect: () => api.post<{ sucesso: boolean; estado?: string; connected?: boolean }>('/admin/whatsapp-platform/connect'),
   getQRCode: () => api.get<QRCodeResponse>('/admin/whatsapp-platform/qrcode'),
   disconnect: () => api.post<{ sucesso: boolean; erro?: string }>('/admin/whatsapp-platform/disconnect'),
+  enviarAviso: (payload: {
+    mensagem: string;
+    workspace_ids?: number[];
+    somente_admins?: boolean;
+  }) =>
+    api.post<
+      WorkspaceEnvioResponse & {
+        filtros?: {
+          workspace_ids?: number[];
+          somente_admins?: boolean;
+        };
+        erro?: string;
+      }
+    >('/admin/whatsapp-platform/enviar-aviso', payload),
+  listarCampanhas: (params?: { status?: string; limit?: number }) =>
+    api.get<{ sucesso: boolean; campanhas: WhatsAppCampaign[] }>(
+      '/admin/whatsapp-platform/campanhas',
+      { params }
+    ),
+  agendarCampanha: (payload: {
+    mensagem: string;
+    scheduled_for: string;
+    workspace_ids?: number[];
+    somente_admins?: boolean;
+  }) =>
+    api.post<{ sucesso: boolean; campanha: WhatsAppCampaign }>(
+      '/admin/whatsapp-platform/campanhas',
+      payload
+    ),
+  cancelarCampanha: (campaignId: number) =>
+    api.post<{ sucesso: boolean; erro?: string }>(
+      `/admin/whatsapp-platform/campanhas/${campaignId}/cancelar`
+    ),
 };

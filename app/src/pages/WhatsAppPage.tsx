@@ -1,6 +1,23 @@
 ﻿import { useState, useEffect } from 'react';
 import { motion } from 'framer-motion';
-import { MessageSquare, Users, QrCode, Settings, Loader2, Power, PowerOff, RefreshCw, Smartphone, Bell, Clock3, Save, Wand2 } from 'lucide-react';
+import {
+  MessageSquare,
+  Users,
+  QrCode,
+  Settings,
+  Loader2,
+  Power,
+  PowerOff,
+  RefreshCw,
+  Smartphone,
+  Bell,
+  Clock3,
+  Save,
+  Wand2,
+  SendHorizontal,
+  ChevronDown,
+  ChevronUp,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
@@ -9,7 +26,10 @@ import {
   whatsapp,
   WhatsAppStatus,
   WhatsAppAutomacaoConfig,
-  WhatsAppSenderStatus
+  WhatsAppSenderStatus,
+  WorkspaceContato,
+  WhatsAppInboxConversation,
+  WhatsAppInboxMessage,
 } from '@/services/whatsapp';
 import { clientes } from '@/services/api';
 import { toast } from 'sonner';
@@ -25,6 +45,35 @@ const normalizeQrCode = (value: string) => {
   return `data:image/png;base64,${value}`;
 };
 
+const QUICK_WHATSAPP_TEMPLATES: Array<{
+  id: string;
+  titulo: string;
+  destino: 'cliente' | 'equipe' | 'telefone';
+  mensagem: string;
+}> = [
+  {
+    id: 'followup-cliente',
+    titulo: 'Follow-up de processo (cliente)',
+    destino: 'cliente',
+    mensagem:
+      'Ola, {{cliente_nome}}! Estamos acompanhando seu processo e assim que houver novidade relevante, eu te aviso por aqui. Conte com a gente.',
+  },
+  {
+    id: 'prazo-equipe',
+    titulo: 'Alerta de prazo (equipe)',
+    destino: 'equipe',
+    mensagem:
+      'Pessoal, lembrete rapido: revisar os prazos do dia e sinalizar qualquer risco de atraso ate 16h.',
+  },
+  {
+    id: 'comunicado-geral',
+    titulo: 'Comunicado curto',
+    destino: 'telefone',
+    mensagem:
+      'Aviso rapido: tivemos uma atualizacao importante no sistema. Se precisar de suporte, me chame aqui.',
+  },
+];
+
 const WhatsAppPage = () => {
   const [status, setStatus] = useState<WhatsAppStatus | null>(null);
   const [isLoading, setIsLoading] = useState(false);
@@ -36,11 +85,27 @@ const WhatsAppPage = () => {
   const [automacaoConfig, setAutomacaoConfig] = useState<WhatsAppAutomacaoConfig | null>(null);
   const [platformStatus, setPlatformStatus] = useState<WhatsAppSenderStatus | null>(null);
   const [isAdminWorkspace, setIsAdminWorkspace] = useState(false);
+  const [workspaceContatos, setWorkspaceContatos] = useState<WorkspaceContato[]>([]);
   const [isSavingAutomacao, setIsSavingAutomacao] = useState(false);
   const [isEnviandoResumoTeste, setIsEnviandoResumoTeste] = useState(false);
+  const [isPromptEditorOpen, setIsPromptEditorOpen] = useState(false);
   const [iaContexto, setIaContexto] = useState('');
   const [iaMensagemGerada, setIaMensagemGerada] = useState('');
   const [isGerandoIA, setIsGerandoIA] = useState(false);
+  const [isEnviandoMensagemIa, setIsEnviandoMensagemIa] = useState(false);
+  const [destinoEnvioIa, setDestinoEnvioIa] = useState<'cliente' | 'equipe' | 'telefone'>('cliente');
+  const [clienteDestinoId, setClienteDestinoId] = useState<string>('');
+  const [equipeSelecionadaIds, setEquipeSelecionadaIds] = useState<number[]>([]);
+  const [somenteEquipeAlerta, setSomenteEquipeAlerta] = useState(false);
+  const [telefoneDestino, setTelefoneDestino] = useState('');
+  const [inboxConversas, setInboxConversas] = useState<WhatsAppInboxConversation[]>([]);
+  const [inboxStatusFilter, setInboxStatusFilter] = useState<'todos' | 'novo' | 'aguardando' | 'resolvido'>('todos');
+  const [inboxSearch, setInboxSearch] = useState('');
+  const [isLoadingInbox, setIsLoadingInbox] = useState(false);
+  const [selectedInboxId, setSelectedInboxId] = useState<number | null>(null);
+  const [inboxMensagens, setInboxMensagens] = useState<WhatsAppInboxMessage[]>([]);
+  const [isLoadingInboxMensagens, setIsLoadingInboxMensagens] = useState(false);
+  const [isUpdatingInboxStatus, setIsUpdatingInboxStatus] = useState(false);
 
   const carregarStatus = async (silencioso = false) => {
     try {
@@ -89,11 +154,99 @@ const WhatsAppPage = () => {
     }
   };
 
+  const carregarContatosEquipe = async (silencioso = true) => {
+    try {
+      const response = await whatsapp.listarContatosWorkspace(false);
+      setWorkspaceContatos(response.data.contatos || []);
+    } catch (error) {
+      if (!silencioso) {
+        toast.error('Erro ao carregar contatos da equipe');
+      }
+    }
+  };
+
+  const carregarInboxConversas = async (silencioso = true) => {
+    try {
+      if (!silencioso) setIsLoadingInbox(true);
+      const params: {
+        status?: 'novo' | 'aguardando' | 'resolvido';
+        search?: string;
+        limit?: number;
+      } = {
+        limit: 120,
+      };
+      if (inboxStatusFilter !== 'todos') {
+        params.status = inboxStatusFilter;
+      }
+      if (inboxSearch.trim()) {
+        params.search = inboxSearch.trim();
+      }
+
+      const response = await whatsapp.listarInboxConversas(params);
+      const conversas = response.data.conversas || [];
+      setInboxConversas(conversas);
+
+      if (selectedInboxId) {
+        const stillExists = conversas.some((item) => item.id === selectedInboxId);
+        if (!stillExists) {
+          setSelectedInboxId(conversas[0]?.id || null);
+        }
+      } else if (conversas.length > 0) {
+        setSelectedInboxId(conversas[0].id);
+      }
+    } catch (error) {
+      if (!silencioso) {
+        toast.error('Erro ao carregar caixa de entrada WhatsApp');
+      }
+    } finally {
+      setIsLoadingInbox(false);
+    }
+  };
+
+  const carregarMensagensConversa = async (conversationId: number, silencioso = true) => {
+    try {
+      if (!silencioso) setIsLoadingInboxMensagens(true);
+      const response = await whatsapp.listarInboxMensagens(conversationId, 120);
+      setInboxMensagens(response.data.mensagens || []);
+    } catch (error) {
+      if (!silencioso) {
+        toast.error('Erro ao carregar mensagens da conversa');
+      }
+    } finally {
+      setIsLoadingInboxMensagens(false);
+    }
+  };
+
   useEffect(() => {
     carregarStatus(true);
     carregarClientes();
     carregarAutomacoes(true);
+    carregarContatosEquipe(true);
+    carregarInboxConversas(true);
   }, []);
+
+  useEffect(() => {
+    carregarInboxConversas(true);
+  }, [inboxStatusFilter, inboxSearch]);
+
+  useEffect(() => {
+    if (!selectedInboxId) {
+      setInboxMensagens([]);
+      return;
+    }
+    carregarMensagensConversa(selectedInboxId, true);
+  }, [selectedInboxId]);
+
+  useEffect(() => {
+    const interval = setInterval(() => {
+      carregarInboxConversas(true);
+      if (selectedInboxId) {
+        carregarMensagensConversa(selectedInboxId, true);
+      }
+    }, 30000);
+
+    return () => clearInterval(interval);
+  }, [selectedInboxId, inboxStatusFilter, inboxSearch]);
 
   useEffect(() => {
     if (!showQRCode) return undefined;
@@ -269,10 +422,143 @@ const WhatsAppPage = () => {
     }
   };
 
+  const toggleEquipeSelecionada = (userId: number) => {
+    setEquipeSelecionadaIds((prev) =>
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
+    );
+  };
+
+  const aplicarTemplateRapido = (templateId: string) => {
+    const selectedTemplate = QUICK_WHATSAPP_TEMPLATES.find((item) => item.id === templateId);
+    if (!selectedTemplate) return;
+
+    const clienteAtual = contatos.find((c) => String(c.id) === String(clienteDestinoId));
+    const fallbackCliente = contatos[0];
+    const clienteNome = (clienteAtual || fallbackCliente)?.nome || 'cliente';
+
+    let texto = selectedTemplate.mensagem;
+    texto = texto.replace(/\{\{cliente_nome\}\}/g, clienteNome);
+    texto = texto.replace(/\{\{data\}\}/g, new Date().toLocaleDateString('pt-BR'));
+
+    setDestinoEnvioIa(selectedTemplate.destino);
+    if (selectedTemplate.destino === 'cliente' && !clienteDestinoId && fallbackCliente) {
+      setClienteDestinoId(String(fallbackCliente.id));
+    }
+    setIaMensagemGerada(texto);
+  };
+
+  const handleEnviarMensagemIA = async () => {
+    const mensagem = iaMensagemGerada.trim();
+    if (!mensagem) {
+      toast.error('Gere ou escreva uma mensagem antes de enviar');
+      return;
+    }
+
+    if (!(status?.connected ?? status?.conectado)) {
+      toast.error('Conecte seu WhatsApp antes de enviar mensagens');
+      return;
+    }
+
+    const payload: {
+      mensagem: string;
+      destino: 'cliente' | 'equipe' | 'telefone';
+      cliente_id?: number;
+      telefone?: string;
+      user_ids?: number[];
+      somente_alerta_whatsapp?: boolean;
+    } = {
+      mensagem,
+      destino: destinoEnvioIa,
+    };
+
+    if (destinoEnvioIa === 'cliente') {
+      const clienteSelecionado = contatos.find((c) => String(c.id) === String(clienteDestinoId));
+      if (!clienteSelecionado) {
+        toast.error('Selecione um cliente para enviar');
+        return;
+      }
+      payload.cliente_id = clienteSelecionado.id;
+    }
+
+    if (destinoEnvioIa === 'equipe') {
+      payload.somente_alerta_whatsapp = somenteEquipeAlerta;
+      if (equipeSelecionadaIds.length > 0) {
+        payload.user_ids = equipeSelecionadaIds;
+      }
+    }
+
+    if (destinoEnvioIa === 'telefone') {
+      const telefone = telefoneDestino.trim();
+      if (!telefone) {
+        toast.error('Informe o telefone de destino');
+        return;
+      }
+      payload.telefone = telefone;
+    }
+
+    setIsEnviandoMensagemIa(true);
+    try {
+      const response = await whatsapp.enviarMensagemPersonalizada(payload);
+      if (response.data.sucesso) {
+        const processados = response.data.processados ?? 0;
+        const confirmados = response.data.confirmados ?? response.data.enviados ?? 0;
+        const pendentes = response.data.pendentes_confirmacao ?? 0;
+        const sufixoPendentes = pendentes > 0 ? `, ${pendentes} pendente(s) de confirmacao` : '';
+        toast.success(
+          `Mensagem processada para ${processados} destino(s), ${confirmados} confirmada(s)${sufixoPendentes}`
+        );
+        carregarInboxConversas(true);
+        if (selectedInboxId) {
+          carregarMensagensConversa(selectedInboxId, true);
+        }
+      } else {
+        toast.error(response.data.erro || 'Falha ao enviar mensagem');
+      }
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao enviar mensagem');
+    } finally {
+      setIsEnviandoMensagemIa(false);
+    }
+  };
+
+  const handleAtualizarStatusInbox = async (
+    conversationId: number,
+    status: 'novo' | 'aguardando' | 'resolvido'
+  ) => {
+    setIsUpdatingInboxStatus(true);
+    try {
+      await whatsapp.atualizarInboxStatus(conversationId, status);
+      await carregarInboxConversas(true);
+      if (selectedInboxId === conversationId) {
+        await carregarMensagensConversa(conversationId, true);
+      }
+      toast.success('Status da conversa atualizado');
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao atualizar status da conversa');
+    } finally {
+      setIsUpdatingInboxStatus(false);
+    }
+  };
+
+  const formatDateTime = (value?: string | null) => {
+    if (!value) return '-';
+    const date = new Date(value);
+    if (Number.isNaN(date.getTime())) return value;
+    return date.toLocaleString('pt-BR');
+  };
+
+  const getSlaColorClass = (slaLevel?: string) => {
+    if (slaLevel === 'critical') return 'text-destructive';
+    if (slaLevel === 'attention') return 'text-warning';
+    if (slaLevel === 'resolved') return 'text-success';
+    return 'text-success';
+  };
+
   const isConectado = Boolean(status?.connected ?? status?.conectado);
   const estadoConexao = status?.state || status?.estado || (isConectado ? 'open' : 'disconnected');
   const platformConectado = Boolean(platformStatus?.connected ?? platformStatus?.conectado);
   const platformEstado = platformStatus?.state || platformStatus?.estado || (platformConectado ? 'connected' : 'disconnected');
+  const selectedInboxConversa = inboxConversas.find((item) => item.id === selectedInboxId) || null;
 
   const cards = [
     { label: 'Clientes com Telefone', value: contatos.length.toString(), icon: Users, color: 'text-primary' },
@@ -493,15 +779,45 @@ const WhatsAppPage = () => {
                 <span>Usar IA para melhorar mensagens automáticas</span>
               </label>
 
-              <div>
-                <label className="text-xs text-muted-foreground">Prompt do escritório para IA (opcional)</label>
-                <Textarea
-                  rows={3}
-                  value={automacaoConfig.ai_prompt || ''}
-                  disabled={!isAdminWorkspace}
-                  onChange={(e) => updateAutomacaoField('ai_prompt', e.target.value)}
-                  placeholder="Ex: Mensagens diretas, formais e com foco em ação."
-                />
+              <div className="space-y-2">
+                <div className="flex items-center justify-between gap-2">
+                  <label className="text-xs text-muted-foreground">
+                    Prompt do escritório para IA (opcional)
+                  </label>
+                  {isAdminWorkspace && (
+                    <Button
+                      type="button"
+                      variant="ghost"
+                      size="sm"
+                      className="h-7 px-2 text-xs"
+                      onClick={() => setIsPromptEditorOpen((prev) => !prev)}
+                    >
+                      {isPromptEditorOpen ? (
+                        <>
+                          Ocultar <ChevronUp className="ml-1 h-3 w-3" />
+                        </>
+                      ) : (
+                        <>
+                          Editar <ChevronDown className="ml-1 h-3 w-3" />
+                        </>
+                      )}
+                    </Button>
+                  )}
+                </div>
+
+                {isPromptEditorOpen ? (
+                  <Textarea
+                    rows={3}
+                    value={automacaoConfig.ai_prompt || ''}
+                    disabled={!isAdminWorkspace}
+                    onChange={(e) => updateAutomacaoField('ai_prompt', e.target.value)}
+                    placeholder="Ex: Mensagens diretas, formais e com foco em ação."
+                  />
+                ) : (
+                  <div className="rounded-md border border-border/60 bg-secondary/20 px-3 py-2 text-xs text-muted-foreground">
+                    Prompt oculto. Clique em "Editar" quando quiser ajustar.
+                  </div>
+                )}
               </div>
             </div>
 
@@ -533,6 +849,23 @@ const WhatsAppPage = () => {
               Descreva um cenário e gere uma sugestão pronta para disparos automáticos.
             </p>
 
+            <div className="rounded-lg bg-secondary/20 p-3 space-y-2">
+              <p className="text-xs font-medium">Templates rapidos</p>
+              <div className="grid gap-2">
+                {QUICK_WHATSAPP_TEMPLATES.map((template) => (
+                  <Button
+                    key={template.id}
+                    type="button"
+                    variant="outline"
+                    className="justify-start text-left h-auto py-2 whitespace-normal"
+                    onClick={() => aplicarTemplateRapido(template.id)}
+                  >
+                    {template.titulo}
+                  </Button>
+                ))}
+              </div>
+            </div>
+
             <Textarea
               rows={6}
               value={iaContexto}
@@ -551,9 +884,331 @@ const WhatsAppPage = () => {
               onChange={(e) => setIaMensagemGerada(e.target.value)}
               placeholder="A mensagem sugerida aparecerá aqui..."
             />
+
+            <div className="rounded-lg border border-border/60 p-4 space-y-3">
+              <div className="flex items-center justify-between gap-3">
+                <p className="text-xs font-medium">Enviar mensagem gerada</p>
+                <span
+                  className={
+                    isConectado
+                      ? 'text-[11px] text-success'
+                      : 'text-[11px] text-warning'
+                  }
+                >
+                  {isConectado ? 'WhatsApp conectado' : 'Conecte seu WhatsApp para enviar'}
+                </span>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={destinoEnvioIa === 'cliente' ? 'default' : 'outline'}
+                  onClick={() => setDestinoEnvioIa('cliente')}
+                >
+                  Cliente
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={destinoEnvioIa === 'equipe' ? 'default' : 'outline'}
+                  onClick={() => setDestinoEnvioIa('equipe')}
+                >
+                  Equipe
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={destinoEnvioIa === 'telefone' ? 'default' : 'outline'}
+                  onClick={() => setDestinoEnvioIa('telefone')}
+                >
+                  Telefone
+                </Button>
+              </div>
+
+              {destinoEnvioIa === 'cliente' && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Cliente destino</label>
+                  <select
+                    className="w-full rounded-md border border-border bg-background px-3 py-2 text-sm"
+                    value={clienteDestinoId}
+                    onChange={(e) => setClienteDestinoId(e.target.value)}
+                  >
+                    <option value="">Selecione um cliente...</option>
+                    {contatos.map((contato) => (
+                      <option key={contato.id} value={String(contato.id)}>
+                        {contato.nome} - {contato.telefone}
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {destinoEnvioIa === 'equipe' && (
+                <div className="space-y-2">
+                  <label className="flex items-center gap-2 text-xs">
+                    <input
+                      type="checkbox"
+                      checked={somenteEquipeAlerta}
+                      onChange={(e) => setSomenteEquipeAlerta(e.target.checked)}
+                    />
+                    <span className="text-muted-foreground">
+                      Somente membros com alerta WhatsApp ativo
+                    </span>
+                  </label>
+                  <div className="max-h-36 overflow-y-auto rounded-md border border-border/60 p-2 space-y-1">
+                    {workspaceContatos.length === 0 ? (
+                      <p className="text-xs text-muted-foreground">
+                        Nenhum membro com telefone cadastrado.
+                      </p>
+                    ) : (
+                      workspaceContatos.map((contato) => (
+                        <label
+                          key={contato.id}
+                          className="flex items-center justify-between gap-2 rounded px-2 py-1 text-xs hover:bg-secondary/40"
+                        >
+                          <span className="truncate">{contato.nome}</span>
+                          <input
+                            type="checkbox"
+                            checked={equipeSelecionadaIds.includes(contato.id)}
+                            onChange={() => toggleEquipeSelecionada(contato.id)}
+                          />
+                        </label>
+                      ))
+                    )}
+                  </div>
+                  <p className="text-[11px] text-muted-foreground">
+                    Nenhum marcado = envia para toda a equipe filtrada.
+                  </p>
+                </div>
+              )}
+
+              {destinoEnvioIa === 'telefone' && (
+                <div className="space-y-1">
+                  <label className="text-xs text-muted-foreground">Telefone destino</label>
+                  <Input
+                    value={telefoneDestino}
+                    onChange={(e) => setTelefoneDestino(e.target.value)}
+                    placeholder="5511999999999"
+                  />
+                </div>
+              )}
+
+              <Button
+                type="button"
+                onClick={handleEnviarMensagemIA}
+                disabled={isEnviandoMensagemIa || !iaMensagemGerada.trim()}
+              >
+                {isEnviandoMensagemIa ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <SendHorizontal className="mr-2 h-4 w-4" />
+                )}
+                Enviar mensagem
+              </Button>
+            </div>
           </div>
         </div>
       )}
+
+      <div className="grid gap-6 lg:grid-cols-2">
+        <div className="glass-card p-5 space-y-4">
+          <div className="flex items-center justify-between gap-2">
+            <h3 className="font-semibold text-sm flex items-center gap-2">
+              <MessageSquare className="h-4 w-4 text-muted-foreground" /> Caixa de Entrada
+            </h3>
+            <Button
+              variant="outline"
+              size="sm"
+              onClick={() => carregarInboxConversas(false)}
+              disabled={isLoadingInbox}
+            >
+              {isLoadingInbox ? (
+                <Loader2 className="mr-2 h-3 w-3 animate-spin" />
+              ) : (
+                <RefreshCw className="mr-2 h-3 w-3" />
+              )}
+              Atualizar
+            </Button>
+          </div>
+
+          <Input
+            placeholder="Buscar por nome/telefone..."
+            value={inboxSearch}
+            onChange={(e) => setInboxSearch(e.target.value)}
+          />
+
+          <div className="grid grid-cols-4 gap-2">
+            <Button
+              size="sm"
+              variant={inboxStatusFilter === 'todos' ? 'default' : 'outline'}
+              onClick={() => setInboxStatusFilter('todos')}
+            >
+              Todos
+            </Button>
+            <Button
+              size="sm"
+              variant={inboxStatusFilter === 'novo' ? 'default' : 'outline'}
+              onClick={() => setInboxStatusFilter('novo')}
+            >
+              Novo
+            </Button>
+            <Button
+              size="sm"
+              variant={inboxStatusFilter === 'aguardando' ? 'default' : 'outline'}
+              onClick={() => setInboxStatusFilter('aguardando')}
+            >
+              Aguardando
+            </Button>
+            <Button
+              size="sm"
+              variant={inboxStatusFilter === 'resolvido' ? 'default' : 'outline'}
+              onClick={() => setInboxStatusFilter('resolvido')}
+            >
+              Resolvido
+            </Button>
+          </div>
+
+          <div className="max-h-96 overflow-y-auto space-y-2">
+            {inboxConversas.length === 0 ? (
+              <p className="text-xs text-muted-foreground text-center py-8">
+                Nenhuma conversa encontrada.
+              </p>
+            ) : (
+              inboxConversas.map((conversa) => (
+                <button
+                  key={conversa.id}
+                  type="button"
+                  onClick={() => setSelectedInboxId(conversa.id)}
+                  className={`w-full text-left rounded-lg border p-3 transition-colors ${
+                    selectedInboxId === conversa.id
+                      ? 'border-primary bg-primary/5'
+                      : 'border-border/60 hover:bg-secondary/30'
+                  }`}
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <p className="text-sm font-medium truncate">
+                        {conversa.cliente_nome || conversa.phone}
+                      </p>
+                      <p className="text-[11px] text-muted-foreground">{conversa.phone}</p>
+                    </div>
+                    <span className="text-[11px] px-2 py-0.5 rounded border border-border/60 uppercase">
+                      {conversa.status}
+                    </span>
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
+                    {conversa.last_message_text || '(sem preview)'}
+                  </p>
+                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                    <span className={getSlaColorClass(conversa.sla_level)}>
+                      SLA: {conversa.sla_label || '-'}
+                    </span>
+                    <span className="text-muted-foreground">
+                      {conversa.unread_count > 0 ? `${conversa.unread_count} nova(s)` : 'sem novas'}
+                    </span>
+                  </div>
+                </button>
+              ))
+            )}
+          </div>
+        </div>
+
+        <div className="glass-card p-5 space-y-4">
+          <h3 className="font-semibold text-sm flex items-center gap-2">
+            <Smartphone className="h-4 w-4 text-muted-foreground" /> Atendimento
+          </h3>
+
+          {!selectedInboxConversa ? (
+            <p className="text-sm text-muted-foreground">
+              Selecione uma conversa para visualizar histórico e atualizar status.
+            </p>
+          ) : (
+            <>
+              <div className="rounded-lg bg-secondary/30 p-3 space-y-1 text-sm">
+                <p>
+                  <span className="text-muted-foreground">Contato:</span>{' '}
+                  {selectedInboxConversa.cliente_nome || selectedInboxConversa.phone}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Telefone:</span> {selectedInboxConversa.phone}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">Ultima entrada:</span>{' '}
+                  {formatDateTime(selectedInboxConversa.last_inbound_at || selectedInboxConversa.last_message_at)}
+                </p>
+                <p>
+                  <span className="text-muted-foreground">SLA:</span>{' '}
+                  <span className={getSlaColorClass(selectedInboxConversa.sla_level)}>
+                    {selectedInboxConversa.sla_label || '-'}
+                  </span>
+                </p>
+              </div>
+
+              <div className="grid grid-cols-3 gap-2">
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectedInboxConversa.status === 'novo' ? 'default' : 'outline'}
+                  disabled={isUpdatingInboxStatus}
+                  onClick={() => handleAtualizarStatusInbox(selectedInboxConversa.id, 'novo')}
+                >
+                  Novo
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectedInboxConversa.status === 'aguardando' ? 'default' : 'outline'}
+                  disabled={isUpdatingInboxStatus}
+                  onClick={() => handleAtualizarStatusInbox(selectedInboxConversa.id, 'aguardando')}
+                >
+                  Aguardando
+                </Button>
+                <Button
+                  type="button"
+                  size="sm"
+                  variant={selectedInboxConversa.status === 'resolvido' ? 'default' : 'outline'}
+                  disabled={isUpdatingInboxStatus}
+                  onClick={() => handleAtualizarStatusInbox(selectedInboxConversa.id, 'resolvido')}
+                >
+                  Resolvido
+                </Button>
+              </div>
+
+              <div className="max-h-96 overflow-y-auto rounded-md border border-border/60 p-3 space-y-2">
+                {isLoadingInboxMensagens ? (
+                  <div className="py-8 flex items-center justify-center">
+                    <Loader2 className="h-5 w-5 animate-spin text-primary" />
+                  </div>
+                ) : inboxMensagens.length === 0 ? (
+                  <p className="text-xs text-muted-foreground text-center py-6">
+                    Sem mensagens registradas nesta conversa.
+                  </p>
+                ) : (
+                  inboxMensagens.map((mensagem) => (
+                    <div
+                      key={mensagem.id}
+                      className={`rounded-md px-3 py-2 text-xs ${
+                        mensagem.direction === 'inbound'
+                          ? 'bg-secondary/40'
+                          : 'bg-primary/10 border border-primary/20'
+                      }`}
+                    >
+                      <div className="flex items-center justify-between gap-2 mb-1">
+                        <span className="font-medium">
+                          {mensagem.direction === 'inbound' ? 'Cliente' : 'Equipe'}
+                        </span>
+                        <span className="text-muted-foreground">{formatDateTime(mensagem.created_at)}</span>
+                      </div>
+                      <p className="whitespace-pre-wrap">{mensagem.message_text || '(sem texto)'}</p>
+                    </div>
+                  ))
+                )}
+              </div>
+            </>
+          )}
+        </div>
+      </div>
 
       <Dialog open={showQRCode} onOpenChange={setShowQRCode}>
         <DialogContent className="sm:max-w-md">

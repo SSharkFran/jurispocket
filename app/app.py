@@ -134,6 +134,7 @@ SUPERADMIN_BOOTSTRAP_TOKEN = os.environ.get('SUPERADMIN_BOOTSTRAP_TOKEN')
 
 # Session key global do WhatsApp oficial da plataforma
 PLATFORM_WHATSAPP_SESSION_KEY = os.environ.get('WHATSAPP_PLATFORM_SESSION_KEY', 'platform')
+WHATSAPP_INBOX_STATUS_VALUES = {'novo', 'aguardando', 'resolvido'}
 
 # ============================================================================
 # CONFIGURAÇÃO DE IA - OpenAI ou Groq
@@ -850,6 +851,52 @@ def init_db():
             FOREIGN KEY (workspace_id) REFERENCES workspaces (id),
             FOREIGN KEY (client_id) REFERENCES clientes (id),
             FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
+
+    # Caixa de entrada WhatsApp por conversa (workspace)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS whatsapp_inbox_conversations (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            phone TEXT NOT NULL,
+            client_id INTEGER,
+            status TEXT DEFAULT 'novo', -- novo | aguardando | resolvido
+            unread_count INTEGER DEFAULT 0,
+            first_inbound_at TIMESTAMP,
+            last_inbound_at TIMESTAMP,
+            first_response_at TIMESTAMP,
+            last_outbound_at TIMESTAMP,
+            last_message_text TEXT,
+            last_message_direction TEXT, -- inbound | outbound
+            last_message_at TIMESTAMP,
+            resolved_at TIMESTAMP,
+            assigned_user_id INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            UNIQUE(workspace_id, phone),
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id),
+            FOREIGN KEY (client_id) REFERENCES clientes (id),
+            FOREIGN KEY (assigned_user_id) REFERENCES users (id)
+        )
+    ''')
+
+    # Campanhas agendadas de aviso via WhatsApp da plataforma
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS whatsapp_campaigns (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            mensagem TEXT NOT NULL,
+            workspace_ids TEXT, -- JSON array com IDs dos workspaces
+            somente_admins BOOLEAN DEFAULT 1,
+            scheduled_for TIMESTAMP NOT NULL,
+            status TEXT DEFAULT 'pendente', -- pendente | processando | enviado | parcial | falhou | cancelado
+            result_summary TEXT, -- JSON resumido do resultado
+            last_error TEXT,
+            processed_at TIMESTAMP,
+            created_by INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            updated_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (created_by) REFERENCES users (id)
         )
     ''')
 
@@ -2762,6 +2809,27 @@ def find_workspace_client_by_phone(db, workspace_id: int, phone: str) -> Optiona
     return None
 
 
+def find_workspace_user_by_phone(db, workspace_id: int, phone: str) -> Optional[Dict[str, Any]]:
+    """Localiza usuário do workspace pelo telefone, normalizando para comparacao."""
+    candidates = set(build_phone_candidates(phone))
+    if not candidates:
+        return None
+
+    rows = db.execute(
+        '''SELECT id, nome, telefone, role
+           FROM users
+           WHERE workspace_id = ? AND telefone IS NOT NULL AND TRIM(telefone) != ''',
+        (workspace_id,),
+    ).fetchall()
+
+    for row in rows:
+        normalized = normalize_phone_digits(row['telefone'])
+        if normalized in candidates:
+            return dict(row)
+
+    return None
+
+
 def ensure_platform_whatsapp_config(db) -> Dict[str, Any]:
     """Garante configuracao default do WhatsApp oficial da plataforma."""
     row = db.execute(
@@ -2912,8 +2980,17 @@ def send_workspace_whatsapp_message(
             message_text=message,
             provider_message_id=response.get('message_id'),
             status='sent' if success else 'failed',
-            commit=True,
+            commit=False,
         )
+        if success or response.get('message_id'):
+            upsert_whatsapp_inbox_conversation_outbound(
+                db=db,
+                workspace_id=workspace_id,
+                phone=phone,
+                message_text=message,
+                client_id=client_id,
+            )
+        db.commit()
     except Exception as log_error:
         print(f"[whatsapp] Falha ao registrar log de envio workspace: {log_error}")
 
@@ -3071,6 +3148,427 @@ def parse_bool(value: Any) -> bool:
         return value != 0
     text = str(value).strip().lower()
     return text in ('1', 'true', 'sim', 'yes', 'on')
+
+
+# ============================================================================
+# WHATSAPP - HELPERS (INBOX / CAMPANHAS)
+# ============================================================================
+
+def now_sql_timestamp() -> str:
+    return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+
+def parse_any_datetime(value: Any) -> Optional[datetime]:
+    """Converte datas em formatos ISO/SQLite para datetime local (naive)."""
+    if value is None:
+        return None
+
+    text = str(value).strip()
+    if not text:
+        return None
+
+    if text.endswith('Z'):
+        text = text[:-1] + '+00:00'
+
+    try:
+        parsed = datetime.fromisoformat(text)
+        if parsed.tzinfo:
+            parsed = parsed.astimezone().replace(tzinfo=None)
+        return parsed
+    except ValueError:
+        pass
+
+    formats = (
+        '%Y-%m-%d %H:%M:%S',
+        '%Y-%m-%d %H:%M:%S.%f',
+        '%Y-%m-%dT%H:%M:%S',
+        '%Y-%m-%dT%H:%M:%S.%f',
+        '%Y-%m-%d %H:%M',
+    )
+    for fmt in formats:
+        try:
+            return datetime.strptime(text, fmt)
+        except ValueError:
+            continue
+
+    return None
+
+
+def normalize_int_list(values: Any) -> List[int]:
+    """Normaliza lista de inteiros removendo inválidos e duplicados."""
+    if values is None:
+        return []
+
+    raw_items = values if isinstance(values, list) else [values]
+    normalized: List[int] = []
+    seen = set()
+    for item in raw_items:
+        try:
+            parsed = int(item)
+        except (TypeError, ValueError):
+            continue
+        if parsed <= 0 or parsed in seen:
+            continue
+        seen.add(parsed)
+        normalized.append(parsed)
+    return normalized
+
+
+def list_platform_notice_recipients_for_admin(
+    db,
+    workspace_ids: Optional[List[int]] = None,
+    somente_admins: bool = True,
+) -> List[Dict[str, Any]]:
+    """Lista destinatários para avisos da plataforma (super admin)."""
+    query = '''
+        SELECT u.id, u.nome, u.telefone, u.role, u.workspace_id, w.nome as workspace_nome
+        FROM users u
+        JOIN workspaces w ON w.id = u.workspace_id
+        WHERE u.telefone IS NOT NULL
+          AND TRIM(u.telefone) != ''
+    '''
+    params: List[Any] = []
+
+    if somente_admins:
+        query += " AND u.role IN ('admin', 'superadmin')"
+
+    normalized_workspace_ids = normalize_int_list(workspace_ids or [])
+    if normalized_workspace_ids:
+        placeholders = ','.join(['?'] * len(normalized_workspace_ids))
+        query += f' AND u.workspace_id IN ({placeholders})'
+        params.extend(normalized_workspace_ids)
+
+    query += ' ORDER BY w.nome ASC, u.nome ASC'
+    rows = db.execute(query, params).fetchall()
+    return [dict(row) for row in rows]
+
+
+def send_platform_notice_batch(
+    db,
+    sender_key: str,
+    mensagem: str,
+    destinatarios: List[Dict[str, Any]],
+) -> Dict[str, Any]:
+    """Envia aviso em lote e retorna relatório consolidado."""
+    resultados: List[Dict[str, Any]] = []
+    processados = 0
+    confirmados = 0
+    pendentes_confirmacao = 0
+    falhas = 0
+
+    for dest in destinatarios:
+        resposta = whatsapp_service.send_text_message(sender_key, dest.get('telefone'), mensagem)
+        sucesso = bool(resposta.get('success'))
+        delivery_confirmed = resposta.get('delivery_confirmed')
+
+        if sucesso:
+            processados += 1
+            if delivery_confirmed is True:
+                confirmados += 1
+            else:
+                pendentes_confirmacao += 1
+        else:
+            falhas += 1
+
+        try:
+            log_whatsapp_message(
+                db=db,
+                workspace_id=dest.get('workspace_id'),
+                client_id=None,
+                user_id=dest.get('id'),
+                channel='platform',
+                direction='outbound',
+                sender_key=sender_key,
+                recipient_phone=dest.get('telefone'),
+                message_text=mensagem,
+                provider_message_id=resposta.get('message_id'),
+                status=(
+                    'sent'
+                    if sucesso and delivery_confirmed is True
+                    else 'pending_confirmation'
+                    if sucesso
+                    else 'failed'
+                ),
+                commit=False,
+            )
+        except Exception as log_error:
+            print(f"[whatsapp] Falha ao registrar log de aviso plataforma: {log_error}")
+
+        resultados.append({
+            'id': dest.get('id'),
+            'nome': dest.get('nome'),
+            'telefone': dest.get('telefone'),
+            'role': dest.get('role'),
+            'workspace_id': dest.get('workspace_id'),
+            'workspace_nome': dest.get('workspace_nome'),
+            'sucesso': sucesso,
+            'erro': resposta.get('error') or resposta.get('erro'),
+            'message_id': resposta.get('message_id'),
+            'modo': resposta.get('modo'),
+            'url_wame': resposta.get('url_wame'),
+            'recipient_jid': resposta.get('recipient_jid'),
+            'delivery_confirmed': delivery_confirmed,
+            'recipient_exists': resposta.get('recipient_exists'),
+            'ack_status': resposta.get('ack_status'),
+            'ack_source': resposta.get('ack_source'),
+            'ack_timestamp': resposta.get('ack_timestamp'),
+            'warning': resposta.get('warning'),
+        })
+
+    try:
+        db.commit()
+    except Exception:
+        pass
+
+    return {
+        'sucesso': processados > 0,
+        'total': len(destinatarios),
+        'processados': processados,
+        'enviados': confirmados,
+        'confirmados': confirmados,
+        'pendentes_confirmacao': pendentes_confirmacao,
+        'falhas': falhas,
+        'resultados': resultados,
+    }
+
+
+def upsert_whatsapp_inbox_conversation_inbound(
+    db,
+    workspace_id: int,
+    phone: str,
+    message_text: str = '',
+    client_id: Optional[int] = None,
+) -> None:
+    """Atualiza/insere conversa de inbox quando chega mensagem do cliente."""
+    normalized_phone = normalize_phone_digits(phone)
+    if not normalized_phone:
+        return
+
+    now_value = now_sql_timestamp()
+    existing = db.execute(
+        'SELECT * FROM whatsapp_inbox_conversations WHERE workspace_id = ? AND phone = ? LIMIT 1',
+        (workspace_id, normalized_phone),
+    ).fetchone()
+
+    resolved_client_id = client_id
+    if resolved_client_id is None:
+        found_client = find_workspace_client_by_phone(db, workspace_id, normalized_phone)
+        resolved_client_id = found_client.get('id') if found_client else None
+
+    if existing:
+        existing_dict = dict(existing)
+        unread_count = max(int(existing_dict.get('unread_count') or 0) + 1, 1)
+        current_status = existing_dict.get('status') or 'novo'
+        new_status = current_status if current_status in WHATSAPP_INBOX_STATUS_VALUES else 'novo'
+        resolved_at = existing_dict.get('resolved_at')
+        if new_status == 'resolvido':
+            new_status = 'novo'
+            resolved_at = None
+
+        db.execute(
+            '''UPDATE whatsapp_inbox_conversations
+               SET client_id = ?,
+                   status = ?,
+                   unread_count = ?,
+                   last_inbound_at = ?,
+                   last_message_text = ?,
+                   last_message_direction = 'inbound',
+                   last_message_at = ?,
+                   resolved_at = ?,
+                   updated_at = ?
+               WHERE id = ?''',
+            (
+                resolved_client_id or existing_dict.get('client_id'),
+                new_status,
+                unread_count,
+                now_value,
+                (message_text or '')[:1000],
+                now_value,
+                resolved_at,
+                now_value,
+                existing_dict.get('id'),
+            ),
+        )
+        if not existing_dict.get('first_inbound_at'):
+            db.execute(
+                'UPDATE whatsapp_inbox_conversations SET first_inbound_at = ? WHERE id = ?',
+                (now_value, existing_dict.get('id')),
+            )
+        return
+
+    db.execute(
+        '''INSERT INTO whatsapp_inbox_conversations
+           (workspace_id, phone, client_id, status, unread_count, first_inbound_at,
+            last_inbound_at, last_message_text, last_message_direction, last_message_at,
+            created_at, updated_at)
+           VALUES (?, ?, ?, 'novo', 1, ?, ?, ?, 'inbound', ?, ?, ?)''',
+        (
+            workspace_id,
+            normalized_phone,
+            resolved_client_id,
+            now_value,
+            now_value,
+            (message_text or '')[:1000],
+            now_value,
+            now_value,
+            now_value,
+        ),
+    )
+
+
+def upsert_whatsapp_inbox_conversation_outbound(
+    db,
+    workspace_id: int,
+    phone: str,
+    message_text: str = '',
+    client_id: Optional[int] = None,
+) -> None:
+    """Atualiza/insere conversa de inbox quando o time envia mensagem ao cliente."""
+    normalized_phone = normalize_phone_digits(phone)
+    if not normalized_phone:
+        return
+
+    now_value = now_sql_timestamp()
+    existing = db.execute(
+        'SELECT * FROM whatsapp_inbox_conversations WHERE workspace_id = ? AND phone = ? LIMIT 1',
+        (workspace_id, normalized_phone),
+    ).fetchone()
+
+    resolved_client_id = client_id
+    if resolved_client_id is None:
+        found_client = find_workspace_client_by_phone(db, workspace_id, normalized_phone)
+        resolved_client_id = found_client.get('id') if found_client else None
+
+    if existing:
+        existing_dict = dict(existing)
+        first_response_at = existing_dict.get('first_response_at')
+        if not first_response_at and existing_dict.get('last_inbound_at'):
+            first_response_at = now_value
+
+        current_status = existing_dict.get('status') or 'novo'
+        if current_status not in WHATSAPP_INBOX_STATUS_VALUES:
+            current_status = 'novo'
+        if current_status == 'novo':
+            current_status = 'aguardando'
+
+        db.execute(
+            '''UPDATE whatsapp_inbox_conversations
+               SET client_id = ?,
+                   status = ?,
+                   unread_count = 0,
+                   first_response_at = ?,
+                   last_outbound_at = ?,
+                   last_message_text = ?,
+                   last_message_direction = 'outbound',
+                   last_message_at = ?,
+                   updated_at = ?
+               WHERE id = ?''',
+            (
+                resolved_client_id or existing_dict.get('client_id'),
+                current_status,
+                first_response_at,
+                now_value,
+                (message_text or '')[:1000],
+                now_value,
+                now_value,
+                existing_dict.get('id'),
+            ),
+        )
+        return
+
+    db.execute(
+        '''INSERT INTO whatsapp_inbox_conversations
+           (workspace_id, phone, client_id, status, unread_count, first_response_at,
+            last_outbound_at, last_message_text, last_message_direction, last_message_at,
+            created_at, updated_at)
+           VALUES (?, ?, ?, 'aguardando', 0, ?, ?, ?, 'outbound', ?, ?, ?)''',
+        (
+            workspace_id,
+            normalized_phone,
+            resolved_client_id,
+            now_value,
+            now_value,
+            (message_text or '')[:1000],
+            now_value,
+            now_value,
+            now_value,
+        ),
+    )
+
+
+def format_duration_minutes(total_minutes: Optional[int]) -> str:
+    if total_minutes is None:
+        return '-'
+    if total_minutes < 60:
+        return f'{total_minutes} min'
+    hours = total_minutes // 60
+    minutes = total_minutes % 60
+    if minutes == 0:
+        return f'{hours}h'
+    return f'{hours}h {minutes}m'
+
+
+def compute_whatsapp_inbox_sla(conversation: Dict[str, Any]) -> Dict[str, Any]:
+    """Calcula SLA de atendimento por conversa."""
+    status = (conversation.get('status') or 'novo').strip().lower()
+    if status not in WHATSAPP_INBOX_STATUS_VALUES:
+        status = 'novo'
+
+    if status == 'resolvido':
+        return {
+            'sla_minutes': None,
+            'sla_label': 'Resolvido',
+            'sla_level': 'resolved',
+            'response_minutes': None,
+            'response_label': '-',
+        }
+
+    reference = parse_any_datetime(conversation.get('last_inbound_at') or conversation.get('last_message_at'))
+    sla_minutes = None
+    if reference:
+        sla_minutes = max(int((datetime.now() - reference).total_seconds() // 60), 0)
+
+    if sla_minutes is None:
+        sla_level = 'ok'
+    elif sla_minutes <= 30:
+        sla_level = 'ok'
+    elif sla_minutes <= 120:
+        sla_level = 'attention'
+    else:
+        sla_level = 'critical'
+
+    first_inbound = parse_any_datetime(conversation.get('first_inbound_at'))
+    first_response = parse_any_datetime(conversation.get('first_response_at'))
+    response_minutes = None
+    if first_inbound and first_response:
+        response_minutes = max(int((first_response - first_inbound).total_seconds() // 60), 0)
+
+    return {
+        'sla_minutes': sla_minutes,
+        'sla_label': format_duration_minutes(sla_minutes),
+        'sla_level': sla_level,
+        'response_minutes': response_minutes,
+        'response_label': format_duration_minutes(response_minutes),
+    }
+
+
+def serialize_whatsapp_campaign_row(row: Any) -> Dict[str, Any]:
+    """Serializa linha de campanha com parsing de campos JSON."""
+    item = dict(row)
+
+    try:
+        workspace_ids = json.loads(item.get('workspace_ids') or '[]')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        workspace_ids = []
+    item['workspace_ids'] = normalize_int_list(workspace_ids)
+    item['somente_admins'] = parse_bool(item.get('somente_admins', True))
+
+    try:
+        item['result_summary'] = json.loads(item.get('result_summary') or '{}')
+    except (TypeError, ValueError, json.JSONDecodeError):
+        item['result_summary'] = {}
+
+    return item
 
 
 # ============================================================================
@@ -3928,6 +4426,109 @@ def verificar_prazos_job():
             print(f"[whatsapp] Lembretes de prazo enviados: {total_enviados}")
 
 
+def processar_campanhas_whatsapp_agendadas_job():
+    """Processa campanhas de aviso WhatsApp agendadas pela superadmin."""
+    with app.app_context():
+        db = get_db()
+        now_value = now_sql_timestamp()
+        rows = db.execute(
+            '''SELECT *
+               FROM whatsapp_campaigns
+               WHERE status = 'pendente'
+                 AND scheduled_for <= ?
+               ORDER BY scheduled_for ASC, id ASC
+               LIMIT 20''',
+            (now_value,),
+        ).fetchall()
+
+        if not rows:
+            return
+
+        for row in rows:
+            campaign_id = int(row['id'])
+
+            claimed = db.execute(
+                '''UPDATE whatsapp_campaigns
+                   SET status = 'processando',
+                       updated_at = ?
+                   WHERE id = ? AND status = 'pendente' ''',
+                (now_sql_timestamp(), campaign_id),
+            )
+            db.commit()
+            if claimed.rowcount == 0:
+                continue
+
+            try:
+                campaign = serialize_whatsapp_campaign_row(row)
+                if not whatsapp_service.is_configured():
+                    raise RuntimeError('Serviço WhatsApp não configurado')
+
+                platform_config = ensure_platform_whatsapp_config(db)
+                if not platform_config.get('enabled'):
+                    raise RuntimeError('WhatsApp da plataforma desativado')
+
+                sender_key = platform_config.get('session_key') or PLATFORM_WHATSAPP_SESSION_KEY
+                recipients = list_platform_notice_recipients_for_admin(
+                    db=db,
+                    workspace_ids=campaign.get('workspace_ids') or [],
+                    somente_admins=campaign.get('somente_admins', True),
+                )
+                if not recipients:
+                    raise RuntimeError('Nenhum destinatário com telefone encontrado')
+
+                report = send_platform_notice_batch(
+                    db=db,
+                    sender_key=sender_key,
+                    mensagem=campaign.get('mensagem') or '',
+                    destinatarios=recipients,
+                )
+
+                processados = int(report.get('processados', 0) or 0)
+                falhas = int(report.get('falhas', 0) or 0)
+                final_status = 'falhou'
+                if processados > 0 and falhas == 0:
+                    final_status = 'enviado'
+                elif processados > 0:
+                    final_status = 'parcial'
+
+                summary = {
+                    'total': report.get('total', 0),
+                    'processados': processados,
+                    'enviados': report.get('enviados', 0),
+                    'confirmados': report.get('confirmados', 0),
+                    'pendentes_confirmacao': report.get('pendentes_confirmacao', 0),
+                    'falhas': falhas,
+                }
+                db.execute(
+                    '''UPDATE whatsapp_campaigns
+                       SET status = ?,
+                           result_summary = ?,
+                           last_error = NULL,
+                           processed_at = ?,
+                           updated_at = ?
+                       WHERE id = ?''',
+                    (
+                        final_status,
+                        json.dumps(summary, ensure_ascii=False),
+                        now_sql_timestamp(),
+                        now_sql_timestamp(),
+                        campaign_id,
+                    ),
+                )
+                db.commit()
+            except Exception as error:
+                db.execute(
+                    '''UPDATE whatsapp_campaigns
+                       SET status = 'falhou',
+                           last_error = ?,
+                           updated_at = ?
+                       WHERE id = ?''',
+                    (str(error), now_sql_timestamp(), campaign_id),
+                )
+                db.commit()
+                print(f"[whatsapp-campanha] Falha ao processar campanha {campaign_id}: {error}")
+
+
 def enviar_resumo_diario_whatsapp_job():
     """Job para envio de resumo diário do escritório via WhatsApp."""
     with app.app_context():
@@ -4005,11 +4606,21 @@ scheduler.add_job(
     replace_existing=True
 )
 
+# Job de campanhas agendadas WhatsApp (checa a cada minuto)
+scheduler.add_job(
+    processar_campanhas_whatsapp_agendadas_job,
+    'cron',
+    minute='*',
+    id='whatsapp_campanhas_agendadas',
+    replace_existing=True
+)
+
 print(f"[{datetime.now()}] Agendador iniciado. Jobs configurados:")
 print(f"  - PJe Monitor: 06:00 diariamente")
 print(f"  - Verificar Prazos: 08:00 diariamente")
 print(f"  - Datajud Monitor: 08:00 e 17:30 diariamente")
 print(f"  - WhatsApp Resumo Diário: checagem a cada minuto")
+print(f"  - WhatsApp Campanhas Agendadas: checagem a cada minuto")
 
 scheduler.start()
 
@@ -9371,6 +9982,185 @@ def admin_whatsapp_platform_disconnect():
 
     return jsonify({'sucesso': False, 'erro': resultado.get('error') or resultado.get('erro') or 'Falha ao desconectar.'}), 500
 
+
+@app.route('/api/admin/whatsapp-platform/enviar-aviso', methods=['POST'])
+@require_superadmin
+def admin_whatsapp_platform_enviar_aviso():
+    """
+    Dispara aviso customizado via WhatsApp da plataforma.
+    BODY:
+    {
+        "mensagem": "obrigatorio",
+        "workspace_ids": [1,2],   # opcional (vazio = todos)
+        "somente_admins": true    # opcional
+    }
+    """
+    if not whatsapp_service.is_configured():
+        return jsonify({'sucesso': False, 'erro': 'Serviço WhatsApp não configurado'}), 503
+
+    data = request.get_json() or {}
+    mensagem = (data.get('mensagem') or '').strip()
+    if not mensagem:
+        return jsonify({'sucesso': False, 'erro': 'Campo mensagem é obrigatório'}), 400
+    if len(mensagem) > 2000:
+        return jsonify({'sucesso': False, 'erro': 'Mensagem muito longa (máximo 2000 caracteres)'}), 400
+
+    workspace_ids_raw = data.get('workspace_ids') or []
+    workspace_ids: List[int] = []
+    for value in workspace_ids_raw:
+        try:
+            workspace_ids.append(int(value))
+        except (TypeError, ValueError):
+            return jsonify({'sucesso': False, 'erro': f'workspace_id inválido: {value}'}), 400
+
+    somente_admins = parse_bool(data.get('somente_admins', True))
+
+    db = get_db()
+    platform_config = ensure_platform_whatsapp_config(db)
+    if not platform_config.get('enabled'):
+        return jsonify({'sucesso': False, 'erro': 'WhatsApp da plataforma desativado'}), 400
+
+    sender_key = platform_config.get('session_key') or PLATFORM_WHATSAPP_SESSION_KEY
+
+    destinatarios = list_platform_notice_recipients_for_admin(
+        db=db,
+        workspace_ids=workspace_ids,
+        somente_admins=somente_admins,
+    )
+
+    if not destinatarios:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum destinatário com telefone encontrado'}), 400
+
+    report = send_platform_notice_batch(
+        db=db,
+        sender_key=sender_key,
+        mensagem=mensagem,
+        destinatarios=destinatarios,
+    )
+
+    return jsonify({
+        **report,
+        'filtros': {
+            'workspace_ids': workspace_ids,
+            'somente_admins': somente_admins,
+        },
+    })
+
+
+@app.route('/api/admin/whatsapp-platform/campanhas', methods=['GET'])
+@require_superadmin
+def admin_whatsapp_platform_listar_campanhas():
+    """Lista campanhas agendadas de WhatsApp da plataforma."""
+    db = get_db()
+
+    status = (request.args.get('status') or '').strip().lower()
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    query = '''
+        SELECT c.*, u.nome as created_by_nome
+        FROM whatsapp_campaigns c
+        LEFT JOIN users u ON u.id = c.created_by
+        WHERE 1=1
+    '''
+    params: List[Any] = []
+
+    if status:
+        query += ' AND c.status = ?'
+        params.append(status)
+
+    query += ' ORDER BY c.id DESC LIMIT ?'
+    params.append(limit)
+    rows = db.execute(query, params).fetchall()
+
+    return jsonify({
+        'sucesso': True,
+        'campanhas': [serialize_whatsapp_campaign_row(r) for r in rows],
+    })
+
+
+@app.route('/api/admin/whatsapp-platform/campanhas', methods=['POST'])
+@require_superadmin
+def admin_whatsapp_platform_agendar_campanha():
+    """Agenda envio de aviso via WhatsApp da plataforma."""
+    data = request.get_json() or {}
+
+    mensagem = (data.get('mensagem') or '').strip()
+    if not mensagem:
+        return jsonify({'sucesso': False, 'erro': 'Campo mensagem é obrigatório'}), 400
+    if len(mensagem) > 2000:
+        return jsonify({'sucesso': False, 'erro': 'Mensagem muito longa (máximo 2000 caracteres)'}), 400
+
+    scheduled_for_raw = data.get('scheduled_for')
+    scheduled_for_dt = parse_any_datetime(scheduled_for_raw)
+    if not scheduled_for_dt:
+        return jsonify({'sucesso': False, 'erro': 'Campo scheduled_for inválido'}), 400
+    if scheduled_for_dt <= datetime.now():
+        return jsonify({'sucesso': False, 'erro': 'Data/hora do agendamento deve estar no futuro'}), 400
+
+    workspace_ids = normalize_int_list(data.get('workspace_ids') or [])
+    somente_admins = parse_bool(data.get('somente_admins', True))
+    db = get_db()
+
+    cursor = db.execute(
+        '''INSERT INTO whatsapp_campaigns
+           (mensagem, workspace_ids, somente_admins, scheduled_for, status, created_by, created_at, updated_at)
+           VALUES (?, ?, ?, ?, 'pendente', ?, ?, ?)''',
+        (
+            mensagem,
+            json.dumps(workspace_ids, ensure_ascii=False),
+            1 if somente_admins else 0,
+            scheduled_for_dt.strftime('%Y-%m-%d %H:%M:%S'),
+            g.auth.get('user_id'),
+            now_sql_timestamp(),
+            now_sql_timestamp(),
+        ),
+    )
+    db.commit()
+
+    row = db.execute(
+        '''SELECT c.*, u.nome as created_by_nome
+           FROM whatsapp_campaigns c
+           LEFT JOIN users u ON u.id = c.created_by
+           WHERE c.id = ?''',
+        (cursor.lastrowid,),
+    ).fetchone()
+
+    return jsonify({
+        'sucesso': True,
+        'campanha': serialize_whatsapp_campaign_row(row) if row else None,
+    }), 201
+
+
+@app.route('/api/admin/whatsapp-platform/campanhas/<int:campaign_id>/cancelar', methods=['POST'])
+@require_superadmin
+def admin_whatsapp_platform_cancelar_campanha(campaign_id: int):
+    """Cancela campanha pendente."""
+    db = get_db()
+    row = db.execute(
+        'SELECT id, status FROM whatsapp_campaigns WHERE id = ? LIMIT 1',
+        (campaign_id,),
+    ).fetchone()
+    if not row:
+        return jsonify({'sucesso': False, 'erro': 'Campanha não encontrada'}), 404
+
+    if row['status'] not in ('pendente', 'falhou'):
+        return jsonify({'sucesso': False, 'erro': f'Campanha em status "{row["status"]}" não pode ser cancelada'}), 400
+
+    db.execute(
+        '''UPDATE whatsapp_campaigns
+           SET status = 'cancelado',
+               updated_at = ?
+           WHERE id = ?''',
+        (now_sql_timestamp(), campaign_id),
+    )
+    db.commit()
+    return jsonify({'sucesso': True})
+
+
 @app.route('/api/whatsapp/enviar', methods=['POST'])
 @require_auth
 def whatsapp_enviar():
@@ -9434,6 +10224,245 @@ def whatsapp_enviar():
 
     erro = resultado.get('error', 'Erro desconhecido')
     return jsonify({'sucesso': False, 'erro': erro, 'url_wame': resultado.get('url_wame')}), 500
+
+
+@app.route('/api/whatsapp/enviar-personalizado', methods=['POST'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_enviar_personalizado():
+    """
+    Envia mensagem manual usando o WhatsApp conectado do usuario autenticado.
+    BODY:
+    {
+        "mensagem": "obrigatorio",
+        "destino": "cliente|equipe|telefone",
+        "cliente_id": 123,                 # opcional se destino=cliente
+        "telefone": "5511999999999",       # opcional se destino=cliente/obrigatorio se destino=telefone
+        "user_ids": [1,2],                 # opcional se destino=equipe
+        "somente_alerta_whatsapp": false   # opcional se destino=equipe
+    }
+    """
+    if not whatsapp_service.is_configured():
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Serviço WhatsApp não configurado'
+        }), 503
+
+    data = request.get_json() or {}
+    mensagem = (data.get('mensagem') or '').strip()
+    if not mensagem:
+        return jsonify({'sucesso': False, 'erro': 'Campo mensagem é obrigatório'}), 400
+    if len(mensagem) > 2000:
+        return jsonify({'sucesso': False, 'erro': 'Mensagem muito longa (máximo 2000 caracteres)'}), 400
+
+    destino = (data.get('destino') or 'cliente').strip().lower()
+    if destino not in ('cliente', 'equipe', 'telefone'):
+        return jsonify({'sucesso': False, 'erro': 'Destino inválido. Use cliente, equipe ou telefone'}), 400
+
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+    sender_user_id = g.auth['user_id']
+
+    def _single_response(resultado: Dict[str, Any], recipient_payload: Dict[str, Any]) -> Dict[str, Any]:
+        sucesso = bool(resultado.get('success'))
+        delivery_confirmed = resultado.get('delivery_confirmed')
+        confirmados = 1 if sucesso and delivery_confirmed is True else 0
+        pendentes = 1 if sucesso and delivery_confirmed is not True else 0
+        return {
+            'sucesso': sucesso,
+            'total': 1,
+            'processados': 1 if sucesso else 0,
+            'enviados': confirmados,
+            'confirmados': confirmados,
+            'pendentes_confirmacao': pendentes,
+            'falhas': 0 if sucesso else 1,
+            'resultados': [
+                {
+                    **recipient_payload,
+                    'sucesso': sucesso,
+                    'erro': resultado.get('error') or resultado.get('erro'),
+                    'message_id': resultado.get('message_id'),
+                    'modo': resultado.get('modo'),
+                    'url_wame': resultado.get('url_wame'),
+                    'recipient_jid': resultado.get('recipient_jid'),
+                    'delivery_confirmed': delivery_confirmed,
+                    'recipient_exists': resultado.get('recipient_exists'),
+                    'ack_status': resultado.get('ack_status'),
+                    'ack_source': resultado.get('ack_source'),
+                    'ack_timestamp': resultado.get('ack_timestamp'),
+                    'warning': resultado.get('warning'),
+                }
+            ],
+        }
+
+    if destino == 'cliente':
+        cliente = None
+        cliente_id_raw = data.get('cliente_id')
+        telefone_raw = (data.get('telefone') or '').strip()
+
+        if cliente_id_raw not in (None, ''):
+            try:
+                cliente_id = int(cliente_id_raw)
+            except (TypeError, ValueError):
+                return jsonify({'sucesso': False, 'erro': 'cliente_id inválido'}), 400
+
+            cliente_row = db.execute(
+                '''SELECT id, nome, telefone
+                   FROM clientes
+                   WHERE id = ? AND workspace_id = ?''',
+                (cliente_id, workspace_id),
+            ).fetchone()
+            if cliente_row:
+                cliente = dict(cliente_row)
+        elif telefone_raw:
+            cliente = find_workspace_client_by_phone(db, workspace_id, telefone_raw)
+        else:
+            return jsonify({
+                'sucesso': False,
+                'erro': 'Informe cliente_id ou telefone quando o destino for cliente'
+            }), 400
+
+        if not cliente:
+            return jsonify({'sucesso': False, 'erro': 'Cliente não encontrado no workspace'}), 404
+
+        telefone_cliente = (cliente.get('telefone') or '').strip()
+        if not telefone_cliente:
+            return jsonify({'sucesso': False, 'erro': 'Cliente selecionado não possui telefone'}), 400
+
+        resultado = send_workspace_whatsapp_message(
+            db=db,
+            workspace_id=workspace_id,
+            phone=telefone_cliente,
+            message=mensagem,
+            client_id=cliente.get('id'),
+            sender_user_id=sender_user_id,
+        )
+        payload = _single_response(
+            resultado,
+            {
+                'id': cliente.get('id'),
+                'nome': cliente.get('nome'),
+                'telefone': telefone_cliente,
+                'tipo_destino': 'cliente',
+            },
+        )
+        status_code = 200 if payload.get('sucesso') else 500
+        return jsonify(payload), status_code
+
+    if destino == 'equipe':
+        user_ids_raw = data.get('user_ids') or []
+        user_ids: List[int] = []
+        for value in user_ids_raw:
+            try:
+                user_ids.append(int(value))
+            except (TypeError, ValueError):
+                return jsonify({'sucesso': False, 'erro': f'user_id inválido: {value}'}), 400
+
+        destinatarios = listar_usuarios_workspace_com_telefone(
+            db=db,
+            workspace_id=workspace_id,
+            user_ids=user_ids if user_ids else None,
+            somente_alerta_whatsapp=parse_bool(data.get('somente_alerta_whatsapp', False)),
+        )
+        if not destinatarios:
+            return jsonify({'sucesso': False, 'erro': 'Nenhum integrante com telefone cadastrado'}), 400
+
+        resultados: List[Dict[str, Any]] = []
+        processados = 0
+        confirmados = 0
+        pendentes_confirmacao = 0
+        falhas = 0
+
+        for contato in destinatarios:
+            resposta = send_workspace_whatsapp_message(
+                db=db,
+                workspace_id=workspace_id,
+                phone=contato.get('telefone'),
+                message=mensagem,
+                client_id=None,
+                sender_user_id=sender_user_id,
+            )
+            sucesso = bool(resposta.get('success'))
+            delivery_confirmed = resposta.get('delivery_confirmed')
+
+            if sucesso:
+                processados += 1
+                if delivery_confirmed is True:
+                    confirmados += 1
+                else:
+                    pendentes_confirmacao += 1
+            else:
+                falhas += 1
+
+            resultados.append({
+                'id': contato.get('id'),
+                'nome': contato.get('nome'),
+                'telefone': contato.get('telefone'),
+                'tipo_destino': 'equipe',
+                'sucesso': sucesso,
+                'erro': resposta.get('error') or resposta.get('erro'),
+                'message_id': resposta.get('message_id'),
+                'modo': resposta.get('modo'),
+                'url_wame': resposta.get('url_wame'),
+                'recipient_jid': resposta.get('recipient_jid'),
+                'delivery_confirmed': delivery_confirmed,
+                'recipient_exists': resposta.get('recipient_exists'),
+                'ack_status': resposta.get('ack_status'),
+                'ack_source': resposta.get('ack_source'),
+                'ack_timestamp': resposta.get('ack_timestamp'),
+                'warning': resposta.get('warning'),
+            })
+
+        return jsonify({
+            'sucesso': processados > 0,
+            'total': len(destinatarios),
+            'processados': processados,
+            'enviados': confirmados,
+            'confirmados': confirmados,
+            'pendentes_confirmacao': pendentes_confirmacao,
+            'falhas': falhas,
+            'resultados': resultados,
+        })
+
+    telefone_destino = (data.get('telefone') or '').strip()
+    if not telefone_destino:
+        return jsonify({'sucesso': False, 'erro': 'Telefone é obrigatório para destino=telefone'}), 400
+
+    cliente = find_workspace_client_by_phone(db, workspace_id, telefone_destino)
+    user_contact = find_workspace_user_by_phone(db, workspace_id, telefone_destino)
+    resultado = send_workspace_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        phone=telefone_destino,
+        message=mensagem,
+        client_id=cliente.get('id') if cliente else None,
+        sender_user_id=sender_user_id,
+    )
+
+    recipient_name = None
+    recipient_type = 'telefone'
+    recipient_id = None
+    if cliente:
+        recipient_type = 'cliente'
+        recipient_name = cliente.get('nome')
+        recipient_id = cliente.get('id')
+    elif user_contact:
+        recipient_type = 'equipe'
+        recipient_name = user_contact.get('nome')
+        recipient_id = user_contact.get('id')
+
+    payload = _single_response(
+        resultado,
+        {
+            'id': recipient_id,
+            'nome': recipient_name,
+            'telefone': telefone_destino,
+            'tipo_destino': recipient_type,
+        },
+    )
+    status_code = 200 if payload.get('sucesso') else 500
+    return jsonify(payload), status_code
+
 
 @app.route('/api/processos/<int:id>/whatsapp/enviar', methods=['POST'])
 @require_auth
@@ -9898,6 +10927,170 @@ def whatsapp_workspace_enviar():
 
     return jsonify({'sucesso': (relatorio.get('processados', 0) > 0), **relatorio})
 
+
+@app.route('/api/whatsapp/inbox/conversas', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_inbox_conversas():
+    """Lista conversas da caixa de entrada WhatsApp do workspace."""
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+
+    status = (request.args.get('status') or '').strip().lower()
+    search = (request.args.get('search') or '').strip().lower()
+
+    try:
+        limit = int(request.args.get('limit', 100))
+    except (TypeError, ValueError):
+        limit = 100
+    limit = max(1, min(limit, 300))
+
+    query = '''
+        SELECT c.*,
+               cli.nome as cliente_nome,
+               cli.telefone as cliente_telefone,
+               u.nome as assigned_user_nome
+        FROM whatsapp_inbox_conversations c
+        LEFT JOIN clientes cli ON cli.id = c.client_id
+        LEFT JOIN users u ON u.id = c.assigned_user_id
+        WHERE c.workspace_id = ?
+    '''
+    params: List[Any] = [workspace_id]
+
+    if status in WHATSAPP_INBOX_STATUS_VALUES:
+        query += ' AND c.status = ?'
+        params.append(status)
+
+    if search:
+        query += ' AND (LOWER(COALESCE(cli.nome, "")) LIKE ? OR REPLACE(c.phone, " ", "") LIKE ?)'
+        like_value = f'%{search}%'
+        phone_like = f'%{re.sub(r"\D", "", search)}%'
+        params.extend([like_value, phone_like])
+
+    query += ' ORDER BY COALESCE(c.last_message_at, c.updated_at) DESC LIMIT ?'
+    params.append(limit)
+    rows = db.execute(query, params).fetchall()
+
+    conversas: List[Dict[str, Any]] = []
+    for row in rows:
+        item = dict(row)
+        item['status'] = (item.get('status') or 'novo').lower()
+        if item['status'] not in WHATSAPP_INBOX_STATUS_VALUES:
+            item['status'] = 'novo'
+
+        if not item.get('client_id'):
+            found = find_workspace_client_by_phone(db, workspace_id, item.get('phone') or '')
+            if found:
+                item['client_id'] = found.get('id')
+                item['cliente_nome'] = found.get('nome')
+
+        sla = compute_whatsapp_inbox_sla(item)
+        item.update(sla)
+        conversas.append(item)
+
+    return jsonify({
+        'sucesso': True,
+        'total': len(conversas),
+        'conversas': conversas,
+    })
+
+
+@app.route('/api/whatsapp/inbox/conversas/<int:conversation_id>/status', methods=['PUT'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_inbox_conversa_status_update(conversation_id: int):
+    """Atualiza status/tag da conversa (novo, aguardando, resolvido)."""
+    data = request.get_json() or {}
+    new_status = (data.get('status') or '').strip().lower()
+    if new_status not in WHATSAPP_INBOX_STATUS_VALUES:
+        return jsonify({'sucesso': False, 'erro': 'Status inválido. Use novo, aguardando ou resolvido'}), 400
+
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+    row = db.execute(
+        '''SELECT *
+           FROM whatsapp_inbox_conversations
+           WHERE id = ? AND workspace_id = ?''',
+        (conversation_id, workspace_id),
+    ).fetchone()
+    if not row:
+        return jsonify({'sucesso': False, 'erro': 'Conversa não encontrada'}), 404
+
+    now_value = now_sql_timestamp()
+    unread_count = 0 if new_status == 'resolvido' else int(row['unread_count'] or 0)
+    resolved_at = now_value if new_status == 'resolvido' else None
+    db.execute(
+        '''UPDATE whatsapp_inbox_conversations
+           SET status = ?,
+               unread_count = ?,
+               resolved_at = ?,
+               updated_at = ?
+           WHERE id = ?''',
+        (new_status, unread_count, resolved_at, now_value, conversation_id),
+    )
+    db.commit()
+
+    updated = db.execute(
+        'SELECT * FROM whatsapp_inbox_conversations WHERE id = ?',
+        (conversation_id,),
+    ).fetchone()
+
+    payload = dict(updated) if updated else dict(row)
+    payload.update(compute_whatsapp_inbox_sla(payload))
+    return jsonify({'sucesso': True, 'conversa': payload})
+
+
+@app.route('/api/whatsapp/inbox/conversas/<int:conversation_id>/mensagens', methods=['GET'])
+@require_auth
+@require_recurso('whatsapp')
+def whatsapp_inbox_conversa_mensagens(conversation_id: int):
+    """Lista mensagens (inbound/outbound) da conversa de inbox."""
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+
+    conversa = db.execute(
+        '''SELECT id, workspace_id, phone
+           FROM whatsapp_inbox_conversations
+           WHERE id = ? AND workspace_id = ?''',
+        (conversation_id, workspace_id),
+    ).fetchone()
+    if not conversa:
+        return jsonify({'sucesso': False, 'erro': 'Conversa não encontrada'}), 404
+
+    try:
+        limit = int(request.args.get('limit', 80))
+    except (TypeError, ValueError):
+        limit = 80
+    limit = max(1, min(limit, 300))
+
+    phone = conversa['phone']
+    candidates = build_phone_candidates(phone)
+    if not candidates:
+        candidates = [normalize_phone_digits(phone)]
+
+    placeholders = ','.join(['?'] * len(candidates))
+    query = f'''
+        SELECT id, direction, sender_phone, recipient_phone, message_text, status, created_at, provider_message_id
+        FROM whatsapp_message_log
+        WHERE workspace_id = ?
+          AND channel = 'workspace'
+          AND (
+            REPLACE(COALESCE(sender_phone, ''), ' ', '') IN ({placeholders})
+            OR REPLACE(COALESCE(recipient_phone, ''), ' ', '') IN ({placeholders})
+          )
+        ORDER BY id DESC
+        LIMIT ?
+    '''
+    params: List[Any] = [workspace_id]
+    params.extend(candidates)
+    params.extend(candidates)
+    params.append(limit)
+    rows = db.execute(query, params).fetchall()
+
+    mensagens = [dict(r) for r in rows][::-1]
+    return jsonify({'sucesso': True, 'mensagens': mensagens})
+
+
 @app.route('/api/whatsapp/automacoes/config', methods=['GET'])
 @require_auth
 @require_recurso('whatsapp')
@@ -10356,6 +11549,18 @@ def whatsapp_inbound_webhook():
         )
     except Exception as error:
         print(f"Erro ao registrar log inbound WhatsApp: {error}")
+
+    try:
+        upsert_whatsapp_inbox_conversation_inbound(
+            db=db,
+            workspace_id=workspace_id,
+            phone=from_phone,
+            message_text=text or '',
+            client_id=client_id,
+        )
+        db.commit()
+    except Exception as error:
+        print(f"Erro ao atualizar inbox WhatsApp inbound: {error}")
 
     # Notifica admins do workspace sobre nova mensagem
     try:
