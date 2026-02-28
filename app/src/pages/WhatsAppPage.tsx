@@ -22,8 +22,8 @@ import { Button } from '@/components/ui/button';
 import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
 import { Input } from '@/components/ui/input';
 import { Textarea } from '@/components/ui/textarea';
-import {
-  whatsapp,
+import { whatsapp } from '@/services/whatsapp';
+import type {
   WhatsAppStatus,
   WhatsAppAutomacaoConfig,
   WhatsAppSenderStatus,

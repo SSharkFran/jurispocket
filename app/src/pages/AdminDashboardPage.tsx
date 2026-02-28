@@ -14,7 +14,8 @@ import { ScrollArea } from '@/components/ui/scroll-area';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
 import { toast } from 'sonner';
-import { whatsappPlatform, WhatsAppCampaign, WhatsAppPlatformConfig } from '@/services/whatsapp';
+import { whatsappPlatform } from '@/services/whatsapp';
+import type { WhatsAppCampaign, WhatsAppPlatformConfig } from '@/services/whatsapp';
 import { 
   Users, 
   Crown, 
