@@ -10766,44 +10766,98 @@ def admin_restaurar_backup():
     tabelas_restaurar = [t for t in tabelas_selecionadas if t in tabelas_permitidas]
     
     try:
+        # Em modo replace, limpar tabelas antes da importacao para evitar duplicidade
+        # e permitir restauracao fiel do snapshot.
+        if modo == 'replace':
+            db.execute('PRAGMA foreign_keys = OFF')
+            for tabela in reversed(tabelas_restaurar):
+                if tabela in ['planos', 'configuracoes_globais']:
+                    continue
+                try:
+                    db.execute(f'DELETE FROM {tabela}')
+                    try:
+                        db.execute('DELETE FROM sqlite_sequence WHERE name = ?', (tabela,))
+                    except Exception:
+                        # sqlite_sequence pode nao existir dependendo do schema
+                        pass
+                except Exception as e:
+                    erros.append(f'Erro ao limpar {tabela}: {str(e)}')
+                    continue
+
         for tabela in tabelas_restaurar:
             dados = backup['tabelas'].get(tabela, [])
             
             if not isinstance(dados, list) or len(dados) == 0:
                 resultados[tabela] = {'status': 'ignorado', 'mensagem': 'Sem dados para restaurar'}
                 continue
-            
-            # Em modo replace, limpa a tabela primeiro (exceto tabelas críticas)
-            if modo == 'replace' and tabela not in ['planos', 'configuracoes_globais']:
-                try:
-                    db.execute(f'DELETE FROM {tabela}')
-                except Exception as e:
-                    erros.append(f'Erro ao limpar {tabela}: {str(e)}')
-                    continue
-            
+
             registros_importados = 0
+            registros_atualizados = 0
             registros_falhos = 0
+
+            # Estrutura da tabela de destino (somente colunas existentes)
+            table_info = db.execute(f'PRAGMA table_info({tabela})').fetchall()
+            colunas_tabela = {col['name'] for col in table_info}
             
             for registro in dados:
                 try:
-                    # Remover campos auto-gerados
-                    registro_limpo = {k: v for k, v in registro.items() 
-                                      if k not in ['id', 'created_at', 'updated_at']}
-                    
+                    # Manter somente colunas que existem na tabela destino
+                    registro_limpo = {k: v for k, v in registro.items() if k in colunas_tabela}
+
                     if not registro_limpo:
                         continue
-                    
+
                     colunas = ', '.join(registro_limpo.keys())
                     placeholders = ', '.join(['?' for _ in registro_limpo])
                     valores = list(registro_limpo.values())
-                    
-                    db.execute(f'''
+
+                    # MERGE idempotente:
+                    # 1) Se existir id, faz upsert por id (nao duplica em novos restores)
+                    # 2) Se nao existir id, tenta insert simples e ignora conflitos naturais
+                    if modo == 'merge' and 'id' in registro_limpo and 'id' in colunas_tabela:
+                        existed_before = db.execute(
+                            f'SELECT 1 FROM {tabela} WHERE id = ? LIMIT 1',
+                            (registro_limpo['id'],)
+                        ).fetchone() is not None
+                        colunas_update = [c for c in registro_limpo.keys() if c != 'id']
+                        if colunas_update:
+                            set_clause = ', '.join([f'{c} = excluded.{c}' for c in colunas_update])
+                            before_changes = db.total_changes
+                            db.execute(
+                                f'''
+                                INSERT INTO {tabela} ({colunas})
+                                VALUES ({placeholders})
+                                ON CONFLICT(id) DO UPDATE SET {set_clause}
+                                ''',
+                                valores
+                            )
+                            if db.total_changes - before_changes > 0:
+                                if existed_before:
+                                    registros_atualizados += 1
+                                else:
+                                    registros_importados += 1
+                            continue
+                        else:
+                            before_changes = db.total_changes
+                            db.execute(
+                                f'INSERT OR IGNORE INTO {tabela} ({colunas}) VALUES ({placeholders})',
+                                valores
+                            )
+                            if db.total_changes - before_changes > 0:
+                                registros_importados += 1
+                            continue
+
+                    before_changes = db.total_changes
+                    db.execute(
+                        f'''
                         INSERT OR IGNORE INTO {tabela} ({colunas})
                         VALUES ({placeholders})
-                    ''', valores)
-                    
-                    registros_importados += 1
-                    
+                        ''',
+                        valores
+                    )
+                    if db.total_changes - before_changes > 0:
+                        registros_importados += 1
+
                 except Exception as e:
                     registros_falhos += 1
                     print(f"Erro ao importar registro em {tabela}: {e}")
@@ -10811,9 +10865,13 @@ def admin_restaurar_backup():
             resultados[tabela] = {
                 'status': 'sucesso',
                 'importados': registros_importados,
+                'atualizados': registros_atualizados,
                 'falhos': registros_falhos
             }
-        
+
+        if modo == 'replace':
+            db.execute('PRAGMA foreign_keys = ON')
+
         db.commit()
         
         # Registrar no audit log
@@ -10832,6 +10890,11 @@ def admin_restaurar_backup():
         
     except Exception as e:
         db.rollback()
+        if modo == 'replace':
+            try:
+                db.execute('PRAGMA foreign_keys = ON')
+            except Exception:
+                pass
         return jsonify({'error': f'Erro ao restaurar backup: {str(e)}'}), 500
 
 

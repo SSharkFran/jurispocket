@@ -280,6 +280,7 @@ function BackupTab() {
   const [backupInfo, setBackupInfo] = useState<any>(null);
   const [arquivoSelecionado, setArquivoSelecionado] = useState<File | null>(null);
   const [verificacao, setVerificacao] = useState<any>(null);
+  const [modoRestauracao, setModoRestauracao] = useState<'replace' | 'merge'>('replace');
   const [showRestoreDialog, setShowRestoreDialog] = useState(false);
   const [resultadoRestauracao, setResultadoRestauracao] = useState<any>(null);
 
@@ -353,7 +354,7 @@ function BackupTab() {
       const response = await api.post('/admin/backup/restaurar', {
         backup,
         opcoes: {
-          modo: 'merge', // Sempre merge para segurança
+          modo: modoRestauracao,
           tabelas: [] // Todas as tabelas
         }
       });
@@ -440,6 +441,27 @@ function BackupTab() {
                 }}
                 className="bg-secondary border-border file:text-foreground"
               />
+
+              <div className="space-y-2">
+                <Label>Modo de restauração</Label>
+                <Select
+                  value={modoRestauracao}
+                  onValueChange={(v) => setModoRestauracao((v as 'replace' | 'merge') || 'replace')}
+                >
+                  <SelectTrigger className="bg-secondary border-border">
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent className="bg-card border-border">
+                    <SelectItem value="replace">Replace (limpa dados atuais)</SelectItem>
+                    <SelectItem value="merge">Merge (mescla sem limpar)</SelectItem>
+                  </SelectContent>
+                </Select>
+                <p className="text-xs text-muted-foreground">
+                  {modoRestauracao === 'replace'
+                    ? 'Recomendado para recuperar ambiente apos duplicacoes: limpa os dados e restaura o snapshot.'
+                    : 'Mantem os dados atuais e mescla com o backup. Use quando quiser complementar dados.'}
+                </p>
+              </div>
               
               {arquivoSelecionado && (
                 <Button 
@@ -527,7 +549,7 @@ function BackupTab() {
                     className={resultado.status === 'sucesso' ? 'border-green-500/30 text-green-400' : 'border-amber-500/30 text-amber-400'}
                   >
                     {resultado.importados !== undefined 
-                      ? `${resultado.importados} registros` 
+                      ? `${resultado.importados} importados${resultado.atualizados ? `, ${resultado.atualizados} atualizados` : ''}` 
                       : resultado.mensagem}
                   </Badge>
                 </div>
@@ -552,8 +574,11 @@ function BackupTab() {
             </p>
             <div className="p-4 bg-red-500/10 border border-red-500/30 rounded-lg">
               <p className="text-red-400 text-sm">
-                <strong>Atenção:</strong> Esta operação irá mesclar os dados do backup com os dados existentes. 
-                Registros conflitantes serão ignorados. Recomendamos fazer um backup atual antes de prosseguir.
+                <strong>Atenção:</strong>{' '}
+                {modoRestauracao === 'replace'
+                  ? 'Esta operação irá limpar os dados atuais das tabelas restauradas e substituir pelo backup.'
+                  : 'Esta operação irá mesclar os dados do backup com os dados existentes.'}{' '}
+                Recomendamos fazer um backup atual antes de prosseguir.
               </p>
             </div>
           </div>
