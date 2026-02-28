@@ -57,6 +57,8 @@ const navItems = [
   { path: '/app/admin', icon: Shield, label: 'Super Admin' },
 ] as const;
 
+const API_BASE_URL = (import.meta.env.VITE_API_URL || '/api').replace(/\/api\/?$/, '');
+
 const AppLayout = () => {
   const location = useLocation();
   const navigate = useNavigate();
@@ -64,6 +66,7 @@ const AppLayout = () => {
   const [collapsed, setCollapsed] = useState(false);
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
   const [notificacoesOpen, setNotificacoesOpen] = useState(false);
   const [listaNotificacoes, setListaNotificacoes] = useState<Notificacao[]>([]);
   const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0);
@@ -123,6 +126,11 @@ const AppLayout = () => {
   const userInitials = user?.nome 
     ? user.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
+  const userAvatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+  }, [userAvatarUrl]);
 
   const formatPlano = (plano?: string) => {
     const codigo = (plano || '').toLowerCase();
@@ -198,8 +206,17 @@ const AppLayout = () => {
       {/* User */}
       <div className="border-t border-border/50 p-4 shrink-0">
         <div className="flex items-center gap-3">
-          <div className="h-9 w-9 rounded-full bg-primary/20 flex items-center justify-center text-primary font-medium text-sm shrink-0">
-            {userInitials}
+          <div className="h-9 w-9 rounded-full bg-primary/20 overflow-hidden flex items-center justify-center text-primary font-medium text-sm shrink-0">
+            {userAvatarUrl && !avatarLoadError ? (
+              <img
+                src={userAvatarUrl}
+                alt={user?.nome || 'Avatar'}
+                className="h-full w-full object-cover"
+                onError={() => setAvatarLoadError(true)}
+              />
+            ) : (
+              userInitials
+            )}
           </div>
           {!collapsed && (
             <div className="flex-1 min-w-0">

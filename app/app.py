@@ -602,7 +602,7 @@ def init_db():
             workspace_id INTEGER NOT NULL,
             user_id INTEGER NOT NULL,
             session_id TEXT NOT NULL,
-            action_type TEXT NOT NULL, -- criar_tarefa | lancar_financeiro_entrada | enviar_whatsapp
+            action_type TEXT NOT NULL, -- criar_prazo | criar_tarefa | lancar_financeiro_entrada | enviar_whatsapp
             payload TEXT NOT NULL, -- JSON com dados normalizados
             status TEXT NOT NULL DEFAULT 'pending', -- pending | confirmed | executed | canceled | failed
             preview TEXT,
@@ -2353,7 +2353,7 @@ class AssistenteIA:
     FUNCTIONS = [
         {
             "name": "listar_processos",
-            "description": "Lista os processos do escritório com filtros opcionais",
+            "description": "Lista os processos do escritório com filtros opcionais. Com status=ativo, retornar apenas processos ativos (nunca arquivados).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -2574,6 +2574,24 @@ class AssistenteIA:
             }
         },
         {
+            "name": "solicitar_criacao_prazo",
+            "description": "Prepara criação de prazo real no sistema (exige confirmação explícita do usuário antes de executar)",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "tipo": {"type": "string", "description": "Tipo do prazo (ex.: Avaliação social, Contestação, Recurso)"},
+                    "descricao": {"type": "string", "description": "Descrição detalhada do prazo"},
+                    "data_prazo": {"type": "string", "description": "Data do prazo no formato YYYY-MM-DD"},
+                    "status": {"type": "string", "enum": ["pendente", "cumprido"], "description": "Status do prazo"},
+                    "processo_id": {"type": "integer", "description": "ID do processo (opcional)"},
+                    "processo_numero": {"type": "string", "description": "Número/CNJ do processo (opcional)"},
+                    "processo_titulo": {"type": "string", "description": "Título do processo (opcional)"},
+                    "cliente_nome": {"type": "string", "description": "Nome do cliente para ajudar a localizar o processo (opcional)"}
+                },
+                "required": ["tipo", "data_prazo"]
+            }
+        },
+        {
             "name": "solicitar_criacao_tarefa",
             "description": "Prepara criação de tarefa real no sistema (exige confirmação explícita do usuário antes de executar)",
             "parameters": {
@@ -2649,6 +2667,7 @@ class AssistenteIA:
         processo['cliente_nome'] = cliente_nome or None
         # Alias direto para reduzir chance de o modelo ignorar o cliente.
         processo['cliente'] = cliente_nome or None
+        processo['status_normalizado'] = str(processo.get('status') or '').strip().lower() or None
         return processo
 
     @staticmethod
@@ -2737,6 +2756,63 @@ class AssistenteIA:
             if item and item not in deduplicadas:
                 deduplicadas.append(item)
         return deduplicadas[:3]
+
+    @staticmethod
+    def resposta_parece_inconclusiva(resposta: str) -> bool:
+        """Detecta respostas com lacuna de contexto/resultado para ativar ajuda contextual."""
+        texto = str(resposta or '').strip().lower()
+        if not texto:
+            return True
+
+        gatilhos = [
+            'não entendi',
+            'nao entendi',
+            'pode reformular',
+            'não encontrei',
+            'nao encontrei',
+            'não foi possível',
+            'nao foi possivel',
+            'não consegui',
+            'nao consegui',
+            'erro ao',
+            'informe',
+            'preciso de',
+            'faltou',
+            'dados insuficientes',
+            'não localizado',
+            'nao localizado',
+        ]
+        if any(gatilho in texto for gatilho in gatilhos):
+            return True
+
+        pergunta_objetiva_sem_contexto = texto.endswith('?') and any(
+            termo in texto
+            for termo in ['qual', 'quais', 'pode informar', 'me diga', 'número do processo', 'numero do processo']
+        )
+        return pergunta_objetiva_sem_contexto
+
+    @staticmethod
+    def deve_sugerir_acoes(
+        mensagem_usuario: str,
+        resposta: str,
+        funcoes_chamadas: List[Dict[str, Any]],
+    ) -> bool:
+        """Só sugere ações quando há bloqueio claro, para evitar ruído em respostas completas."""
+        if not AssistenteIA.resposta_parece_inconclusiva(resposta):
+            return False
+
+        texto_usuario = str(mensagem_usuario or '').strip().lower()
+        if texto_usuario in {'ok', 'obrigado', 'valeu', 'show', 'blz'}:
+            return False
+
+        # Se já houve função operacional de solicitação, não força sugestão extra.
+        nomes_funcoes = {
+            str(item.get('nome') or '').strip().lower()
+            for item in (funcoes_chamadas or [])
+        }
+        if any(nome.startswith('solicitar_') for nome in nomes_funcoes):
+            return False
+        return True
 
     @staticmethod
     def anexar_acoes_sugeridas(resposta: str, acoes: List[str]) -> str:
@@ -3108,6 +3184,56 @@ class AssistenteIA:
                 }
                 resposta = f'Ação #{action_id} executada: tarefa #{tarefa_id} criada com sucesso.'
 
+            elif action_type == 'criar_prazo':
+                tipo_prazo = (payload.get('tipo') or '').strip()
+                if not tipo_prazo:
+                    raise ValueError('Tipo do prazo ausente na ação')
+
+                data_prazo = str(payload.get('data_prazo') or '').strip()[:10]
+                if not data_prazo:
+                    raise ValueError('Data do prazo ausente na ação')
+                try:
+                    datetime.strptime(data_prazo, '%Y-%m-%d')
+                except ValueError:
+                    raise ValueError('Data do prazo inválida (use formato YYYY-MM-DD)')
+
+                processo_id = payload.get('processo_id')
+                if not processo_id:
+                    raise ValueError('Processo não informado para criação do prazo')
+
+                processo_row = db.execute(
+                    'SELECT id FROM processos WHERE id = ? AND workspace_id = ? LIMIT 1',
+                    (processo_id, workspace_id),
+                ).fetchone()
+                if not processo_row:
+                    raise ValueError('Processo informado para o prazo não foi encontrado')
+
+                status_prazo = (payload.get('status') or 'pendente').strip().lower()
+                if status_prazo not in ('pendente', 'cumprido'):
+                    status_prazo = 'pendente'
+
+                cursor = db.execute(
+                    '''INSERT INTO prazos (workspace_id, processo_id, tipo, data_prazo, descricao, status)
+                       VALUES (?, ?, ?, ?, ?, ?)''',
+                    (
+                        workspace_id,
+                        processo_id,
+                        tipo_prazo,
+                        data_prazo,
+                        payload.get('descricao'),
+                        status_prazo,
+                    ),
+                )
+                prazo_id = int(cursor.lastrowid)
+                summary = {
+                    'prazo_id': prazo_id,
+                    'tipo': tipo_prazo,
+                    'data_prazo': data_prazo,
+                    'processo_id': processo_id,
+                    'status': status_prazo,
+                }
+                resposta = f'Ação #{action_id} executada: prazo #{prazo_id} criado para {data_prazo}.'
+
             elif action_type == 'lancar_financeiro_entrada':
                 try:
                     valor = float(payload.get('valor'))
@@ -3399,11 +3525,16 @@ O QUE VOCÊ PODE FAZER:
 COMO RESPONDER:
 - Seja sempre cordial e profissional
 - Use formatacao clara quando apropriado
+- Entenda primeiro a intencao principal do usuario e responda exatamente ao que ele pediu
+- Seja compreensivo e direto: menos genericidade e mais orientacao pratica
+- Se faltar dado para concluir, faca apenas 1 pergunta objetiva para destravar
 - Quando nao souber algo, seja honesto e sugira alternativas
 - Mantenha respostas concisas mas completas
 - Sempre responda em portugues do Brasil
 - Nao invente dados de cliente, processo, prazo ou movimentacao
-- Sempre que o usuario pedir para executar uma acao real (criar tarefa, lancar financeiro, enviar WhatsApp), use primeiro uma funcao `solicitar_*` para preparar a acao com confirmacao explicita.
+- Sempre que o usuario pedir para executar uma acao real (criar prazo, criar tarefa, lancar financeiro, enviar WhatsApp), use primeiro uma funcao `solicitar_*` para preparar a acao com confirmacao explicita.
+- Quando o usuario pedir para criar prazo, use `solicitar_criacao_prazo` (nao transforme prazo em tarefa).
+- Quando o usuario pedir listagem de processos ativos/arquivados, use `listar_processos` com o status correspondente e responda apenas com o retorno da funcao.
 - Nunca execute acao operacional sem confirmacao textual do usuario.
 
 Use as funcoes disponiveis para buscar informacoes em tempo real quando necessario."""}
@@ -3499,10 +3630,16 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
                     )
                     message = response.choices[0].message
                     resposta_base = message.content or "Não entendi. Pode reformular?"
-                    acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+                    if AssistenteIA.deve_sugerir_acoes(mensagem, resposta_base, funcoes_chamadas):
+                        acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+                    else:
+                        acoes_sugeridas = []
             else:
                 resposta_base = message.content or "Não entendi. Pode reformular?"
-                acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+                if AssistenteIA.deve_sugerir_acoes(mensagem, resposta_base, funcoes_chamadas):
+                    acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+                else:
+                    acoes_sugeridas = []
 
             resposta_final = AssistenteIA.anexar_acoes_sugeridas(resposta_base, acoes_sugeridas)
 
@@ -3625,8 +3762,16 @@ Parece que você atingiu o limite da sua API Key atual.
             params = [workspace_id]
             
             if args.get('status'):
-                query += ' AND p.status = ?'
-                params.append(args['status'])
+                status_raw = str(args.get('status') or '').strip().lower()
+                if status_raw in {'ativo', 'ativos'}:
+                    query += " AND LOWER(COALESCE(p.status, '')) IN ('ativo', 'em_andamento', 'andamento')"
+                elif status_raw in {'arquivado', 'arquivados'}:
+                    query += " AND LOWER(COALESCE(p.status, '')) = 'arquivado'"
+                elif status_raw in {'suspenso', 'suspensos'}:
+                    query += " AND LOWER(COALESCE(p.status, '')) = 'suspenso'"
+                else:
+                    query += ' AND LOWER(COALESCE(p.status, "")) = ?'
+                    params.append(status_raw)
             
             if args.get('cliente'):
                 query += ' AND LOWER(COALESCE(c.nome, "")) LIKE ?'
@@ -4169,6 +4314,105 @@ Parece que você atingiu o limite da sua API Key atual.
                 'tom': tom,
                 'processo': processo_preview,
                 'cliente_nome': cliente_nome or None,
+            }
+
+        elif nome == 'solicitar_criacao_prazo':
+            if user_id is None:
+                return {'erro': 'Não foi possível identificar o usuário para preparar a ação'}
+
+            tipo_prazo = str(args.get('tipo') or '').strip()
+            if not tipo_prazo:
+                return {'erro': 'Tipo do prazo é obrigatório'}
+
+            data_prazo_raw = str(args.get('data_prazo') or '').strip()
+            if not data_prazo_raw:
+                return {'erro': 'Data do prazo é obrigatória'}
+            data_prazo = data_prazo_raw[:10]
+            try:
+                datetime.strptime(data_prazo, '%Y-%m-%d')
+            except ValueError:
+                return {'erro': 'Data do prazo inválida. Use YYYY-MM-DD (ex.: 2026-03-30).'}
+
+            processo = AssistenteIA.buscar_processo_para_acao(
+                db=db,
+                workspace_id=workspace_id,
+                processo_id=_to_int(args.get('processo_id')),
+                numero=str(args.get('processo_numero') or '').strip(),
+                titulo=str(args.get('processo_titulo') or '').strip(),
+            )
+
+            if not processo:
+                cliente_nome = str(args.get('cliente_nome') or '').strip().lower()
+                if cliente_nome:
+                    processo_row = db.execute(
+                        '''SELECT p.*, c.nome as cliente_nome
+                           FROM processos p
+                           LEFT JOIN clientes c ON c.id = p.cliente_id AND c.workspace_id = p.workspace_id
+                           WHERE p.workspace_id = ?
+                             AND LOWER(COALESCE(c.nome, '')) LIKE ?
+                             AND LOWER(COALESCE(p.status, '')) = 'ativo'
+                           ORDER BY p.created_at DESC
+                           LIMIT 1''',
+                        (workspace_id, f'%{cliente_nome}%'),
+                    ).fetchone()
+                    if processo_row:
+                        processo = dict(processo_row)
+
+            if not processo:
+                return {
+                    'erro': (
+                        'Não consegui identificar o processo para este prazo. '
+                        'Informe o número/CNJ do processo ou o título exato.'
+                    )
+                }
+
+            status_prazo = str(args.get('status') or 'pendente').strip().lower()
+            if status_prazo not in {'pendente', 'cumprido'}:
+                status_prazo = 'pendente'
+
+            payload = {
+                'tipo': tipo_prazo,
+                'descricao': str(args.get('descricao') or '').strip() or None,
+                'data_prazo': data_prazo,
+                'status': status_prazo,
+                'processo_id': int(processo['id']),
+            }
+
+            preview_linhas = [
+                'Criar prazo',
+                f'Tipo: {tipo_prazo}',
+                f'Data: {data_prazo}',
+                f'Status: {status_prazo}',
+                (
+                    f"Processo: {processo.get('numero') or processo.get('numero_cnj') or processo.get('id')} "
+                    f"- {processo.get('titulo') or 'sem título'}"
+                ),
+            ]
+            if payload.get('descricao'):
+                preview_linhas.append(f"Descrição: {payload.get('descricao')}")
+
+            preview = '\n'.join(preview_linhas)
+            acao = AssistenteIA.criar_acao_pendente(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                action_type='criar_prazo',
+                payload=payload,
+                preview=preview,
+            )
+
+            resposta = (
+                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
+                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
+                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+            )
+            return {
+                'ok': True,
+                'acao_pendente': acao,
+                '_acao_pendente': acao,
+                '_final_resposta': resposta,
+                '_acoes_sugeridas': [],
             }
 
         elif nome == 'solicitar_criacao_tarefa':
