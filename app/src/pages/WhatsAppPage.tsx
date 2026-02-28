@@ -208,6 +208,11 @@ const WhatsAppPage = () => {
         const confirmadas = response.data.confirmados ?? response.data.enviados ?? 0;
         const pendentes = response.data.pendentes_confirmacao ?? 0;
         const processadas = response.data.processados ?? (confirmadas + pendentes);
+        const invalidos = (response.data.resultados || [])
+          .filter((r) => r.recipient_exists === false)
+          .map((r) => r.telefone)
+          .filter(Boolean)
+          .join(', ');
         const destinos = (response.data.destinatarios || [])
           .map((d) => d.telefone)
           .filter(Boolean)
@@ -219,8 +224,9 @@ const WhatsAppPage = () => {
             `Resumo processado: ${processadas} mensagem(ns), ${confirmadas} confirmada(s)${sufixoPendentes}`
           );
         } else if (processadas > 0) {
+          const detalheInvalido = invalidos ? ` Numeros sem WhatsApp: ${invalidos}.` : '';
           toast.warning(
-            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao. Destinos: ${destinos || 'N/A'}`
+            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao. Destinos: ${destinos || 'N/A'}.${detalheInvalido}`
           );
         } else {
           toast.error(response.data.error || 'Resumo não enviado');

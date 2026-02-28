@@ -3037,6 +3037,10 @@ def enviar_whatsapp_para_destinatarios(
             'modo': resposta.get('modo'),
             'url_wame': resposta.get('url_wame'),
             'delivery_confirmed': delivery_confirmed,
+            'recipient_exists': resposta.get('recipient_exists'),
+            'ack_status': resposta.get('ack_status'),
+            'ack_source': resposta.get('ack_source'),
+            'ack_timestamp': resposta.get('ack_timestamp'),
             'warning': warning,
         })
 

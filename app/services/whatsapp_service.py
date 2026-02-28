@@ -310,6 +310,7 @@ class WhatsAppService:
 
             if response.status_code == 200 and data.get('success'):
                 delivery_confirmed = data.get('deliveryConfirmed')
+                recipient_exists = data.get('recipientExists')
                 ack_status = data.get('ackStatus')
                 ack_source = data.get('ackSource')
                 ack_timestamp = data.get('ackTimestamp')
@@ -331,6 +332,7 @@ class WhatsAppService:
                         'phone': formatted_phone,
                         'delay_ms': data.get('delayMs'),
                         'delivery_confirmed': False,
+                        'recipient_exists': recipient_exists,
                         'ack_status': ack_status,
                         'ack_source': ack_source,
                         'ack_timestamp': ack_timestamp,
@@ -345,6 +347,7 @@ class WhatsAppService:
                     'phone': formatted_phone,
                     'delay_ms': data.get('delayMs'),
                     'delivery_confirmed': None if delivery_confirmed is None else bool(delivery_confirmed),
+                    'recipient_exists': recipient_exists,
                     'ack_status': ack_status,
                     'ack_source': ack_source,
                     'ack_timestamp': ack_timestamp,

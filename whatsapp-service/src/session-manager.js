@@ -79,6 +79,7 @@ export class SessionManager {
       lastDisconnectCode: null,
       recentMessages: [],
       recentAcks: [],
+      recentSentMessageIds: [],
     };
   }
 
@@ -215,6 +216,20 @@ export class SessionManager {
     session.updatedAt = new Date().toISOString();
   }
 
+  _recordSentMessageId(userId, messageId) {
+    if (!messageId) return;
+    const session = this._getOrCreateSession(userId);
+    session.recentSentMessageIds.unshift(messageId);
+    session.recentSentMessageIds = session.recentSentMessageIds.slice(0, 200);
+    session.updatedAt = new Date().toISOString();
+  }
+
+  _isKnownSentMessageId(userId, messageId) {
+    if (!messageId) return false;
+    const session = this._getOrCreateSession(userId);
+    return session.recentSentMessageIds.includes(messageId);
+  }
+
   _extractMessageText(message) {
     if (!message) return '';
     if (message.conversation) return message.conversation;
@@ -300,7 +315,8 @@ export class SessionManager {
       try {
         updates.forEach((item) => {
           const key = item?.key;
-          if (!key?.id || key.fromMe !== true) return;
+          if (!key?.id) return;
+          if (key.fromMe !== true && !this._isKnownSentMessageId(userId, key.id)) return;
           const rawStatus = item?.update?.status ?? null;
           const status =
             rawStatus === null || rawStatus === undefined
@@ -325,7 +341,8 @@ export class SessionManager {
       try {
         updates.forEach((item) => {
           const key = item?.key;
-          if (!key?.id || key.fromMe !== true) return;
+          if (!key?.id) return;
+          if (key.fromMe !== true && !this._isKnownSentMessageId(userId, key.id)) return;
           const rawStatus = item?.receipt?.status ?? item?.receipt ?? null;
           const status =
             rawStatus === null || rawStatus === undefined
@@ -530,6 +547,35 @@ export class SessionManager {
       await sleep(delayMs);
 
       const jid = this._toJid(to);
+      let recipientExists = null;
+      try {
+        const existsResult = await session.socket.onWhatsApp(jid);
+        if (Array.isArray(existsResult) && existsResult.length > 0) {
+          recipientExists = Boolean(existsResult[0]?.exists);
+        }
+      } catch (error) {
+        this.logger.warn(
+          { userId: normalized, to: jid, error: error.message },
+          'Falha ao validar existencia do numero no WhatsApp',
+        );
+      }
+
+      if (recipientExists === false) {
+        return {
+          success: false,
+          error: 'Numero destino nao possui WhatsApp',
+          messageId: null,
+          to: jid,
+          delayMs,
+          timestamp: new Date().toISOString(),
+          deliveryConfirmed: false,
+          recipientExists: false,
+          ackStatus: null,
+          ackSource: null,
+          ackTimestamp: null,
+        };
+      }
+
       const response = await session.socket.sendMessage(jid, {
         text: String(message || ''),
       });
@@ -537,6 +583,7 @@ export class SessionManager {
       if (!messageId) {
         throw new Error('Envio sem messageId retornado pelo WhatsApp');
       }
+      this._recordSentMessageId(normalized, messageId);
 
       const ack = await this._waitForAck(normalized, messageId);
       if (ack.failed) {
@@ -548,6 +595,7 @@ export class SessionManager {
           delayMs,
           timestamp: new Date().toISOString(),
           deliveryConfirmed: false,
+          recipientExists,
           ackStatus: ack.status,
           ackSource: ack.source,
           ackTimestamp: ack.timestamp,
@@ -567,6 +615,7 @@ export class SessionManager {
         delayMs,
         timestamp: new Date().toISOString(),
         deliveryConfirmed,
+        recipientExists,
         ackStatus: ack.found ? ack.status : null,
         ackSource: ack.found ? ack.source : null,
         ackTimestamp: ack.found ? ack.timestamp : null,

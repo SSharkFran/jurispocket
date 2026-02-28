@@ -68,6 +68,10 @@ export interface WorkspaceEnvioResponse {
     modo?: string;
     url_wame?: string;
     delivery_confirmed?: boolean | null;
+    recipient_exists?: boolean | null;
+    ack_status?: string | number | null;
+    ack_source?: string | null;
+    ack_timestamp?: string | null;
     warning?: string | null;
   }>;
 }
