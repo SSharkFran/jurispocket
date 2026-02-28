@@ -29,9 +29,12 @@ const MENSAGEM_BOAS_VINDAS = `👋 Olá! Sou o **${ASSISTENTE_NOME}**.
 Sou seu assistente virtual especializado em gestão jurídica. Posso ajudar você a:
 
 • 🔍 **Buscar processos** e consultar andamentos
+• 📌 **Resumo 360** do processo (movimentações, prazos, tarefas e financeiro)
+• 🚨 **Prazos críticos** (atrasados, hoje e próximos dias)
 • 👥 **Localizar clientes** e seus dados
 • 📅 **Verificar prazos** e tarefas pendentes
 • 💰 **Analisar o financeiro** do escritório
+• 💬 **Gerar mensagens de WhatsApp** contextuais para cliente ou equipe
 • ⚖️ **Tirar dúvidas** sobre seus casos
 • 📝 **Sugerir ações** e organizar sua agenda
 

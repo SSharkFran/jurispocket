@@ -6,9 +6,9 @@ import { ia } from '@/services/api';
 import { toast } from 'sonner';
 
 const sugestoes = [
-  { icon: Scale, text: 'Analise o risco de recurso no processo 001234' },
-  { icon: FileText, text: 'Gere uma petição inicial para ação trabalhista' },
-  { icon: Lightbulb, text: 'Qual a jurisprudência sobre dano moral no TJSP?' },
+  { icon: Scale, text: 'Liste os prazos críticos dos próximos 7 dias e os atrasados.' },
+  { icon: FileText, text: 'Faça um resumo 360 do processo 1009019-92.2025.4.01.3000.' },
+  { icon: Lightbulb, text: 'Gere uma mensagem de WhatsApp para atualizar o cliente do processo 1009019-92.2025.4.01.3000.' },
 ];
 
 interface Message {

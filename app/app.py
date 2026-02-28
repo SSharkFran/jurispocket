@@ -573,6 +573,27 @@ def init_db():
             FOREIGN KEY (user_id) REFERENCES users (id)
         )
     ''')
+
+    # Auditoria de interacoes da IA (qualidade, latencia e erros)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS ia_interaction_logs (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            workspace_id INTEGER NOT NULL,
+            user_id INTEGER NOT NULL,
+            session_id TEXT NOT NULL,
+            provider TEXT,
+            model TEXT,
+            input_message TEXT,
+            response_text TEXT,
+            function_calls TEXT, -- JSON array: nome, args, duration_ms, erro
+            status TEXT NOT NULL, -- success | error | quota | fallback
+            error_message TEXT,
+            total_duration_ms INTEGER,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
+            FOREIGN KEY (workspace_id) REFERENCES workspaces (id),
+            FOREIGN KEY (user_id) REFERENCES users (id)
+        )
+    ''')
     
     # Templates de Documentos
     db.execute('''
@@ -2343,6 +2364,77 @@ class AssistenteIA:
                     "titulo": {
                         "type": "string",
                         "description": "Título ou palavras-chave do processo"
+                    },
+                    "cliente": {
+                        "type": "string",
+                        "description": "Nome do cliente vinculado ao processo"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados"
+                    }
+                }
+            }
+        },
+        {
+            "name": "listar_movimentacoes_recentes",
+            "description": "Lista movimentações processuais recentes com processo e cliente",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "processo_numero": {
+                        "type": "string",
+                        "description": "Filtrar por número do processo (opcional)"
+                    },
+                    "dias": {
+                        "type": "integer",
+                        "description": "Filtrar movimentações dos últimos N dias (opcional)"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de movimentações"
+                    }
+                }
+            }
+        },
+        {
+            "name": "proximos_prazos_criticos",
+            "description": "Lista prazos mais críticos (atrasados, hoje e próximos dias) com processo e cliente",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "dias": {
+                        "type": "integer",
+                        "description": "Janela de dias para frente (default 15)"
+                    },
+                    "incluir_vencidos": {
+                        "type": "boolean",
+                        "description": "Se deve incluir prazos já vencidos"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados"
+                    }
+                }
+            }
+        },
+        {
+            "name": "resumo_processo_360",
+            "description": "Gera visão 360 de um processo com cliente, movimentações, prazos, tarefas e financeiro",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "processo_id": {
+                        "type": "integer",
+                        "description": "ID do processo (opcional)"
+                    },
+                    "numero": {
+                        "type": "string",
+                        "description": "Número/CNJ do processo (opcional)"
+                    },
+                    "titulo": {
+                        "type": "string",
+                        "description": "Título do processo (opcional)"
                     }
                 }
             }
@@ -2361,6 +2453,10 @@ class AssistenteIA:
                     "dias": {
                         "type": "integer",
                         "description": "Filtrar prazos dos próximos N dias"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados"
                     }
                 }
             }
@@ -2380,6 +2476,10 @@ class AssistenteIA:
                         "type": "string",
                         "enum": ["baixa", "media", "alta", "urgente"],
                         "description": "Prioridade da tarefa"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados"
                     }
                 }
             }
@@ -2393,6 +2493,10 @@ class AssistenteIA:
                     "nome": {
                         "type": "string",
                         "description": "Filtrar por nome do cliente"
+                    },
+                    "limite": {
+                        "type": "integer",
+                        "description": "Número máximo de resultados"
                     }
                 }
             }
@@ -2410,6 +2514,42 @@ class AssistenteIA:
                     }
                 }
             }
+        },
+        {
+            "name": "gerar_mensagem_whatsapp_contextual",
+            "description": "Gera mensagem de WhatsApp contextual para cliente ou equipe com base em processo/prazo/tarefa",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "destino": {
+                        "type": "string",
+                        "enum": ["cliente", "equipe"],
+                        "description": "Destino principal da mensagem"
+                    },
+                    "tipo_contexto": {
+                        "type": "string",
+                        "enum": ["movimentacao", "prazo", "tarefa", "status_processo", "comunicado"],
+                        "description": "Tipo de contexto da mensagem"
+                    },
+                    "processo_numero": {
+                        "type": "string",
+                        "description": "Número/CNJ do processo (opcional)"
+                    },
+                    "cliente_nome": {
+                        "type": "string",
+                        "description": "Nome do cliente (opcional)"
+                    },
+                    "objetivo": {
+                        "type": "string",
+                        "description": "Objetivo específico da mensagem"
+                    },
+                    "tom": {
+                        "type": "string",
+                        "enum": ["formal", "acolhedor", "direto"],
+                        "description": "Tom desejado"
+                    }
+                }
+            }
         }
     ]
     
@@ -2417,16 +2557,166 @@ class AssistenteIA:
     def get_modelo() -> str:
         """Retorna o modelo apropriado baseado no provider configurado"""
         return AssistenteIA.MODELS.get(ia_provider, AssistenteIA.MODELS['default'])
+
+    @staticmethod
+    def serializar_processo_para_ia(row: Any) -> Dict[str, Any]:
+        """Normaliza payload de processo para facilitar resposta do modelo."""
+        processo = dict(row)
+        cliente_nome = (processo.get('cliente_nome') or '').strip() if processo.get('cliente_nome') else ''
+        processo['cliente_nome'] = cliente_nome or None
+        # Alias direto para reduzir chance de o modelo ignorar o cliente.
+        processo['cliente'] = cliente_nome or None
+        return processo
+
+    @staticmethod
+    def parse_limited_int(raw_value: Any, default: int, min_value: int = 1, max_value: int = 100) -> int:
+        """Converte inteiro com limite para evitar consultas exageradas."""
+        try:
+            parsed = int(raw_value)
+        except (TypeError, ValueError):
+            parsed = default
+        return max(min_value, min(parsed, max_value))
+
+    @staticmethod
+    def normalizar_session_id(session_id: Any) -> str:
+        """Normaliza session_id para evitar valores inválidos/excessivos."""
+        value = str(session_id or '').strip()
+        if not value:
+            value = 'default'
+        return value[:120]
+
+    @staticmethod
+    def resumir_resultado_funcao(resultado: Any) -> Dict[str, Any]:
+        """Gera resumo leve do retorno da função para auditoria."""
+        if not isinstance(resultado, dict):
+            return {'tipo': type(resultado).__name__}
+
+        resumo: Dict[str, Any] = {}
+        for key, value in resultado.items():
+            if isinstance(value, list):
+                resumo[key] = len(value)
+            elif isinstance(value, dict):
+                resumo[f'{key}_keys'] = len(value.keys())
+            elif isinstance(value, (int, float, bool)) or value is None:
+                resumo[key] = value
+            elif isinstance(value, str):
+                resumo[key] = value[:120]
+            else:
+                resumo[key] = type(value).__name__
+        return resumo
+
+    @staticmethod
+    def construir_acoes_sugeridas(
+        mensagem_usuario: str,
+        funcoes_chamadas: List[Dict[str, Any]],
+    ) -> List[str]:
+        """Sugere próximos passos objetivos com base no contexto da conversa."""
+        nomes_funcoes = {
+            str(item.get('nome') or '').strip().lower()
+            for item in (funcoes_chamadas or [])
+        }
+        texto = (mensagem_usuario or '').strip().lower()
+
+        sugestoes: List[str] = []
+
+        if 'resumo_processo_360' in nomes_funcoes:
+            sugestoes.append('Gerar uma mensagem de WhatsApp para atualizar cliente e equipe sobre esse processo.')
+            sugestoes.append('Listar somente prazos críticos desse processo para priorizar o dia.')
+
+        if 'proximos_prazos_criticos' in nomes_funcoes or 'listar_prazos' in nomes_funcoes:
+            sugestoes.append('Filtrar apenas prazos vencidos para montar plano de ação imediato.')
+            sugestoes.append('Pedir uma lista de tarefas pendentes por prioridade para distribuir ao time.')
+
+        if 'listar_movimentacoes_recentes' in nomes_funcoes:
+            sugestoes.append('Gerar comunicado de movimentação para WhatsApp com linguagem de fácil entendimento.')
+
+        if 'listar_processos' in nomes_funcoes or 'buscar_processo' in nomes_funcoes:
+            sugestoes.append('Solicitar um resumo 360 do processo mais importante da lista.')
+
+        if 'resumo_financeiro' in nomes_funcoes:
+            sugestoes.append('Comparar o mês atual com o anterior e destacar variações relevantes.')
+
+        if not sugestoes:
+            if 'prazo' in texto:
+                sugestoes.append('Listar os prazos críticos dos próximos 7 dias.')
+            if 'processo' in texto:
+                sugestoes.append('Pedir um resumo 360 de um processo específico.')
+            if 'cliente' in texto or 'whatsapp' in texto:
+                sugestoes.append('Gerar mensagem contextual de WhatsApp para cliente ou equipe.')
+            if not sugestoes:
+                sugestoes.extend([
+                    'Listar processos ativos com suas últimas movimentações.',
+                    'Listar prazos críticos com foco nos atrasados e vencendo hoje.',
+                ])
+
+        deduplicadas: List[str] = []
+        for item in sugestoes:
+            if item and item not in deduplicadas:
+                deduplicadas.append(item)
+        return deduplicadas[:3]
+
+    @staticmethod
+    def anexar_acoes_sugeridas(resposta: str, acoes: List[str]) -> str:
+        """Anexa bloco de ações sugeridas sem duplicar se já existir."""
+        base = (resposta or '').strip()
+        if not acoes:
+            return base
+        if 'ações sugeridas' in base.lower() or 'acoes sugeridas' in base.lower():
+            return base
+
+        linhas = '\n'.join([f'{idx + 1}. {acao}' for idx, acao in enumerate(acoes)])
+        return f"{base}\n\nAções sugeridas:\n{linhas}"
+
+    @staticmethod
+    def registrar_log_interacao(
+        db,
+        workspace_id: int,
+        user_id: int,
+        session_id: str,
+        provider: Optional[str],
+        model: str,
+        input_message: str,
+        response_text: str,
+        function_calls: List[Dict[str, Any]],
+        status: str,
+        error_message: str,
+        total_duration_ms: int,
+    ) -> None:
+        """Registra interação da IA para observabilidade e qualidade."""
+        db.execute(
+            '''INSERT INTO ia_interaction_logs
+               (workspace_id, user_id, session_id, provider, model, input_message, response_text,
+                function_calls, status, error_message, total_duration_ms)
+               VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+            (
+                workspace_id,
+                user_id,
+                session_id,
+                provider or '',
+                model,
+                (input_message or '')[:4000],
+                (response_text or '')[:6000],
+                json.dumps(function_calls or [], ensure_ascii=False),
+                (status or 'success')[:40],
+                (error_message or '')[:1000],
+                max(int(total_duration_ms or 0), 0),
+            ),
+        )
     
     @staticmethod
     def processar_mensagem(mensagem: str, workspace_id: int, user_id: int, session_id: str) -> Dict[str, Any]:
         """Processa mensagem do usuário usando IA (OpenAI ou Groq)"""
-        
         global ia_client, ia_provider
-        
+
+        started_at = datetime.now()
+        session_id = AssistenteIA.normalizar_session_id(session_id)
+        modelo = AssistenteIA.get_modelo()
+        funcoes_chamadas: List[Dict[str, Any]] = []
+        rastreio_funcoes: List[Dict[str, Any]] = []
+        db = get_db()
+
         if not ia_client:
-            return {
-                'resposta': '''🤖 **Copiloto Jurídico não configurado**
+            resposta_sem_ia = '''🤖 **Copiloto Jurídico não configurado**
 
 Para usar o assistente IA, configure uma das opções no arquivo `.env`:
 
@@ -2439,20 +2729,22 @@ Para usar o assistente IA, configure uma das opções no arquivo `.env`:
 **Opção 2 - OpenAI (Pago):**
 - Adicione ao .env: `OPENAI_API_KEY=sua_chave_aqui`
 
-💡 Recomendamos o **Groq** pois é gratuito e ultra-rápido!''',
-                'funcoes_chamadas': []
+💡 Recomendamos o **Groq** pois é gratuito e ultra-rápido!'''
+            return {
+                'resposta': resposta_sem_ia,
+                'funcoes_chamadas': [],
+                'acoes_sugeridas': [],
+                'session_id': session_id,
             }
-        
+
         try:
-            # Busca histórico da conversa
-            db = get_db()
             historico = db.execute(
-                '''SELECT role, content FROM chat_history 
+                '''SELECT role, content FROM chat_history
                    WHERE workspace_id = ? AND user_id = ? AND session_id = ?
                    ORDER BY created_at DESC LIMIT 10''',
-                (workspace_id, user_id, session_id)
+                (workspace_id, user_id, session_id),
             ).fetchall()
-            
+
             messages = [
                 {"role": "system", "content": """Você é o Copiloto Jurídico do JurisGestão, um assistente de IA especializado em gestão de escritórios de advocacia.
 
@@ -2476,52 +2768,45 @@ COMO RESPONDER:
 - Quando nao souber algo, seja honesto e sugira alternativas
 - Mantenha respostas concisas mas completas
 - Sempre responda em portugues do Brasil
+- Nao invente dados de cliente, processo, prazo ou movimentacao
 
 Use as funcoes disponiveis para buscar informacoes em tempo real quando necessario."""}
             ]
-            
-            # Adiciona histórico
+
             for h in reversed(historico):
                 messages.append({"role": h['role'], "content": h['content']})
-            
-            # Adiciona mensagem atual
             messages.append({"role": "user", "content": mensagem})
-            
-            # Seleciona modelo baseado no provider
-            modelo = AssistenteIA.get_modelo()
-            
+
             def _criar_completion(com_funcoes: bool = True):
                 payload = {
                     'model': modelo,
                     'messages': messages,
                     'temperature': 0.7,
-                    'max_tokens': 500
+                    'max_tokens': 500,
                 }
                 if com_funcoes:
                     payload['functions'] = AssistenteIA.FUNCTIONS
                     payload['function_call'] = 'auto'
                 return ia_client.chat.completions.create(**payload)
 
-            # Chama a API de IA (fallback sem funcoes para evitar erro tool_use_failed)
+            fallback_sem_funcoes = False
             try:
                 response = _criar_completion(com_funcoes=True)
             except Exception as tool_error:
                 tool_error_msg = str(tool_error)
                 if 'tool_use_failed' in tool_error_msg or 'Failed to call a function' in tool_error_msg:
+                    fallback_sem_funcoes = True
                     response = _criar_completion(com_funcoes=False)
                 else:
                     raise
-            
+
             message = response.choices[0].message
-            funcoes_chamadas = []
-            
-            # Salva mensagem do usuário
+
             db.execute(
                 'INSERT INTO chat_history (workspace_id, user_id, session_id, role, content) VALUES (?, ?, ?, ?, ?)',
-                (workspace_id, user_id, session_id, 'user', mensagem)
+                (workspace_id, user_id, session_id, 'user', mensagem),
             )
-            
-            # Verifica se houve function calling
+
             function_call = getattr(message, 'function_call', None)
             if function_call:
                 func_name = function_call.name
@@ -2531,46 +2816,84 @@ Use as funcoes disponiveis para buscar informacoes em tempo real quando necessar
                     func_args = {}
                 if not isinstance(func_args, dict):
                     func_args = {}
+
                 funcoes_chamadas.append({'nome': func_name, 'args': func_args})
-                
-                # Executa a função
-                resultado = AssistenteIA.executar_funcao(func_name, func_args, workspace_id)
-                
-                # Adiciona resultado ao contexto
+
+                func_started_at = datetime.now()
+                func_error_msg = ''
+                try:
+                    resultado = AssistenteIA.executar_funcao(func_name, func_args, workspace_id)
+                except Exception as function_error:
+                    func_error_msg = str(function_error)
+                    resultado = {'erro': func_error_msg}
+
+                func_duration_ms = int((datetime.now() - func_started_at).total_seconds() * 1000)
+                rastreio_funcoes.append({
+                    'nome': func_name,
+                    'args': func_args,
+                    'duration_ms': func_duration_ms,
+                    'erro': func_error_msg,
+                    'result_summary': AssistenteIA.resumir_resultado_funcao(resultado),
+                })
+
                 messages.append({
                     "role": "function",
                     "name": func_name,
-                    "content": json.dumps(resultado)
+                    "content": json.dumps(resultado, ensure_ascii=False),
                 })
-                
-                # Chama API novamente com o resultado
+
                 response = ia_client.chat.completions.create(
                     model=modelo,
                     messages=messages,
                     temperature=0.7,
-                    max_tokens=500
+                    max_tokens=500,
                 )
                 message = response.choices[0].message
-            
-            resposta = message.content or "Não entendi. Pode reformular?"
-            
-            # Salva resposta do assistente
+
+            resposta_base = message.content or "Não entendi. Pode reformular?"
+            acoes_sugeridas = AssistenteIA.construir_acoes_sugeridas(mensagem, funcoes_chamadas)
+            resposta_final = AssistenteIA.anexar_acoes_sugeridas(resposta_base, acoes_sugeridas)
+
             db.execute(
                 'INSERT INTO chat_history (workspace_id, user_id, session_id, role, content) VALUES (?, ?, ?, ?, ?)',
-                (workspace_id, user_id, session_id, 'assistant', resposta)
+                (workspace_id, user_id, session_id, 'assistant', resposta_final),
+            )
+
+            status_interacao = 'success'
+            if fallback_sem_funcoes or any(item.get('erro') for item in rastreio_funcoes):
+                status_interacao = 'fallback'
+
+            total_duration_ms = int((datetime.now() - started_at).total_seconds() * 1000)
+            AssistenteIA.registrar_log_interacao(
+                db=db,
+                workspace_id=workspace_id,
+                user_id=user_id,
+                session_id=session_id,
+                provider=ia_provider,
+                model=modelo,
+                input_message=mensagem,
+                response_text=resposta_final,
+                function_calls=rastreio_funcoes,
+                status=status_interacao,
+                error_message='',
+                total_duration_ms=total_duration_ms,
             )
             db.commit()
-            
+
             return {
-                'resposta': resposta,
-                'funcoes_chamadas': funcoes_chamadas
+                'resposta': resposta_final,
+                'funcoes_chamadas': funcoes_chamadas,
+                'acoes_sugeridas': acoes_sugeridas,
+                'session_id': session_id,
             }
-            
-        except Exception as e:
-            error_msg = str(e)
+
+        except Exception as error:
+            error_msg = str(error)
+            total_duration_ms = int((datetime.now() - started_at).total_seconds() * 1000)
+
             if 'quota' in error_msg.lower() or '429' in error_msg:
-                return {
-                    'resposta': '''⚠️ **Limite de uso atingido**
+                status_interacao = 'quota'
+                resposta_erro = '''⚠️ **Limite de uso atingido**
 
 Parece que você atingiu o limite da sua API Key atual.
 
@@ -2581,12 +2904,35 @@ Parece que você atingiu o limite da sua API Key atual.
    - Substitua no .env: `GROQ_API_KEY=sua_chave_aqui`
 
 2. Se já estiver usando Groq: Aguarde alguns minutos e tente novamente
-   (Limite: 1,000 requisições/dia para o modelo llama3-70b)''',
-                    'funcoes_chamadas': []
-                }
+   (Limite: 1,000 requisições/dia para o modelo llama3-70b)'''
+            else:
+                status_interacao = 'error'
+                resposta_erro = f'Erro ao processar mensagem: {error_msg}'
+
+            try:
+                AssistenteIA.registrar_log_interacao(
+                    db=db,
+                    workspace_id=workspace_id,
+                    user_id=user_id,
+                    session_id=session_id,
+                    provider=ia_provider,
+                    model=modelo,
+                    input_message=mensagem,
+                    response_text=resposta_erro,
+                    function_calls=rastreio_funcoes,
+                    status=status_interacao,
+                    error_message=error_msg,
+                    total_duration_ms=total_duration_ms,
+                )
+                db.commit()
+            except Exception as log_error:
+                print(f"[ia] Falha ao registrar auditoria de erro: {log_error}")
+
             return {
-                'resposta': f'Erro ao processar mensagem: {error_msg}',
-                'funcoes_chamadas': []
+                'resposta': resposta_erro,
+                'funcoes_chamadas': funcoes_chamadas,
+                'acoes_sugeridas': [],
+                'session_id': session_id,
             }
     
     @staticmethod
@@ -2595,58 +2941,330 @@ Parece que você atingiu o limite da sua API Key atual.
         db = get_db()
         
         if nome == 'listar_processos':
-            query = 'SELECT * FROM processos WHERE workspace_id = ?'
-            params = [workspace_id]
-            
-            if args.get('status'):
-                query += ' AND status = ?'
-                params.append(args['status'])
-            
-            if args.get('cliente'):
-                query += ' AND cliente_id IN (SELECT id FROM clientes WHERE nome LIKE ?)'
-                params.append(f"%{args['cliente']}%")
-            
-            query += ' ORDER BY created_at DESC'
-            
-            if args.get('limite'):
-                query += " LIMIT ?"
-                params.append(args['limite'])
-            
-            rows = db.execute(query, params).fetchall()
-            return {'processos': [dict(r) for r in rows]}
-        
-        elif nome == 'buscar_processo':
-            query = 'SELECT * FROM processos WHERE workspace_id = ? AND ('
-            params = [workspace_id]
-            
-            conditions = []
-            if args.get('numero'):
-                conditions.append('numero LIKE ?')
-                params.append(f"%{args['numero']}%")
-            if args.get('titulo'):
-                conditions.append('titulo LIKE ?')
-                params.append(f"%{args['titulo']}%")
-            
-            query += ' OR '.join(conditions) + ')' if conditions else '1=0)'
-            
-            rows = db.execute(query, params).fetchall()
-            return {'processos': [dict(r) for r in rows]}
-        
-        elif nome == 'listar_prazos':
-            query = 'SELECT p.*, pr.numero as processo_numero FROM prazos p '
-            query += 'JOIN processos pr ON p.processo_id = pr.id WHERE p.workspace_id = ?'
+            query = '''
+                SELECT p.*,
+                       c.nome as cliente_nome,
+                       c.email as cliente_email,
+                       c.telefone as cliente_telefone
+                FROM processos p
+                LEFT JOIN clientes c
+                  ON c.id = p.cliente_id
+                 AND c.workspace_id = p.workspace_id
+                WHERE p.workspace_id = ?
+            '''
             params = [workspace_id]
             
             if args.get('status'):
                 query += ' AND p.status = ?'
                 params.append(args['status'])
             
+            if args.get('cliente'):
+                query += ' AND LOWER(COALESCE(c.nome, "")) LIKE ?'
+                params.append(f"%{str(args['cliente']).lower()}%")
+            
+            query += ' ORDER BY p.created_at DESC'
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=20, max_value=100)
+            query += " LIMIT ?"
+            params.append(limite)
+            
+            rows = db.execute(query, params).fetchall()
+            return {'processos': [AssistenteIA.serializar_processo_para_ia(r) for r in rows]}
+        
+        elif nome == 'buscar_processo':
+            query = '''
+                SELECT p.*,
+                       c.nome as cliente_nome,
+                       c.email as cliente_email,
+                       c.telefone as cliente_telefone
+                FROM processos p
+                LEFT JOIN clientes c
+                  ON c.id = p.cliente_id
+                 AND c.workspace_id = p.workspace_id
+                WHERE p.workspace_id = ? AND (
+            '''
+            params = [workspace_id]
+            
+            conditions = []
+            if args.get('numero'):
+                conditions.append('(p.numero LIKE ? OR p.numero_cnj LIKE ?)')
+                params.append(f"%{args['numero']}%")
+                params.append(f"%{args['numero']}%")
+            if args.get('titulo'):
+                conditions.append('p.titulo LIKE ?')
+                params.append(f"%{args['titulo']}%")
+            if args.get('cliente'):
+                conditions.append('LOWER(COALESCE(c.nome, "")) LIKE ?')
+                params.append(f"%{str(args['cliente']).lower()}%")
+            
+            query += ' OR '.join(conditions) + ')' if conditions else '1=0)'
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=10, max_value=50)
+            query += ' ORDER BY p.created_at DESC LIMIT ?'
+            params.append(limite)
+            
+            rows = db.execute(query, params).fetchall()
+            return {'processos': [AssistenteIA.serializar_processo_para_ia(r) for r in rows]}
+
+        elif nome == 'listar_movimentacoes_recentes':
+            query = '''
+                SELECT m.id,
+                       m.workspace_id,
+                       m.processo_id,
+                       m.codigo_movimento,
+                       m.nome_movimento,
+                       m.data_movimento,
+                       m.fonte,
+                       p.numero as processo_numero,
+                       p.numero_cnj as processo_numero_cnj,
+                       p.titulo as processo_titulo,
+                       c.nome as cliente_nome
+                FROM movimentacoes_processo m
+                JOIN processos p ON p.id = m.processo_id
+                LEFT JOIN clientes c
+                  ON c.id = p.cliente_id
+                 AND c.workspace_id = p.workspace_id
+                WHERE m.workspace_id = ?
+            '''
+            params: List[Any] = [workspace_id]
+
+            processo_numero = (args.get('processo_numero') or '').strip()
+            if processo_numero:
+                query += ' AND (p.numero LIKE ? OR COALESCE(p.numero_cnj, "") LIKE ?)'
+                like_proc = f"%{processo_numero}%"
+                params.extend([like_proc, like_proc])
+
+            dias_raw = args.get('dias')
+            if dias_raw is not None:
+                dias = AssistenteIA.parse_limited_int(dias_raw, default=30, max_value=365)
+                data_limite = (datetime.now() - timedelta(days=dias)).strftime('%Y-%m-%d')
+                query += ' AND date(m.data_movimento) >= date(?)'
+                params.append(data_limite)
+
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=20, max_value=100)
+            query += ' ORDER BY datetime(m.data_movimento) DESC, m.id DESC LIMIT ?'
+            params.append(limite)
+
+            rows = db.execute(query, params).fetchall()
+            return {'movimentacoes': [dict(r) for r in rows]}
+
+        elif nome == 'proximos_prazos_criticos':
+            dias = AssistenteIA.parse_limited_int(args.get('dias'), default=15, max_value=120)
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=20, max_value=100)
+            incluir_vencidos_raw = args.get('incluir_vencidos', True)
+            incluir_vencidos = str(incluir_vencidos_raw).strip().lower() not in {'0', 'false', 'nao', 'não'}
+
+            hoje = datetime.now().strftime('%Y-%m-%d')
+            data_limite = (datetime.now() + timedelta(days=dias)).strftime('%Y-%m-%d')
+
+            query = '''
+                SELECT p.id,
+                       p.tipo,
+                       p.data_prazo,
+                       p.descricao,
+                       p.status,
+                       pr.id as processo_id,
+                       pr.numero as processo_numero,
+                       pr.numero_cnj as processo_numero_cnj,
+                       pr.titulo as processo_titulo,
+                       c.nome as cliente_nome,
+                       CAST(julianday(date(p.data_prazo)) - julianday(date(?)) AS INTEGER) as dias_restantes
+                FROM prazos p
+                JOIN processos pr ON pr.id = p.processo_id
+                LEFT JOIN clientes c
+                  ON c.id = pr.cliente_id
+                 AND c.workspace_id = pr.workspace_id
+                WHERE p.workspace_id = ?
+                  AND p.status = 'pendente'
+                  AND p.data_prazo IS NOT NULL
+                  AND date(p.data_prazo) <= date(?)
+            '''
+            params: List[Any] = [hoje, workspace_id, data_limite]
+
+            if not incluir_vencidos:
+                query += ' AND date(p.data_prazo) >= date(?)'
+                params.append(hoje)
+
+            query += ' ORDER BY date(p.data_prazo) ASC LIMIT ?'
+            params.append(limite)
+
+            rows = db.execute(query, params).fetchall()
+            prazos = []
+            for row in rows:
+                item = dict(row)
+                dias_restantes = item.get('dias_restantes')
+                if dias_restantes is None:
+                    criticidade = 'atencao'
+                elif int(dias_restantes) < 0:
+                    criticidade = 'atrasado'
+                elif int(dias_restantes) == 0:
+                    criticidade = 'hoje'
+                elif int(dias_restantes) <= 2:
+                    criticidade = 'urgente'
+                elif int(dias_restantes) <= 7:
+                    criticidade = 'atencao'
+                else:
+                    criticidade = 'planejado'
+                item['criticidade'] = criticidade
+                prazos.append(item)
+
+            return {
+                'prazos_criticos': prazos,
+                'janela_dias': dias,
+                'inclui_vencidos': incluir_vencidos,
+                'total': len(prazos),
+            }
+
+        elif nome == 'resumo_processo_360':
+            processo_id = args.get('processo_id')
+            numero = (args.get('numero') or '').strip()
+            titulo = (args.get('titulo') or '').strip()
+
+            query = '''
+                SELECT p.*,
+                       c.nome as cliente_nome,
+                       c.email as cliente_email,
+                       c.telefone as cliente_telefone
+                FROM processos p
+                LEFT JOIN clientes c
+                  ON c.id = p.cliente_id
+                 AND c.workspace_id = p.workspace_id
+                WHERE p.workspace_id = ?
+            '''
+            params: List[Any] = [workspace_id]
+
+            if processo_id:
+                query += ' AND p.id = ?'
+                params.append(processo_id)
+            elif numero:
+                query += ' AND (p.numero LIKE ? OR COALESCE(p.numero_cnj, "") LIKE ?)'
+                like_num = f'%{numero}%'
+                params.extend([like_num, like_num])
+            elif titulo:
+                query += ' AND p.titulo LIKE ?'
+                params.append(f'%{titulo}%')
+            else:
+                return {'erro': 'Informe processo_id, numero ou titulo para gerar o resumo 360'}
+
+            query += ' ORDER BY p.created_at DESC LIMIT 1'
+            processo_row = db.execute(query, params).fetchone()
+            if not processo_row:
+                return {'erro': 'Processo não encontrado'}
+
+            processo = AssistenteIA.serializar_processo_para_ia(processo_row)
+            processo_id = int(processo['id'])
+
+            movimentacoes_rows = db.execute(
+                '''SELECT id, codigo_movimento, nome_movimento, data_movimento, fonte
+                   FROM movimentacoes_processo
+                   WHERE workspace_id = ? AND processo_id = ?
+                   ORDER BY datetime(data_movimento) DESC, id DESC
+                   LIMIT 5''',
+                (workspace_id, processo_id),
+            ).fetchall()
+
+            prazos_rows = db.execute(
+                '''SELECT id, tipo, data_prazo, descricao, status,
+                          CAST(julianday(date(data_prazo)) - julianday(date('now')) AS INTEGER) as dias_restantes
+                   FROM prazos
+                   WHERE workspace_id = ?
+                     AND processo_id = ?
+                     AND status = 'pendente'
+                   ORDER BY date(data_prazo) ASC
+                   LIMIT 5''',
+                (workspace_id, processo_id),
+            ).fetchall()
+
+            tarefas_rows = db.execute(
+                '''SELECT t.id, t.titulo, t.descricao, t.prioridade, t.status, t.data_vencimento,
+                          u.nome as responsavel_nome,
+                          CAST(julianday(date(t.data_vencimento)) - julianday(date('now')) AS INTEGER) as dias_para_vencer
+                   FROM tarefas t
+                   LEFT JOIN users u ON u.id = t.assigned_to
+                   WHERE t.workspace_id = ?
+                     AND t.processo_id = ?
+                     AND t.status IN ('pendente', 'em_andamento')
+                   ORDER BY
+                     CASE WHEN t.data_vencimento IS NULL THEN 1 ELSE 0 END ASC,
+                     date(t.data_vencimento) ASC,
+                     t.created_at DESC
+                   LIMIT 7''',
+                (workspace_id, processo_id),
+            ).fetchall()
+
+            receitas = db.execute(
+                '''SELECT COALESCE(SUM(valor), 0) as total
+                   FROM financeiro
+                   WHERE workspace_id = ? AND processo_id = ? AND tipo IN ('receita', 'entrada')''',
+                (workspace_id, processo_id),
+            ).fetchone()['total']
+            despesas = db.execute(
+                '''SELECT COALESCE(SUM(valor), 0) as total
+                   FROM financeiro
+                   WHERE workspace_id = ? AND processo_id = ? AND tipo IN ('despesa', 'saida')''',
+                (workspace_id, processo_id),
+            ).fetchone()['total']
+
+            total_movimentacoes = db.execute(
+                '''SELECT COUNT(*) as total
+                   FROM movimentacoes_processo
+                   WHERE workspace_id = ? AND processo_id = ?''',
+                (workspace_id, processo_id),
+            ).fetchone()['total']
+            total_prazos_pendentes = db.execute(
+                '''SELECT COUNT(*) as total
+                   FROM prazos
+                   WHERE workspace_id = ? AND processo_id = ? AND status = 'pendente' ''',
+                (workspace_id, processo_id),
+            ).fetchone()['total']
+            total_tarefas_abertas = db.execute(
+                '''SELECT COUNT(*) as total
+                   FROM tarefas
+                   WHERE workspace_id = ?
+                     AND processo_id = ?
+                     AND status IN ('pendente', 'em_andamento')''',
+                (workspace_id, processo_id),
+            ).fetchone()['total']
+
+            return {
+                'processo': processo,
+                'movimentacoes_recentes': [dict(r) for r in movimentacoes_rows],
+                'prazos_pendentes': [dict(r) for r in prazos_rows],
+                'tarefas_abertas': [dict(r) for r in tarefas_rows],
+                'financeiro_processo': {
+                    'receitas': receitas,
+                    'despesas': despesas,
+                    'saldo': receitas - despesas,
+                },
+                'indicadores': {
+                    'total_movimentacoes': total_movimentacoes,
+                    'total_prazos_pendentes': total_prazos_pendentes,
+                    'total_tarefas_abertas': total_tarefas_abertas,
+                },
+            }
+        
+        elif nome == 'listar_prazos':
+            query = 'SELECT p.*, pr.numero as processo_numero FROM prazos p '
+            query += 'JOIN processos pr ON p.processo_id = pr.id WHERE p.workspace_id = ?'
+            params = [workspace_id]
+            
+            status = (args.get('status') or '').strip().lower()
+            if status == 'vencido':
+                hoje = datetime.now().strftime('%Y-%m-%d')
+                query += " AND p.status = 'pendente' AND date(p.data_prazo) < date(?)"
+                params.append(hoje)
+            elif status:
+                query += ' AND p.status = ?'
+                params.append(status)
+            
             if args.get('dias'):
-                data_limite = (datetime.now() + timedelta(days=args['dias'])).strftime('%Y-%m-%d')
+                dias = AssistenteIA.parse_limited_int(args.get('dias'), default=30, max_value=365)
+                data_limite = (datetime.now() + timedelta(days=dias)).strftime('%Y-%m-%d')
                 query += ' AND p.data_prazo <= ?'
                 params.append(data_limite)
             
             query += ' ORDER BY p.data_prazo'
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=30, max_value=100)
+            query += ' LIMIT ?'
+            params.append(limite)
             
             rows = db.execute(query, params).fetchall()
             return {'prazos': [dict(r) for r in rows]}
@@ -2664,6 +3282,9 @@ Parece que você atingiu o limite da sua API Key atual.
                 params.append(args['prioridade'])
             
             query += ' ORDER BY created_at DESC'
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=30, max_value=100)
+            query += ' LIMIT ?'
+            params.append(limite)
             
             rows = db.execute(query, params).fetchall()
             return {'tarefas': [dict(r) for r in rows]}
@@ -2677,6 +3298,9 @@ Parece que você atingiu o limite da sua API Key atual.
                 params.append(f"%{args['nome']}%")
             
             query += ' ORDER BY nome'
+            limite = AssistenteIA.parse_limited_int(args.get('limite'), default=50, max_value=200)
+            query += ' LIMIT ?'
+            params.append(limite)
             
             rows = db.execute(query, params).fetchall()
             return {'clientes': [dict(r) for r in rows]}
@@ -2695,13 +3319,21 @@ Parece que você atingiu o limite da sua API Key atual.
                 fim = hoje.strftime('%Y-%m-%d')
             
             receitas = db.execute(
-                'SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo = ? AND data BETWEEN ? AND ?',
-                (workspace_id, 'receita', inicio, fim)
+                '''SELECT COALESCE(SUM(valor), 0) as total
+                   FROM financeiro
+                   WHERE workspace_id = ?
+                     AND tipo IN ('receita', 'entrada')
+                     AND data BETWEEN ? AND ?''',
+                (workspace_id, inicio, fim)
             ).fetchone()['total']
-            
+
             despesas = db.execute(
-                'SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo = ? AND data BETWEEN ? AND ?',
-                (workspace_id, 'despesa', inicio, fim)
+                '''SELECT COALESCE(SUM(valor), 0) as total
+                   FROM financeiro
+                   WHERE workspace_id = ?
+                     AND tipo IN ('despesa', 'saida')
+                     AND data BETWEEN ? AND ?''',
+                (workspace_id, inicio, fim)
             ).fetchone()['total']
             
             return {
@@ -2709,6 +3341,164 @@ Parece que você atingiu o limite da sua API Key atual.
                 'despesas': despesas,
                 'saldo': receitas - despesas,
                 'periodo': args.get('periodo', 'ano')
+            }
+
+        elif nome == 'gerar_mensagem_whatsapp_contextual':
+            destino = (args.get('destino') or 'cliente').strip().lower()
+            if destino not in {'cliente', 'equipe'}:
+                destino = 'cliente'
+
+            tipo_contexto = (args.get('tipo_contexto') or 'comunicado').strip().lower()
+            if tipo_contexto not in {'movimentacao', 'prazo', 'tarefa', 'status_processo', 'comunicado'}:
+                tipo_contexto = 'comunicado'
+
+            tom = (args.get('tom') or 'acolhedor').strip().lower()
+            if tom not in {'formal', 'acolhedor', 'direto'}:
+                tom = 'acolhedor'
+
+            processo_numero = (args.get('processo_numero') or '').strip()
+            cliente_nome_informado = (args.get('cliente_nome') or '').strip()
+            objetivo = (args.get('objetivo') or '').strip()
+
+            processo = None
+            if processo_numero:
+                processo_row = db.execute(
+                    '''SELECT p.*,
+                              c.nome as cliente_nome
+                       FROM processos p
+                       LEFT JOIN clientes c
+                         ON c.id = p.cliente_id
+                        AND c.workspace_id = p.workspace_id
+                       WHERE p.workspace_id = ?
+                         AND (p.numero LIKE ? OR COALESCE(p.numero_cnj, '') LIKE ?)
+                       ORDER BY p.created_at DESC
+                       LIMIT 1''',
+                    (workspace_id, f'%{processo_numero}%', f'%{processo_numero}%'),
+                ).fetchone()
+                if processo_row:
+                    processo = dict(processo_row)
+
+            cliente_nome = cliente_nome_informado or (processo.get('cliente_nome') if processo else '')
+            if not cliente_nome and destino == 'cliente':
+                cliente_nome = 'cliente'
+
+            cabecalho = 'Olá!' if destino == 'cliente' else 'Equipe,'
+            if destino == 'cliente' and cliente_nome:
+                cabecalho = f'Olá, {cliente_nome}!'
+
+            contexto_linha = ''
+            if processo:
+                contexto_linha = (
+                    f"Processo {processo.get('numero') or processo.get('numero_cnj') or ''} "
+                    f"- {processo.get('titulo') or 'sem título'}"
+                ).strip()
+
+            detalhe = ''
+            if tipo_contexto == 'movimentacao' and processo:
+                mov_row = db.execute(
+                    '''SELECT nome_movimento, data_movimento
+                       FROM movimentacoes_processo
+                       WHERE workspace_id = ? AND processo_id = ?
+                       ORDER BY datetime(data_movimento) DESC, id DESC
+                       LIMIT 1''',
+                    (workspace_id, processo['id']),
+                ).fetchone()
+                if mov_row:
+                    detalhe = (
+                        f"Identificamos nova movimentação em {mov_row['data_movimento']}: "
+                        f"{mov_row['nome_movimento']}."
+                    )
+                else:
+                    detalhe = 'Não há movimentação recente registrada no momento.'
+            elif tipo_contexto == 'prazo' and processo:
+                prazo_row = db.execute(
+                    '''SELECT tipo, data_prazo, descricao
+                       FROM prazos
+                       WHERE workspace_id = ?
+                         AND processo_id = ?
+                         AND status = 'pendente'
+                       ORDER BY date(data_prazo) ASC
+                       LIMIT 1''',
+                    (workspace_id, processo['id']),
+                ).fetchone()
+                if prazo_row:
+                    detalhe = (
+                        f"Próximo prazo: {prazo_row['tipo']} em {prazo_row['data_prazo']}. "
+                        f"Detalhe: {prazo_row['descricao'] or '-'}."
+                    )
+                else:
+                    detalhe = 'No momento não há prazos pendentes para este processo.'
+            elif tipo_contexto == 'tarefa' and processo:
+                tarefa_row = db.execute(
+                    '''SELECT titulo, data_vencimento, prioridade
+                       FROM tarefas
+                       WHERE workspace_id = ?
+                         AND processo_id = ?
+                         AND status IN ('pendente', 'em_andamento')
+                       ORDER BY
+                         CASE WHEN data_vencimento IS NULL THEN 1 ELSE 0 END ASC,
+                         date(data_vencimento) ASC,
+                         created_at DESC
+                       LIMIT 1''',
+                    (workspace_id, processo['id']),
+                ).fetchone()
+                if tarefa_row:
+                    detalhe = (
+                        f"Tarefa em aberto: {tarefa_row['titulo']} "
+                        f"(prioridade {tarefa_row['prioridade']}, vencimento {tarefa_row['data_vencimento'] or 'sem data'})."
+                    )
+                else:
+                    detalhe = 'Não há tarefas pendentes vinculadas a este processo.'
+            elif tipo_contexto == 'status_processo' and processo:
+                detalhe = (
+                    f"Status atual do processo: {processo.get('status') or 'não informado'}. "
+                    f"Último movimento registrado: {processo.get('ultimo_movimento') or 'sem registro'}."
+                )
+            else:
+                detalhe = 'Passando um comunicado rápido sobre o andamento atual.'
+
+            objetivo_linha = f"Objetivo: {objetivo}" if objetivo else ''
+
+            mensagem_base = '\n'.join(
+                line for line in [
+                    cabecalho,
+                    contexto_linha,
+                    detalhe,
+                    objetivo_linha,
+                    'Se precisar, sigo à disposição por aqui.',
+                ] if line
+            )
+
+            preferencia_tom = {
+                'formal': 'Tom formal, claro e respeitoso.',
+                'acolhedor': 'Tom acolhedor e humano, sem perder objetividade.',
+                'direto': 'Tom direto e curto, com chamada clara para ação.',
+            }[tom]
+
+            mensagem_final = maybe_generate_whatsapp_message_with_ai(
+                base_message=mensagem_base,
+                objective=f"Gerar mensagem de WhatsApp contextual para {destino} no contexto {tipo_contexto}.",
+                ai_prompt=preferencia_tom,
+            )
+
+            processo_preview = None
+            if processo:
+                processo_preview = {
+                    'id': processo.get('id'),
+                    'numero': processo.get('numero'),
+                    'numero_cnj': processo.get('numero_cnj'),
+                    'titulo': processo.get('titulo'),
+                    'cliente_nome': processo.get('cliente_nome'),
+                }
+
+            return {
+                'mensagem': mensagem_final,
+                'mensagem_base': mensagem_base,
+                'destino': destino,
+                'tipo_contexto': tipo_contexto,
+                'tom': tom,
+                'processo': processo_preview,
+                'cliente_nome': cliente_nome or None,
             }
         
         return {'erro': 'Função não implementada'}
@@ -7119,9 +7909,9 @@ def dashboard():
 @require_auth
 def chat_assistente():
     """Chat with AI assistant"""
-    data = request.get_json()
+    data = request.get_json() or {}
     mensagem = data.get('mensagem')
-    session_id = data.get('session_id', 'default')
+    session_id = AssistenteIA.normalizar_session_id(data.get('session_id', 'default'))
     
     if not mensagem:
         return jsonify({'error': 'Mensagem não fornecida'}), 400
@@ -7139,7 +7929,7 @@ def chat_assistente():
 @require_auth
 def historico_chat():
     """Get chat history"""
-    session_id = request.args.get('session_id', 'default')
+    session_id = AssistenteIA.normalizar_session_id(request.args.get('session_id', 'default'))
     
     db = get_db()
     rows = db.execute(
@@ -7165,6 +7955,61 @@ def ia_chat_alias():
 def ia_historico_alias():
     """Alias for /api/assistente/historico"""
     return historico_chat()
+
+
+@app.route('/api/ia/auditoria', methods=['GET'])
+@require_auth
+@require_recurso('ia')
+def ia_auditoria():
+    """Auditoria de interações da IA (funções, latência, status e erros)."""
+    db = get_db()
+    workspace_id = g.auth['workspace_id']
+    user_id = g.auth['user_id']
+    role = g.auth.get('role')
+
+    status = (request.args.get('status') or '').strip().lower()
+    try:
+        limit = int(request.args.get('limit', 50))
+    except (TypeError, ValueError):
+        limit = 50
+    limit = max(1, min(limit, 200))
+
+    query = '''
+        SELECT id, workspace_id, user_id, session_id, provider, model,
+               input_message, response_text, function_calls, status,
+               error_message, total_duration_ms, created_at
+        FROM ia_interaction_logs
+        WHERE workspace_id = ?
+    '''
+    params: List[Any] = [workspace_id]
+
+    if status:
+        query += ' AND status = ?'
+        params.append(status)
+
+    # Usuários comuns só enxergam as próprias interações
+    if role not in ('admin', 'superadmin'):
+        query += ' AND user_id = ?'
+        params.append(user_id)
+
+    query += ' ORDER BY id DESC LIMIT ?'
+    params.append(limit)
+    rows = db.execute(query, params).fetchall()
+
+    interacoes = []
+    for row in rows:
+        item = dict(row)
+        try:
+            item['function_calls'] = json.loads(item.get('function_calls') or '[]')
+        except (TypeError, ValueError, json.JSONDecodeError):
+            item['function_calls'] = []
+        interacoes.append(item)
+
+    return jsonify({
+        'sucesso': True,
+        'total': len(interacoes),
+        'interacoes': interacoes,
+    })
 
 # ============================================================================
 # API ROUTES - DOCUMENTOS

@@ -192,6 +192,8 @@ export const ia = {
     api.post('/ia/chat', { mensagem, session_id: sessionId }),
   historico: (sessionId?: string) =>
     api.get('/ia/historico', { params: { session_id: sessionId } }),
+  auditoria: (params?: { status?: string; limit?: number }) =>
+    api.get('/ia/auditoria', { params }),
 };
 
 export const admin = {
