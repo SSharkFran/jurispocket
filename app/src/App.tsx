@@ -36,6 +36,7 @@ import AppLayout from '@/components/AppLayout';
 
 // Components
 import { ConvitesBanner } from '@/components/ConvitesBanner';
+import { PremiumRoute } from '@/components/premium/PremiumRoute';
 
 const queryClient = new QueryClient();
 
@@ -92,16 +93,65 @@ function AppRoutes() {
         <Route path="processos/:id" element={<ProcessoDetalhePage />} />
         <Route path="prazos" element={<PrazosPage />} />
         <Route path="tarefas" element={<TarefasPage />} />
-        <Route path="financeiro" element={<FinanceiroPage />} />
-        <Route path="documentos" element={<DocumentosPage />} />
-        <Route path="templates" element={<TemplatesPage />} />
-        <Route path="equipe" element={<EquipePage />} />
+        <Route
+          path="financeiro"
+          element={
+            <PremiumRoute feature="financeiro">
+              <FinanceiroPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="documentos"
+          element={
+            <PremiumRoute feature="documentos">
+              <DocumentosPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="templates"
+          element={
+            <PremiumRoute feature="templates">
+              <TemplatesPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="equipe"
+          element={
+            <PremiumRoute feature="equipe">
+              <EquipePage />
+            </PremiumRoute>
+          }
+        />
         <Route path="configuracoes" element={<ConfiguracoesPage />} />
         <Route path="admin" element={<AdminDashboardPage />} />
         {/* Novas rotas do design */}
-        <Route path="datajud" element={<DatajudPage />} />
-        <Route path="ia" element={<CopilotIAPage />} />
-        <Route path="whatsapp" element={<WhatsAppPage />} />
+        <Route
+          path="datajud"
+          element={
+            <PremiumRoute feature="pje">
+              <DatajudPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="ia"
+          element={
+            <PremiumRoute feature="ia">
+              <CopilotIAPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="whatsapp"
+          element={
+            <PremiumRoute feature="whatsapp">
+              <WhatsAppPage />
+            </PremiumRoute>
+          }
+        />
       </Route>
 
       {/* Dashboard Layout - Compatibilidade com rotas antigas */}
@@ -121,10 +171,38 @@ function AppRoutes() {
         <Route path="clientes/:id" element={<ClienteDetalhePage />} />
         <Route path="tarefas" element={<TarefasPage />} />
         <Route path="prazos" element={<PrazosPage />} />
-        <Route path="financeiro" element={<FinanceiroPage />} />
-        <Route path="equipe" element={<EquipePage />} />
-        <Route path="documentos" element={<DocumentosPage />} />
-        <Route path="templates" element={<TemplatesPage />} />
+        <Route
+          path="financeiro"
+          element={
+            <PremiumRoute feature="financeiro">
+              <FinanceiroPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="equipe"
+          element={
+            <PremiumRoute feature="equipe">
+              <EquipePage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="documentos"
+          element={
+            <PremiumRoute feature="documentos">
+              <DocumentosPage />
+            </PremiumRoute>
+          }
+        />
+        <Route
+          path="templates"
+          element={
+            <PremiumRoute feature="templates">
+              <TemplatesPage />
+            </PremiumRoute>
+          }
+        />
         <Route path="configuracoes" element={<ConfiguracoesPage />} />
       </Route>
 

@@ -61,17 +61,20 @@ export default function DatajudPage() {
 
   const calcularProximaVerificacao = useCallback(() => {
     const agora = new Date();
-    const minutos = agora.getMinutes();
-    const proximos30 = Math.ceil(minutos / 30) * 30;
-    const proximaHora = new Date(agora);
-    proximaHora.setMinutes(proximos30);
-    proximaHora.setSeconds(0);
-    proximaHora.setMilliseconds(0);
-    if (proximos30 >= 60) {
-      proximaHora.setHours(proximaHora.getHours() + 1);
-      proximaHora.setMinutes(0);
+    const slots = [0, 6, 12, 18];
+
+    for (const slot of slots) {
+      const candidato = new Date(agora);
+      candidato.setHours(slot, 0, 0, 0);
+      if (candidato > agora) {
+        return candidato.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+      }
     }
-    return proximaHora.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
+
+    const amanha = new Date(agora);
+    amanha.setDate(amanha.getDate() + 1);
+    amanha.setHours(0, 0, 0, 0);
+    return amanha.toLocaleTimeString('pt-BR', { hour: '2-digit', minute: '2-digit' });
   }, []);
 
   const carregarProcessos = useCallback(async (showLoading = true) => {
@@ -106,7 +109,6 @@ export default function DatajudPage() {
         const ultimaVerificacaoRaw =
           p.monitoramento?.ultima_verificacao ||
           p.ultima_consulta_datajud ||
-          p.updated_at ||
           null;
         const ultimaVerificacao = ultimaVerificacaoRaw ? new Date(ultimaVerificacaoRaw) : undefined;
         const ultimaVerificacaoValida =

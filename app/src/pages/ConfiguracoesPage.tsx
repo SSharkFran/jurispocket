@@ -1,30 +1,60 @@
-import { type ChangeEvent, useEffect, useRef, useState } from 'react';
+import { type ChangeEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { motion } from 'framer-motion';
-import { User, Mail, Phone, Shield, Bell, Save, Loader2 } from 'lucide-react';
+import { useLocation } from 'react-router-dom';
+import {
+  ArrowRight,
+  Bell,
+  CheckCircle2,
+  Crown,
+  Loader2,
+  Mail,
+  MessageCircle,
+  Phone,
+  Save,
+  Shield,
+  Sparkles,
+  User,
+} from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
 import { Switch } from '@/components/ui/switch';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from '@/components/ui/dialog';
 import { auth } from '@/services/api';
 import { useAuth } from '@/contexts/AuthContext';
+import { buildSalesWhatsAppLink, getPlanLabel } from '@/lib/plans';
 import { toast } from 'sonner';
 
 const API_BASE_URL = (import.meta.env.VITE_API_URL || 'http://localhost:5002/api').replace(/\/api\/?$/, '');
 
-const formatPlano = (plano?: string) => {
-  const codigo = (plano || '').toLowerCase();
-  if (codigo === 'pro') return 'Pro';
-  if (codigo === 'escritorio') return 'Escritorio';
-  if (codigo === 'enterprise') return 'Enterprise';
-  if (codigo === 'gratuito' || codigo === 'free') return 'Gratuito';
-  if (!plano) return 'Gratuito';
-  return plano.charAt(0).toUpperCase() + plano.slice(1);
-};
+const PLAN_OPTIONS = [
+  {
+    code: 'pro',
+    nome: 'Pro',
+    preco: 'R$ 97/mes',
+    destaque: 'Ideal para advogado(a) individual',
+    recursos: ['IA', 'Datajud', 'WhatsApp', 'Financeiro', 'Documentos', 'Templates', 'Equipe'],
+  },
+  {
+    code: 'escritorio',
+    nome: 'Escritorio',
+    preco: 'R$ 297/mes',
+    destaque: 'Ideal para escritorio com equipe',
+    recursos: ['Tudo do Pro', 'Escala para equipe maior', 'Mais armazenamento', 'Colaboracao avancada'],
+  },
+] as const;
 
 export function ConfiguracoesPage() {
   const { user, workspace, refreshUser } = useAuth();
+  const location = useLocation();
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [formData, setFormData] = useState({
     nome: '',
@@ -52,6 +82,14 @@ export function ConfiguracoesPage() {
       resumoDiario: user.resumo_diario || false,
     });
   }, [user]);
+
+  useEffect(() => {
+    const params = new URLSearchParams(location.search);
+    const shouldOpen = params.get('planos');
+    if (shouldOpen === '1' || shouldOpen === 'true') {
+      setIsPlanDialogOpen(true);
+    }
+  }, [location.search]);
 
   const handleSave = async () => {
     try {
@@ -97,8 +135,43 @@ export function ConfiguracoesPage() {
 
   const initials = formData.nome?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
   const avatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
-  const planoNome = workspace?.plano_nome || formatPlano(workspace?.plano);
+  const planoNome = workspace?.plano_nome || getPlanLabel(workspace?.plano);
   const planoCodigo = (workspace?.plano || 'gratuito').toLowerCase();
+  const planosDisponiveis = useMemo(
+    () => PLAN_OPTIONS.filter((plan) => plan.code !== planoCodigo),
+    [planoCodigo]
+  );
+
+  const limparParametroPlanos = () => {
+    const params = new URLSearchParams(location.search);
+    if (!params.has('planos')) return;
+    params.delete('planos');
+    const query = params.toString();
+    const nextUrl = `${location.pathname}${query ? `?${query}` : ''}${location.hash || ''}`;
+    window.history.replaceState({}, '', nextUrl);
+  };
+
+  const handleOpenPlansDialog = () => {
+    setIsPlanDialogOpen(true);
+  };
+
+  const handlePlanDialogOpenChange = (open: boolean) => {
+    setIsPlanDialogOpen(open);
+    if (!open) {
+      limparParametroPlanos();
+    }
+  };
+
+  const handleFalarComVendas = (desiredPlan?: string) => {
+    const link = buildSalesWhatsAppLink({
+      userName: user?.nome,
+      workspaceName: workspace?.nome,
+      currentPlan: workspace?.plano,
+      desiredPlan,
+    });
+    window.open(link, '_blank', 'noopener,noreferrer');
+    toast.success('Abrindo WhatsApp do time de vendas...');
+  };
 
   return (
     <div className="space-y-6 w-full max-w-6xl">
@@ -224,7 +297,7 @@ export function ConfiguracoesPage() {
             variant="outline"
             size="sm"
             className="border-primary/20 text-primary hover:bg-primary/10"
-            onClick={() => toast.info('Gerenciamento de plano em desenvolvimento')}
+            onClick={handleOpenPlansDialog}
           >
             Gerenciar Plano
           </Button>
@@ -235,6 +308,95 @@ export function ConfiguracoesPage() {
         {isSaving ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Save className="mr-2 h-4 w-4" />}
         Salvar Alteracoes
       </Button>
+
+      <Dialog open={isPlanDialogOpen} onOpenChange={handlePlanDialogOpenChange}>
+        <DialogContent className="max-w-4xl border-border bg-card text-foreground">
+          <DialogHeader>
+            <DialogTitle className="flex items-center gap-2 text-xl">
+              <Crown className="h-5 w-5 text-primary" />
+              Upgrade de Plano
+            </DialogTitle>
+          </DialogHeader>
+
+          <div className="space-y-5">
+            <div className="rounded-xl border border-primary/20 bg-primary/5 p-4">
+              <p className="text-sm text-muted-foreground">
+                Seu plano atual e <span className="font-semibold text-primary">{planoNome}</span>. Escolha um plano
+                abaixo e fale com nosso time comercial para concluir o upgrade.
+              </p>
+            </div>
+
+            <div className="grid gap-4 md:grid-cols-2">
+              {PLAN_OPTIONS.map((plan, index) => {
+                const isCurrentPlan = plan.code === planoCodigo;
+                return (
+                  <motion.div
+                    key={plan.code}
+                    initial={{ opacity: 0, y: 10 }}
+                    animate={{ opacity: 1, y: 0 }}
+                    transition={{ delay: index * 0.08 }}
+                    className={`rounded-2xl border p-5 ${
+                      isCurrentPlan
+                        ? 'border-primary/35 bg-primary/10'
+                        : 'border-border/60 bg-secondary/20 hover:border-primary/30'
+                    }`}
+                  >
+                    <div className="mb-4 flex items-start justify-between gap-3">
+                      <div>
+                        <h4 className="flex items-center gap-2 text-lg font-semibold">
+                          <Sparkles className="h-4 w-4 text-primary" />
+                          {plan.nome}
+                        </h4>
+                        <p className="text-sm text-muted-foreground">{plan.destaque}</p>
+                      </div>
+                      <span className="rounded-full border border-primary/20 bg-primary/10 px-2 py-1 text-xs font-medium text-primary">
+                        {plan.preco}
+                      </span>
+                    </div>
+
+                    <div className="mb-5 space-y-2">
+                      {plan.recursos.map((recurso) => (
+                        <div key={recurso} className="flex items-center gap-2 text-sm">
+                          <CheckCircle2 className="h-4 w-4 text-primary" />
+                          <span>{recurso}</span>
+                        </div>
+                      ))}
+                    </div>
+
+                    <Button
+                      className="w-full"
+                      variant={isCurrentPlan ? 'secondary' : 'default'}
+                      disabled={isCurrentPlan}
+                      onClick={() => handleFalarComVendas(plan.nome)}
+                    >
+                      {isCurrentPlan ? 'Plano Atual' : 'Quero esse plano'}
+                      {!isCurrentPlan && <ArrowRight className="ml-2 h-4 w-4" />}
+                    </Button>
+                  </motion.div>
+                );
+              })}
+            </div>
+
+            {planosDisponiveis.length === 0 && (
+              <div className="rounded-xl border border-border/60 bg-secondary/20 p-4 text-sm text-muted-foreground">
+                Seu workspace ja esta no maior plano disponivel no momento. Se quiser um plano customizado, fale com
+                nosso time.
+              </div>
+            )}
+
+            <div className="flex flex-col gap-3 rounded-xl border border-border/60 bg-secondary/20 p-4 sm:flex-row sm:items-center sm:justify-between">
+              <div>
+                <p className="font-medium">Precisa de ajuda para escolher?</p>
+                <p className="text-sm text-muted-foreground">Nosso time comercial pode indicar o melhor plano.</p>
+              </div>
+              <Button variant="outline" className="border-primary/30 text-primary" onClick={() => handleFalarComVendas()}>
+                <MessageCircle className="mr-2 h-4 w-4" />
+                Falar com Vendas
+              </Button>
+            </div>
+          </div>
+        </DialogContent>
+      </Dialog>
     </div>
   );
 }

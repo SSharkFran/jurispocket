@@ -4,7 +4,7 @@ import { motion } from 'framer-motion';
 import { 
   Scale, Bot, MessageSquare, Search, Shield, Zap, 
   BarChart3, Users, FileText, Clock, ArrowRight, Check,
-  Star, ChevronRight, Globe
+  Star, ChevronRight, Globe, Instagram
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 
@@ -86,7 +86,8 @@ const plans = [
 ];
 
 const LandingPage = () => {
-  const [whatsappNumber, setWhatsappNumber] = useState('5511999999999');
+  const fallbackWhatsappNumber = String((import.meta as any).env?.VITE_WHATSAPP_VENDAS || '5511999999999').replace(/\D/g, '') || '5511999999999';
+  const [whatsappNumber, setWhatsappNumber] = useState(fallbackWhatsappNumber);
 
   useEffect(() => {
     const baseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
@@ -95,11 +96,22 @@ const LandingPage = () => {
       .then(res => res.json())
       .then(data => {
         if (data.whatsapp_vendas) {
-          setWhatsappNumber(data.whatsapp_vendas);
+          const sanitized = String(data.whatsapp_vendas).replace(/\D/g, '');
+          if (sanitized) {
+            setWhatsappNumber(sanitized);
+          }
         }
       })
       .catch(() => {});
   }, []);
+
+  const buildSalesLink = (planName: string) => {
+    const number = String(whatsappNumber || fallbackWhatsappNumber).replace(/\D/g, '') || '5511999999999';
+    const text =
+      `Ola, time JurisPocket! Vim pela landing page e quero contratar o plano ${planName}. ` +
+      'Podem me ajudar com valores e ativacao?';
+    return `https://wa.me/${number}?text=${encodeURIComponent(text)}`;
+  };
 
   return (
     <div className="min-h-screen bg-background">
@@ -357,11 +369,19 @@ const LandingPage = () => {
                     </li>
                   ))}
                 </ul>
-                <Link to="/register">
-                  <Button className={`w-full ${plan.popular ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}>
-                    {plan.cta} <ChevronRight className="ml-1 h-4 w-4" />
-                  </Button>
-                </Link>
+                {plan.name === 'Gratuito' ? (
+                  <Link to="/register">
+                    <Button className={`w-full ${plan.popular ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}>
+                      {plan.cta} <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </Link>
+                ) : (
+                  <a href={buildSalesLink(plan.name)} target="_blank" rel="noopener noreferrer" className="block">
+                    <Button className={`w-full ${plan.popular ? "bg-primary text-primary-foreground hover:bg-primary/90" : "bg-secondary text-secondary-foreground hover:bg-secondary/80"}`}>
+                      {plan.cta} <ChevronRight className="ml-1 h-4 w-4" />
+                    </Button>
+                  </a>
+                )}
               </motion.div>
             ))}
           </div>
@@ -389,12 +409,30 @@ const LandingPage = () => {
 
       {/* Footer */}
       <footer className="border-t border-border/50 py-12">
-        <div className="container mx-auto px-6 flex flex-col md:flex-row items-center justify-between gap-4">
-          <div className="flex items-center gap-2">
-            <Scale className="h-5 w-5 text-primary" />
-            <span className="font-semibold">JurisPocket</span>
+        <div className="container mx-auto px-6 space-y-4">
+          <div className="flex flex-col md:flex-row items-center justify-between gap-4">
+            <div className="flex items-center gap-2">
+              <Scale className="h-5 w-5 text-primary" />
+              <span className="font-semibold">JurisPocket</span>
+            </div>
+            <p className="text-sm text-muted-foreground">© 2025 JurisPocket. Todos os direitos reservados.</p>
           </div>
-          <p className="text-sm text-muted-foreground">© 2025 JurisPocket. Todos os direitos reservados.</p>
+          <div className="mx-auto flex w-fit flex-col items-center gap-3 rounded-2xl border border-border/60 bg-secondary/30 px-4 py-3 text-xs text-muted-foreground sm:flex-row">
+            <div className="flex items-center gap-2">
+              <span className="h-1.5 w-1.5 rounded-full bg-primary/80" />
+              JurisPocket é um produto da InfraCode, empresa de tecnologia do Acre.
+            </div>
+            <a
+              href="https://www.instagram.com/infracode_br?igsh=aDVoeHFkZWR1ZWd2"
+              target="_blank"
+              rel="noopener noreferrer"
+            >
+              <Button size="sm" variant="outline" className="h-8 border-primary/30 text-primary hover:bg-primary/10">
+                <Instagram className="mr-1.5 h-4 w-4" />
+                Instagram InfraCode
+              </Button>
+            </a>
+          </div>
         </div>
       </footer>
     </div>

@@ -6166,7 +6166,7 @@ def monitorar_datajud_job():
     JOB DE MONITORAMENTO DATAJUD - Executado automaticamente pelo APScheduler
     
     Este job consulta a API Datajud (CNJ) para todos os processos ativos
-    que possuem monitoramento habilitado. Roda 2x ao dia: 08:00 e 17:30
+    que possuem monitoramento habilitado. Roda a cada 6 horas: 00:00, 06:00, 12:00 e 18:00
     
     FUNCIONAMENTO:
     1. Busca processos com monitoramento ativo (monitorar_datajud = 1)
@@ -6176,8 +6176,7 @@ def monitorar_datajud_job():
     5. Registra logs de consulta para auditoria
     
     CONFIGURAÇÃO DO AGENDADOR:
-    - Manhã: 08:00 (antes do expediente)
-    - Tarde: 17:30 (final do expediente)
+    - 00:00, 06:00, 12:00 e 18:00
     
     CHAVE DE API:
     Configure a variável de ambiente DATAJUD_API_KEY ou edite diretamente
@@ -6562,35 +6561,15 @@ if BACKGROUND_JOBS_ENABLED:
         )
 
         # ============================================================================
-        # AGENDAMENTO DO MONITORAMENTO DATAJUD (NOVO)
+        # AGENDAMENTO DO MONITORAMENTO DATAJUD
         # ============================================================================
-        # Configura o job para rodar 2x ao dia: 08:00 e 17:30
-        # Você pode alterar os horários abaixo conforme necessário
+        # Roda a cada 6 horas: 00:00, 06:00, 12:00 e 18:00
         scheduler.add_job(
             monitorar_datajud_job,
             'cron',
-            hour='8,17',      # 08:00 e 17:00 (24h format)
-            minute='0,30',    # 00 e 30 minutos
-            id='datajud_monitor_manha',
-            replace_existing=True
-        )
-        # Job específico para 17:30
-        scheduler.add_job(
-            monitorar_datajud_job,
-            'cron',
-            hour=17,
-            minute=30,
-            id='datajud_monitor_tarde',
-            replace_existing=True
-        )
-
-        # Job de manhã às 08:00
-        scheduler.add_job(
-            monitorar_datajud_job,
-            'cron',
-            hour=8,
+            hour='0,6,12,18',
             minute=0,
-            id='datajud_monitor_manha_8h',
+            id='datajud_monitor_6h',
             replace_existing=True
         )
 
@@ -6615,7 +6594,7 @@ if BACKGROUND_JOBS_ENABLED:
         print(f"[{datetime.now()}] Agendador iniciado. Jobs configurados:")
         print(f"  - PJe Monitor: 06:00 diariamente")
         print(f"  - Verificar Prazos: 08:00 diariamente")
-        print(f"  - Datajud Monitor: 08:00 e 17:30 diariamente")
+        print(f"  - Datajud Monitor: 00:00, 06:00, 12:00 e 18:00")
         print(f"  - WhatsApp Resumo Diário: checagem a cada minuto")
         print(f"  - WhatsApp Campanhas Agendadas: checagem a cada minuto")
         scheduler.start()
@@ -7131,7 +7110,7 @@ def create_processo():
                 INSERT INTO processo_monitor_config
                 (processo_id, workspace_id, monitorar_datajud, frequencia_verificacao, 
                  ultima_verificacao, total_movimentacoes, created_at, updated_at)
-                VALUES (?, ?, 1, 'diaria', NULL, 0, ?, ?)
+                VALUES (?, ?, 1, '6h', NULL, 0, ?, ?)
                 ON CONFLICT(processo_id) DO UPDATE SET
                 monitorar_datajud = 1,
                 updated_at = excluded.updated_at
@@ -7254,14 +7233,14 @@ def get_processo(id):
             INSERT INTO processo_monitor_config
             (processo_id, workspace_id, monitorar_datajud, frequencia_verificacao, 
              ultima_verificacao, total_movimentacoes, created_at, updated_at)
-            VALUES (?, ?, 1, 'diaria', NULL, 0, ?, ?)
+            VALUES (?, ?, 1, '6h', NULL, 0, ?, ?)
         ''', (id, g.auth['workspace_id'], 
               datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
               datetime.now().strftime('%Y-%m-%d %H:%M:%S')))
         db.commit()
         result['monitoramento'] = {
             'monitorar_datajud': True,
-            'frequencia_verificacao': 'diaria',
+            'frequencia_verificacao': '6h',
             'ultima_verificacao': None,
             'total_movimentacoes': 0
         }
@@ -7541,60 +7520,94 @@ def consultar_datajud(id):
             'mensagem': 'O número do processo deve ter 20 dígitos. Tribunais suportados: TJSP, TJRJ, TJMG, TRF1-6, TST, etc.'
         }), 400
     
+    consulta_em = datetime.now()
     # Consulta a API Datajud
     resultado = DatajudMonitor.consultar_processo(numero_processo, tribunal_sigla)
-    
+
+    movimentos = resultado.get('movimentos') or []
+    movs_novas = []
+    movs_encontradas = len(movimentos) if resultado.get('encontrado') else 0
+    status_consulta = 'sucesso' if resultado.get('sucesso') and resultado.get('encontrado') else 'vazio'
+    erro_msg = None
+
     if not resultado.get('sucesso'):
-        return jsonify({
-            'sucesso': False,
-            'erro': resultado.get('erro', 'Erro na consulta ao Datajud')
-        }), 500
-    
-    # Se encontrou o processo, salva as movimentações
-    if resultado.get('encontrado') and resultado.get('movimentos'):
-        movimentos = resultado['movimentos']
-        
+        status_consulta = 'erro'
+        erro_msg = resultado.get('erro', 'Erro na consulta ao Datajud')
+    elif resultado.get('encontrado') and movimentos:
         # Salva movimentações no banco (evita duplicatas)
         resultado_salvamento = DatajudMonitor.salvar_movimentacoes(
             id, workspace_id, movimentos
         )
-        
         movs_novas = resultado_salvamento.get('novas_movimentacoes', [])
-        
+
         # Se há movimentações novas, cria alertas
         if movs_novas:
             DatajudMonitor.criar_alertas_movimentacao(
                 id, workspace_id, movs_novas, numero_processo
             )
-        
-        # Registra log da consulta
-        db.execute('''
-            INSERT INTO datajud_consulta_logs 
-            (workspace_id, processo_id, numero_processo, tribunal_sigla, 
-             endpoint_usado, status_consulta, movimentacoes_encontradas, 
-             movimentacoes_novas, tempo_resposta_ms, created_at)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-        ''', (
-            workspace_id, id, numero_processo, tribunal_sigla,
-            DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
-            'sucesso', len(movimentos), len(movs_novas),
-            resultado.get('tempo_resposta_ms', 0), datetime.now()
-        ))
-        
-        # Atualiza último movimento no processo
-        if movs_novas:
+            # Atualiza último movimento do processo com o mais recente entre os novos
             ultima_mov = movs_novas[0]
-            db.execute('''
-                UPDATE processos 
-                SET ultimo_movimento = ?, ultimo_movimento_data = ? 
-                WHERE id = ?
-            ''', (ultima_mov['nome'], ultima_mov['data'], id))
-        
-        db.commit()
-        
-        # Atualiza resultado com info de novas movimentações
-        resultado['movimentacoes_novas'] = len(movs_novas)
-    
+            db.execute(
+                '''UPDATE processos
+                   SET ultimo_movimento = ?, ultimo_movimento_data = ?
+                   WHERE id = ?''',
+                (ultima_mov['nome'], ultima_mov['data'], id),
+            )
+
+    # Registra log da consulta (sempre)
+    db.execute(
+        '''INSERT INTO datajud_consulta_logs
+           (workspace_id, processo_id, numero_processo, tribunal_sigla,
+            endpoint_usado, status_consulta, movimentacoes_encontradas,
+            movimentacoes_novas, erro_msg, tempo_resposta_ms, created_at)
+           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+        (
+            workspace_id,
+            id,
+            numero_processo,
+            tribunal_sigla,
+            DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
+            status_consulta,
+            movs_encontradas,
+            len(movs_novas),
+            erro_msg,
+            resultado.get('tempo_resposta_ms', 0),
+            consulta_em,
+        ),
+    )
+
+    # Atualiza última verificação no monitoramento mesmo sem novas movimentações
+    db.execute(
+        '''INSERT INTO processo_monitor_config
+           (processo_id, workspace_id, monitorar_datajud, frequencia_verificacao,
+            ultima_verificacao, total_movimentacoes, created_at, updated_at)
+           VALUES (?, ?, 1, '6h', ?, ?, ?, ?)
+           ON CONFLICT(processo_id) DO UPDATE SET
+           monitorar_datajud = 1,
+           frequencia_verificacao = COALESCE(processo_monitor_config.frequencia_verificacao, '6h'),
+           ultima_verificacao = excluded.ultima_verificacao,
+           total_movimentacoes = excluded.total_movimentacoes,
+           updated_at = excluded.updated_at''',
+        (
+            id,
+            workspace_id,
+            consulta_em,
+            movs_encontradas,
+            consulta_em,
+            consulta_em,
+        ),
+    )
+    db.commit()
+
+    # Atualiza resultado com info de novas movimentações
+    resultado['movimentacoes_novas'] = len(movs_novas)
+
+    if not resultado.get('sucesso'):
+        return jsonify({
+            'sucesso': False,
+            'erro': erro_msg or 'Erro na consulta ao Datajud'
+        }), 500
+
     return jsonify(resultado)
 
 
@@ -11410,15 +11423,17 @@ def status_monitoramento_datajud():
             (workspace_id, hoje)
         ).fetchone()
         
-        # Próxima execução
+        # Próxima execução (a cada 6 horas: 00, 06, 12, 18)
         agora = datetime.now()
         proxima = None
-        if agora.hour < 8:
-            proxima = agora.replace(hour=8, minute=0, second=0)
-        elif agora.hour < 17 or (agora.hour == 17 and agora.minute < 30):
-            proxima = agora.replace(hour=17, minute=30, second=0)
-        else:
-            proxima = (agora + timedelta(days=1)).replace(hour=8, minute=0, second=0)
+        slots = [0, 6, 12, 18]
+        for slot_hour in slots:
+            candidato = agora.replace(hour=slot_hour, minute=0, second=0, microsecond=0)
+            if candidato > agora:
+                proxima = candidato
+                break
+        if proxima is None:
+            proxima = (agora + timedelta(days=1)).replace(hour=0, minute=0, second=0, microsecond=0)
         
         return jsonify({
             'sucesso': True,
@@ -11445,7 +11460,7 @@ def ativar_monitoramento_processo():
     BODY:
     {
         "processo_id": int,
-        "frequencia": "diaria" (ou "semanal", "manual")
+        "frequencia": "6h" (ou "diaria", "semanal", "manual")
     }
     
     RESPOSTA:
@@ -11459,7 +11474,7 @@ def ativar_monitoramento_processo():
     data = request.get_json()
     
     processo_id = data.get('processo_id')
-    frequencia = data.get('frequencia', 'diaria')
+    frequencia = data.get('frequencia', '6h')
     
     if not processo_id:
         return jsonify({'error': 'processo_id é obrigatório'}), 400
