@@ -208,6 +208,10 @@ const WhatsAppPage = () => {
         const confirmadas = response.data.confirmados ?? response.data.enviados ?? 0;
         const pendentes = response.data.pendentes_confirmacao ?? 0;
         const processadas = response.data.processados ?? (confirmadas + pendentes);
+        const destinos = (response.data.destinatarios || [])
+          .map((d) => d.telefone)
+          .filter(Boolean)
+          .join(', ');
 
         if (confirmadas > 0) {
           const sufixoPendentes = pendentes > 0 ? `, ${pendentes} pendente(s) de confirmacao` : '';
@@ -216,7 +220,7 @@ const WhatsAppPage = () => {
           );
         } else if (processadas > 0) {
           toast.warning(
-            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao de entrega no WhatsApp`
+            `Resumo processado: ${processadas} mensagem(ns), aguardando confirmacao. Destinos: ${destinos || 'N/A'}`
           );
         } else {
           toast.error(response.data.error || 'Resumo não enviado');

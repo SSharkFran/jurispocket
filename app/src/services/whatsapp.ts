@@ -228,6 +228,12 @@ export const whatsapp = {
   enviarResumoTeste: () =>
     api.post<{
       sucesso: boolean;
+      test_mode?: string;
+      destinatarios?: Array<{
+        id?: number;
+        nome?: string;
+        telefone?: string | null;
+      }>;
       processados?: number;
       enviados?: number;
       confirmados?: number;

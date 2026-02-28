@@ -9987,9 +9987,44 @@ def whatsapp_automacoes_teste_resumo():
     if g.auth.get('role') not in ('admin', 'superadmin'):
         return jsonify({'sucesso': False, 'erro': 'Apenas admin pode enviar resumo de teste'}), 403
 
+    db = get_db()
     workspace_id = g.auth['workspace_id']
-    report = send_workspace_daily_summary(workspace_id=workspace_id, force=True)
-    return jsonify({'sucesso': report.get('success', False), **report})
+    config = get_workspace_whatsapp_config(db, workspace_id)
+
+    destinatarios = listar_usuarios_workspace_com_telefone(
+        db=db,
+        workspace_id=workspace_id,
+        somente_alerta_whatsapp=False,
+    )
+    if not destinatarios:
+        return jsonify({'sucesso': False, 'erro': 'Nenhum usuario do workspace com telefone cadastrado'}), 400
+
+    message = build_workspace_daily_summary_message(
+        db=db,
+        workspace_id=workspace_id,
+        ai_enabled=config.get('ai_generate_messages', False),
+        ai_prompt=config.get('ai_prompt') or '',
+    )
+
+    report = dispatch_platform_whatsapp_message(
+        db=db,
+        workspace_id=workspace_id,
+        message=message,
+        recipients=destinatarios,
+    )
+    return jsonify({
+        'sucesso': report.get('success', False),
+        'test_mode': 'all_workspace_users_with_phone',
+        'destinatarios': [
+            {
+                'id': d.get('id'),
+                'nome': d.get('nome'),
+                'telefone': d.get('telefone'),
+            }
+            for d in destinatarios
+        ],
+        **report,
+    })
 
 
 @app.route('/api/whatsapp/automacoes/preview-ia', methods=['POST'])
