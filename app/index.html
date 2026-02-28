@@ -9,6 +9,7 @@
       /* Estilos de fallback para evitar tela azul */
       html, body, #root {
         min-height: 100vh;
+        min-height: 100dvh;
         margin: 0;
         padding: 0;
       }
@@ -27,14 +28,15 @@
         align-items: center;
         justify-content: center;
         height: 100vh;
+        height: 100dvh;
         background: #0f172a;
       }
       .initial-loading::after {
         content: '';
         width: 40px;
         height: 40px;
-        border: 3px solid #334155;
-        border-top-color: #06b6d4;
+        border: 3px solid #1f2937;
+        border-top-color: #10b981;
         border-radius: 50%;
         animation: spin 1s linear infinite;
       }

@@ -619,7 +619,7 @@ export function ProcessoDetalhePage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Processo não encontrado</p>
-        <Link to="/processos">
+        <Link to="/app/processos">
           <Button variant="outline" className="mt-4">
             <ArrowLeft className="w-4 h-4 mr-2" />
             Voltar
@@ -633,7 +633,7 @@ export function ProcessoDetalhePage() {
     <div className="space-y-6">
       <div className="flex flex-col lg:flex-row lg:items-center lg:justify-between gap-4">
         <div className="flex items-center gap-4">
-          <Link to="/processos">
+          <Link to="/app/processos">
             <Button variant="outline" size="icon" className="border-white/10 text-muted-foreground hover:text-white">
               <ArrowLeft className="w-4 h-4" />
             </Button>
@@ -1495,7 +1495,7 @@ export function ProcessoDetalhePage() {
                   <div className="p-4 bg-amber-500/10 border border-amber-500/30 rounded-lg">
                     <p className="text-amber-400 text-sm">
                       <strong>Nenhum template cadastrado.</strong>{' '}
-                      <Link to="/templates" className="underline hover:text-amber-300">
+                      <Link to="/app/templates" className="underline hover:text-amber-300">
                         Clique aqui para criar templates
                       </Link>
                     </p>
@@ -1630,7 +1630,7 @@ export function ProcessoDetalhePage() {
                   try {
                     await processos.delete(Number(id));
                     toast.success('Processo excluído com sucesso!');
-                    navigate('/processos');
+                    navigate('/app/processos');
                   } catch (error) {
                     toast.error('Erro ao excluir processo');
                   }

@@ -290,7 +290,7 @@ export function DashboardPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+        <Loader2 className="w-8 h-8 animate-spin text-primary" />
       </div>
     );
   }
@@ -483,7 +483,7 @@ export function DashboardPage() {
                 <p className="text-xs text-muted-foreground text-center py-8">Nenhuma movimentação recente</p>
               ) : (
                 processos_movimentacao.slice(0, 5).map((p) => (
-                  <Link key={p.id} to={`/processos/${p.id}`}>
+                  <Link key={p.id} to={`/app/processos/${p.id}`}>
                     <div className="flex items-start justify-between gap-4 p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors">
                       <div className="min-w-0">
                         <div className="text-sm font-medium truncate">{p.cliente_nome || p.titulo}</div>

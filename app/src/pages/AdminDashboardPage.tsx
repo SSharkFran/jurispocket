@@ -179,7 +179,7 @@ export function AdminDashboardPage() {
 
   if (loading) {
     return (
-      <div className="flex items-center justify-center h-screen bg-background">
+      <div className="flex min-h-screen min-h-[100dvh] items-center justify-center bg-background">
         <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary" />
       </div>
     );
@@ -212,7 +212,7 @@ export function AdminDashboardPage() {
 
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 shrink-0 border-r border-border/60 bg-card/70 min-h-[calc(100vh-80px)] backdrop-blur">
+        <aside className="w-64 shrink-0 border-r border-border/60 bg-card/70 min-h-[calc(100dvh-80px)] backdrop-blur">
           <nav className="p-4 space-y-2">
             <SidebarItem 
               icon={<TrendingUp className="w-4 h-4" />} 
@@ -782,7 +782,7 @@ function UsuariosTab() {
       // Substituir pelo token do usuário
       localStorage.setItem('token', token);
       toast.success(`Logado como ${user.nome}`);
-      window.location.href = '/';
+      navigate('/');
     } catch (error) {
       toast.error('Erro ao impersonar usuário');
     }

@@ -362,7 +362,7 @@ export function ClientesPage() {
 
       {isLoading ? (
         <div className="flex items-center justify-center h-64">
-          <Loader2 className="w-8 h-8 animate-spin text-cyan-500" />
+          <Loader2 className="w-8 h-8 animate-spin text-primary" />
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
@@ -373,7 +373,7 @@ export function ClientesPage() {
             </div>
           )}
           {clientesList.map((cliente) => (
-            <Link key={cliente.id} to={`/clientes/${cliente.id}`}>
+            <Link key={cliente.id} to={`/app/clientes/${cliente.id}`}>
               <Card className="glass-card-hover hover:border-primary/30 transition-all group h-full">
                 <CardContent className="p-5">
                   {/* Header */}

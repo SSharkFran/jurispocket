@@ -1,5 +1,6 @@
-import { BrowserRouter, Routes, Route, Navigate, useParams } from 'react-router-dom';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import { useEffect } from 'react';
+import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
+import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
 import { Toaster } from 'sonner';
 import { TooltipProvider } from '@/components/ui/tooltip';
@@ -37,6 +38,7 @@ import AppLayout from '@/components/AppLayout';
 // Components
 import { ConvitesBanner } from '@/components/ConvitesBanner';
 import { PremiumRoute } from '@/components/premium/PremiumRoute';
+import { FullScreenLoader } from '@/components/FullScreenLoader';
 
 const queryClient = new QueryClient();
 
@@ -54,18 +56,29 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, isLoading } = useAuth();
 
   if (isLoading) {
-    return (
-      <div className="flex items-center justify-center h-screen bg-background">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
-    );
+    return <FullScreenLoader />;
   }
 
-  return isAuthenticated ? <>{children}</> : <Navigate to="/login" />;
+  return isAuthenticated ? <>{children}</> : <Navigate to="/login" replace />;
 }
 
 function AppRoutes() {
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, isLoggingOut, finishLogoutTransition } = useAuth();
+  const location = useLocation();
+
+  useEffect(() => {
+    if (!isLoggingOut || location.pathname !== '/login') return;
+
+    const timeoutId = window.setTimeout(() => {
+      finishLogoutTransition();
+    }, 180);
+
+    return () => window.clearTimeout(timeoutId);
+  }, [isLoggingOut, location.pathname, finishLogoutTransition]);
+
+  if (isLoggingOut && location.pathname !== '/login') {
+    return <Navigate to="/login" replace />;
+  }
 
   return (
     <Routes>
@@ -73,7 +86,7 @@ function AppRoutes() {
       <Route path="/" element={isAuthenticated ? <Navigate to="/app" /> : <LandingPage />} />
 
       {/* Autenticação */}
-      <Route path="/login" element={isAuthenticated ? <Navigate to="/app" /> : <LoginPage />} />
+      <Route path="/login" element={isLoggingOut ? <FullScreenLoader label="Encerrando sessão..." /> : isAuthenticated ? <Navigate to="/app" /> : <LoginPage />} />
       <Route path="/register" element={isAuthenticated ? <Navigate to="/app" /> : <RegisterPage />} />
 
       {/* App Layout - Nova estrutura com /app como base */}
@@ -229,12 +242,26 @@ function AppRoutes() {
   );
 }
 
+function SessionCacheSync() {
+  const queryClient = useQueryClient();
+  const { isAuthenticated, isLoading } = useAuth();
+
+  useEffect(() => {
+    if (!isLoading && !isAuthenticated) {
+      queryClient.clear();
+    }
+  }, [isLoading, isAuthenticated, queryClient]);
+
+  return null;
+}
+
 function App() {
   return (
     <QueryClientProvider client={queryClient}>
       <AuthProvider>
         <TooltipProvider>
           <BrowserRouter>
+            <SessionCacheSync />
             <AppRoutes />
             <ConvitesBanner />
             <Toaster position="top-right" richColors />

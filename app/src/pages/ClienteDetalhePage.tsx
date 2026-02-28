@@ -48,7 +48,7 @@ export function ClienteDetalhePage() {
       setProcessosList(processosRes.data);
     } catch (error) {
       toast.error('Erro ao carregar dados do cliente');
-      navigate('/clientes');
+      navigate('/app/clientes');
     }
   };
 
@@ -80,7 +80,7 @@ export function ClienteDetalhePage() {
     try {
       await clientes.delete(parseInt(id));
       toast.success('Cliente excluído com sucesso!');
-      navigate('/clientes');
+      navigate('/app/clientes');
     } catch (error) {
       toast.error('Erro ao excluir cliente');
     }
@@ -98,7 +98,7 @@ export function ClienteDetalhePage() {
     return (
       <div className="text-center py-12">
         <p className="text-muted-foreground">Cliente não encontrado</p>
-        <Button onClick={() => navigate('/clientes')} className="mt-4">
+        <Button onClick={() => navigate('/app/clientes')} className="mt-4">
           <ArrowLeft className="w-4 h-4 mr-2" />
           Voltar para Clientes
         </Button>
@@ -114,7 +114,7 @@ export function ClienteDetalhePage() {
           <Button
             variant="outline"
             size="icon"
-            onClick={() => navigate('/clientes')}
+            onClick={() => navigate('/app/clientes')}
             className="border-border text-muted-foreground hover:text-white hover:bg-secondary"
           >
             <ArrowLeft className="w-4 h-4" />
@@ -471,7 +471,7 @@ export function ClienteDetalhePage() {
           <div className="flex justify-between items-center">
             <h2 className="text-xl font-semibold text-white">Processos do Cliente</h2>
             <Button 
-              onClick={() => navigate('/processos', { state: { cliente_id: cliente.id } })}
+              onClick={() => navigate('/app/processos', { state: { cliente_id: cliente.id } })}
               className="bg-primary hover:bg-primary/90"
             >
               <Plus className="w-4 h-4 mr-2" />
@@ -485,7 +485,7 @@ export function ClienteDetalhePage() {
                 <Briefcase className="w-12 h-12 text-muted-foreground mx-auto mb-4" />
                 <p className="text-muted-foreground">Nenhum processo cadastrado para este cliente</p>
                 <Button 
-                  onClick={() => navigate('/processos', { state: { cliente_id: cliente.id } })}
+                  onClick={() => navigate('/app/processos', { state: { cliente_id: cliente.id } })}
                   className="mt-4 bg-primary hover:bg-primary/90"
                 >
                   <Plus className="w-4 h-4 mr-2" />
@@ -499,7 +499,7 @@ export function ClienteDetalhePage() {
                 <Card 
                   key={processo.id} 
                   className="bg-card/50 border-border hover:border-border transition-colors cursor-pointer"
-                  onClick={() => navigate(`/processos/${processo.id}`)}
+                  onClick={() => navigate(`/app/processos/${processo.id}`)}
                 >
                   <CardContent className="p-4">
                     <div className="flex items-start justify-between">

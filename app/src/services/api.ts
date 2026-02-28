@@ -21,11 +21,11 @@ api.interceptors.response.use(
   (response) => response,
   (error) => {
     if (error.response?.status === 401) {
-      // Só redireciona se não estiver já na página de login
+      // Evita loop na tela de auth e notifica a aplicação para encerrar sessão via SPA
       const currentPath = window.location.pathname;
       if (currentPath !== '/login' && currentPath !== '/register') {
         localStorage.removeItem('token');
-        window.location.href = '/login';
+        window.dispatchEvent(new Event('jurispocket:force-logout'));
       }
     }
     return Promise.reject(error);

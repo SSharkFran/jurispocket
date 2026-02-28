@@ -220,7 +220,7 @@ export function PainelAlertas({
       <div className="space-y-3">
         {carregando && alertasFiltrados.length === 0 ? (
           <div className="flex justify-center py-8">
-            <div className="animate-spin rounded-full h-8 w-8 border border-gray-300 border-t-blue-600"></div>
+            <div className="animate-spin rounded-full h-8 w-8 border border-border border-t-primary"></div>
           </div>
         ) : alertasFiltrados.length === 0 ? (
           <div className="text-center py-8 bg-gray-50 rounded-lg border border-gray-200">

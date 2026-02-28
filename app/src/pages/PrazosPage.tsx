@@ -158,7 +158,7 @@ export function PrazosPage() {
   if (isLoading) {
     return (
       <div className="flex items-center justify-center h-64">
-        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-cyan-500"></div>
+        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
       </div>
     );
   }
@@ -405,7 +405,7 @@ export function PrazosPage() {
                               <Badge 
                                 variant="outline" 
                                 className="bg-slate-800 text-slate-300 border-slate-700 cursor-pointer hover:bg-slate-700"
-                                onClick={() => navigate(`/processos/${prazo.processo_id}`)}
+                                onClick={() => navigate(`/app/processos/${prazo.processo_id}`)}
                               >
                                 {prazo.processo_numero}
                                 <ArrowRight className="w-3 h-3 ml-1" />

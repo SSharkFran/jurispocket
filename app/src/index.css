@@ -43,6 +43,11 @@
   }
 }
 
+/* Mobile safe areas (iOS notch/home indicator) */
+.safe-area-pb {
+  padding-bottom: env(safe-area-inset-bottom);
+}
+
 @layer base {
   * {
     @apply border-border;

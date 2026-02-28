@@ -323,7 +323,7 @@ export function DocumentosList({ processoId, clienteId, titulo = 'Documentos' }:
       {/* Lista */}
       {isLoading ? (
         <div className="flex items-center justify-center h-32">
-          <Loader2 className="w-6 h-6 animate-spin text-cyan-500" />
+          <Loader2 className="w-6 h-6 animate-spin text-primary" />
         </div>
       ) : documentosList.length === 0 ? (
         <div className="text-center py-8 border border-dashed border-slate-700 rounded-lg">

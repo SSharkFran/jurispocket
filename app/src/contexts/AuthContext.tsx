@@ -32,11 +32,13 @@ interface AuthContextType {
   setUser: (user: User | null) => void;
   workspace: Workspace | null;
   isLoading: boolean;
+  isLoggingOut: boolean;
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
   register: (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) => Promise<void>;
   logout: () => void;
+  finishLogoutTransition: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
 }
 
@@ -46,6 +48,14 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [workspace, setWorkspace] = useState<Workspace | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [isLoggingOut, setIsLoggingOut] = useState(false);
+
+  const clearSession = () => {
+    localStorage.removeItem('token');
+    localStorage.removeItem('user');
+    setUser(null);
+    setWorkspace(null);
+  };
 
   useEffect(() => {
     console.log('🔐 AuthProvider montado');
@@ -67,9 +77,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       setWorkspace(response.data.workspace);
     } catch (error) {
       console.error('❌ Erro ao atualizar usuário:', error);
-      localStorage.removeItem('token');
-      setUser(null);
-      setWorkspace(null);
+      clearSession();
     } finally {
       setIsLoading(false);
     }
@@ -99,16 +107,28 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   const logout = () => {
-    localStorage.removeItem('token');
-    setUser(null);
-    setWorkspace(null);
-    window.location.href = '/login';
+    setIsLoggingOut(true);
+    clearSession();
+  };
+
+  const finishLogoutTransition = () => {
+    setIsLoggingOut(false);
   };
 
   const updateProfile = async (data: Partial<User>) => {
     await auth.updateProfile(data);
     await refreshUser();
   };
+
+  useEffect(() => {
+    const handleForcedLogout = (_event: Event) => {
+      setIsLoggingOut(true);
+      clearSession();
+    };
+
+    window.addEventListener('jurispocket:force-logout', handleForcedLogout);
+    return () => window.removeEventListener('jurispocket:force-logout', handleForcedLogout);
+  }, []);
 
   return (
     <AuthContext.Provider
@@ -117,11 +137,13 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         setUser,
         workspace,
         isLoading,
+        isLoggingOut,
         isAuthenticated: !!user,
         refreshUser,
         login,
         register,
         logout,
+        finishLogoutTransition,
         updateProfile,
       }}
     >

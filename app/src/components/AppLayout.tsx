@@ -241,7 +241,7 @@ const AppLayout = () => {
   );
 
   return (
-    <div className="flex h-screen bg-background overflow-hidden">
+    <div className="flex h-[100dvh] min-h-screen bg-background overflow-hidden">
       {/* Desktop Sidebar */}
       <motion.aside
         animate={{ width: collapsed ? 72 : 260 }}
@@ -415,7 +415,7 @@ const AppLayout = () => {
         </header>
 
         {/* Page content */}
-        <main className="flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
+        <main className="safe-area-pb flex-1 overflow-y-auto overflow-x-hidden p-4 lg:p-6">
           <AnimatePresence mode="wait">
             <motion.div
               key={location.pathname}
