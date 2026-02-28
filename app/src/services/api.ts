@@ -177,6 +177,7 @@ export const equipe = {
   list: () => api.get('/equipe'),
   convidar: (data: { email: string; role?: string }) => api.post('/equipe/convidar', data),
   convitesPendentes: () => api.get('/equipe/convites'),
+  convitesWorkspace: () => api.get('/equipe/convites/workspace'),
   cancelarConvite: (id: number) => api.delete(`/equipe/convites/${id}`),
   removerMembro: (userId: number) => api.delete(`/equipe/membros/${userId}`),
   atualizarRole: (userId: number, role: string) => api.put(`/equipe/membros/${userId}/role`, { role }),
