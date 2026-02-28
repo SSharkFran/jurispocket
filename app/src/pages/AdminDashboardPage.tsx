@@ -1304,11 +1304,11 @@ function ConfiguracoesTab() {
         phone_number: platformForm.phone_number || '',
         enabled: Boolean(platformForm.enabled),
       });
-      setPlatformConfig(response.data.config);
       setPlatformForm(response.data.config);
       toast.success('WhatsApp da plataforma atualizado');
-    } catch (error) {
-      toast.error('Erro ao salvar WhatsApp da plataforma');
+      await carregarWhatsAppPlataforma();
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || 'Erro ao salvar WhatsApp da plataforma');
     } finally {
       setPlatformLoading(false);
     }
