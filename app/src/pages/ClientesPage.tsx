@@ -170,11 +170,11 @@ export function ClientesPage() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+            <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
               <Plus className="mr-2 h-4 w-4" /> Novo Cliente
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-background border-border max-w-2xl max-h-[90vh] overflow-y-auto">
+          <DialogContent className="bg-background border-border sm:max-w-2xl max-h-[90vh] overflow-y-auto">
             <DialogHeader>
               <DialogTitle>Novo Cliente</DialogTitle>
             </DialogHeader>
@@ -282,7 +282,7 @@ export function ClientesPage() {
                   placeholder="Rua/Avenida"
                   className="bg-secondary border-border"
                 />
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <Input
                     value={formData.numero}
                     onChange={(e) => setFormData({ ...formData, numero: e.target.value })}
@@ -309,7 +309,7 @@ export function ClientesPage() {
                     placeholder="Cidade"
                     className="bg-secondary border-border"
                   />
-                  <div className="grid grid-cols-2 gap-2">
+                  <div className="grid grid-cols-1 gap-2 sm:grid-cols-2">
                     <Input
                       value={formData.estado}
                       onChange={(e) => setFormData({ ...formData, estado: e.target.value.toUpperCase() })}

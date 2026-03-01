@@ -346,7 +346,7 @@ const AppLayout = () => {
                       animate={{ opacity: 1, y: 0, scale: 1 }}
                       exit={{ opacity: 0, y: 10, scale: 0.95 }}
                       transition={{ duration: 0.15 }}
-                      className="absolute right-0 top-full mt-2 w-80 glass-card z-50 overflow-hidden"
+                      className="absolute right-0 top-full mt-2 w-[min(22rem,calc(100vw-1rem))] glass-card z-50 overflow-hidden"
                     >
                       <div className="flex items-center justify-between p-3 border-b border-border/50">
                         <span className="font-semibold text-sm">Notificações</span>

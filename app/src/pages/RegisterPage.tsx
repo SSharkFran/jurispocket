@@ -365,13 +365,13 @@ export function RegisterPage() {
                 )}
               </Button>
 
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                 <Button
                   type="button"
                   variant="outline"
                   onClick={handleResendCode}
                   disabled={isLoading}
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                 >
                   Reenviar código
                 </Button>
@@ -386,7 +386,7 @@ export function RegisterPage() {
                     setErrorMessage(null);
                   }}
                   disabled={isLoading}
-                  className="flex-1"
+                  className="w-full sm:flex-1"
                 >
                   Alterar dados
                 </Button>

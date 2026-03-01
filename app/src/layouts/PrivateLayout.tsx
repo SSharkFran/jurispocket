@@ -278,7 +278,7 @@ const PrivateLayout = ({ children }: PrivateLayoutProps) => {
                       className="fixed inset-0 z-40"
                       onClick={() => setNotificationsOpen(false)}
                     />
-                    <div className="absolute right-0 top-full mt-2 w-80 sm:w-96 glass-card-strong z-50 overflow-hidden">
+                    <div className="absolute right-0 top-full mt-2 w-[min(24rem,calc(100vw-1rem))] glass-card-strong z-50 overflow-hidden">
                       <div className="flex items-center justify-between p-4 border-b border-white/5">
                         <h3 className="font-semibold">Notificações</h3>
                         {unreadCount > 0 && (

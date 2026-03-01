@@ -306,7 +306,7 @@ export function ConfiguracoesPage() {
       </Button>
 
       <Dialog open={isPlanDialogOpen} onOpenChange={handlePlanDialogOpenChange}>
-        <DialogContent className="max-w-4xl border-border bg-card text-foreground">
+        <DialogContent className="sm:max-w-4xl border-border bg-card text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-xl">
               <Crown className="h-5 w-5 text-primary" />

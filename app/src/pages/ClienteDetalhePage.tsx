@@ -126,15 +126,15 @@ export function ClienteDetalhePage() {
             </p>
           </div>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline" className="border-border text-foreground hover:text-white hover:bg-secondary">
+              <Button variant="outline" className="w-full border-border text-foreground hover:text-white hover:bg-secondary sm:w-auto">
                 <Edit3 className="w-4 h-4 mr-2" />
                 Editar
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border text-white max-w-2xl max-h-[90vh] overflow-y-auto">
+            <DialogContent className="bg-card border-border text-white sm:max-w-2xl max-h-[90vh] overflow-y-auto">
               <DialogHeader>
                 <DialogTitle>Editar Cliente</DialogTitle>
               </DialogHeader>
@@ -234,7 +234,7 @@ export function ClienteDetalhePage() {
                       className="bg-secondary border-border text-white"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="numero">Número</Label>
                       <Input
@@ -273,7 +273,7 @@ export function ClienteDetalhePage() {
                       className="bg-secondary border-border text-white"
                     />
                   </div>
-                  <div className="grid grid-cols-2 gap-4">
+                  <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                     <div>
                       <Label htmlFor="estado">Estado</Label>
                       <Input
@@ -304,11 +304,11 @@ export function ClienteDetalhePage() {
                     />
                   </div>
                 </div>
-                <div className="flex gap-2 pt-4">
-                  <Button type="submit" className="flex-1 bg-primary hover:bg-primary/90">
+                <div className="flex flex-col gap-2 pt-4 sm:flex-row">
+                  <Button type="submit" className="w-full bg-primary hover:bg-primary/90 sm:flex-1">
                     Salvar Alterações
                   </Button>
-                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+                  <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                     Cancelar
                   </Button>
                 </div>
@@ -318,7 +318,7 @@ export function ClienteDetalhePage() {
           <Button 
             variant="outline" 
             onClick={handleDelete}
-            className="border-red-700 text-red-400 hover:text-red-300 hover:bg-red-500/10"
+            className="w-full border-red-700 text-red-400 hover:text-red-300 hover:bg-red-500/10 sm:w-auto"
           >
             <Trash2 className="w-4 h-4 mr-2" />
             Excluir
@@ -328,16 +328,16 @@ export function ClienteDetalhePage() {
 
       {/* Content Tabs */}
       <Tabs defaultValue="info" className="space-y-6">
-        <TabsList className="bg-card/50 border border-border">
-          <TabsTrigger value="info" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+        <TabsList className="w-full justify-start overflow-x-auto bg-card/50 border border-border">
+          <TabsTrigger value="info" className="flex-none data-[state=active]:bg-primary data-[state=active]:text-white">
             <User className="w-4 h-4 mr-2" />
             Informações
           </TabsTrigger>
-          <TabsTrigger value="processos" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+          <TabsTrigger value="processos" className="flex-none data-[state=active]:bg-primary data-[state=active]:text-white">
             <Briefcase className="w-4 h-4 mr-2" />
             Processos ({processosList.length})
           </TabsTrigger>
-          <TabsTrigger value="documentos" className="data-[state=active]:bg-primary data-[state=active]:text-white">
+          <TabsTrigger value="documentos" className="flex-none data-[state=active]:bg-primary data-[state=active]:text-white">
             <FolderOpen className="w-4 h-4 mr-2" />
             Documentos
           </TabsTrigger>
@@ -413,19 +413,19 @@ export function ClienteDetalhePage() {
               </CardHeader>
               <CardContent className="space-y-2">
                 {cliente.cpf_cnpj && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">CPF/CNPJ:</span>
                     <span className="text-foreground">{cliente.cpf_cnpj}</span>
                   </div>
                 )}
                 {cliente.rg_ie && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">RG/IE:</span>
                     <span className="text-foreground">{cliente.rg_ie}</span>
                   </div>
                 )}
                 {cliente.data_nascimento && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">Nascimento:</span>
                     <span className="text-foreground">
                       {new Date(cliente.data_nascimento).toLocaleDateString('pt-BR')}
@@ -433,19 +433,19 @@ export function ClienteDetalhePage() {
                   </div>
                 )}
                 {cliente.nacionalidade && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">Nacionalidade:</span>
                     <span className="text-foreground">{cliente.nacionalidade}</span>
                   </div>
                 )}
                 {cliente.estado_civil && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">Estado Civil:</span>
                     <span className="text-foreground capitalize">{cliente.estado_civil}</span>
                   </div>
                 )}
                 {cliente.profissao && (
-                  <div className="flex justify-between">
+                  <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                     <span className="text-muted-foreground">Profissão:</span>
                     <span className="text-foreground">{cliente.profissao}</span>
                   </div>
@@ -468,11 +468,11 @@ export function ClienteDetalhePage() {
         </TabsContent>
 
         <TabsContent value="processos" className="space-y-6">
-          <div className="flex justify-between items-center">
+          <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <h2 className="text-xl font-semibold text-white">Processos do Cliente</h2>
             <Button 
               onClick={() => navigate('/app/processos', { state: { cliente_id: cliente.id } })}
-              className="bg-primary hover:bg-primary/90"
+              className="w-full bg-primary hover:bg-primary/90 sm:w-auto"
             >
               <Plus className="w-4 h-4 mr-2" />
               Novo Processo

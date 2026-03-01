@@ -120,12 +120,12 @@ const PortalCliente = () => {
     <div className="min-h-screen bg-[#0f1217]">
       {/* Background Effects */}
       <div className="fixed inset-0 bg-gradient-radial opacity-50"></div>
-      <div className="fixed top-1/4 left-1/4 w-96 h-96 bg-[#7db2ff]/10 rounded-full blur-3xl"></div>
+      <div className="fixed top-1/4 left-1/4 h-64 w-64 rounded-full bg-[#7db2ff]/10 blur-3xl sm:h-96 sm:w-96"></div>
 
       {/* Header */}
       <header className="relative border-b border-white/5">
         <div className="max-w-4xl mx-auto px-4 sm:px-6 py-6">
-          <div className="flex items-center justify-between">
+          <div className="flex flex-wrap items-center justify-between gap-3">
             <Link to="/" className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-[#7db2ff] to-[#2d6cdf] flex items-center justify-center">
                 <Scale className="w-5 h-5 text-white" />

@@ -303,25 +303,25 @@ export function TemplatesPage() {
   };
 
   return (
-    <div className="p-6 space-y-6">
+    <div className="space-y-6 p-4 sm:p-6">
       {/* Header */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <div>
           <h1 className="text-3xl font-bold text-foreground">Templates de Documentos</h1>
           <p className="text-muted-foreground mt-1">
             Crie modelos com variáveis para gerar documentos automaticamente
           </p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Button 
             variant="outline" 
             onClick={handleDownloadModelo}
-            className="border-border"
+            className="w-full border-border sm:w-auto"
           >
             <Download className="w-4 h-4 mr-2" />
             Guia de Variáveis
           </Button>
-          <Button onClick={() => setIsCreateOpen(true)} className="bg-primary hover:bg-primary/90">
+          <Button onClick={() => setIsCreateOpen(true)} className="w-full bg-primary hover:bg-primary/90 sm:w-auto">
             <Plus className="w-4 h-4 mr-2" />
             Novo Template
           </Button>
@@ -329,8 +329,8 @@ export function TemplatesPage() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4 flex-wrap">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:flex-wrap">
+        <div className="relative w-full sm:flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar templates..."
@@ -340,7 +340,7 @@ export function TemplatesPage() {
           />
         </div>
         <Select value={categoriaFiltro} onValueChange={setCategoriaFiltro}>
-          <SelectTrigger className="w-48 bg-secondary border-border">
+          <SelectTrigger className="w-full bg-secondary border-border sm:w-48">
             <SelectValue placeholder="Todas categorias" />
           </SelectTrigger>
           <SelectContent>
@@ -351,7 +351,7 @@ export function TemplatesPage() {
           </SelectContent>
         </Select>
         <Select value={tipoFiltro} onValueChange={(v) => setTipoFiltro(v as any)}>
-          <SelectTrigger className="w-40 bg-secondary border-border">
+          <SelectTrigger className="w-full bg-secondary border-border sm:w-40">
             <SelectValue placeholder="Todos tipos" />
           </SelectTrigger>
           <SelectContent>
@@ -459,7 +459,7 @@ export function TemplatesPage() {
 
       {/* Dialog Criar Template */}
       <Dialog open={isCreateOpen} onOpenChange={setIsCreateOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground overflow-y-auto">
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
@@ -473,7 +473,7 @@ export function TemplatesPage() {
             <RadioGroup 
               value={formData.tipo_arquivo} 
               onValueChange={(v) => setFormData({ ...formData, tipo_arquivo: v as 'texto' | 'docx' })}
-              className="flex gap-4"
+              className="flex flex-col gap-3 sm:flex-row sm:gap-4"
             >
               <div className="flex items-center space-x-2">
                 <RadioGroupItem value="texto" id="texto" />
@@ -529,7 +529,7 @@ export function TemplatesPage() {
 
       {/* Dialog Editar Template */}
       <Dialog open={isEditOpen} onOpenChange={setIsEditOpen}>
-        <DialogContent className="max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground">
+        <DialogContent className="sm:max-w-5xl max-h-[90vh] bg-secondary border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Edit2 className="w-5 h-5 text-primary" />
@@ -553,7 +553,7 @@ export function TemplatesPage() {
 
       {/* Dialog Preview */}
       <Dialog open={isPreviewOpen} onOpenChange={setIsPreviewOpen}>
-        <DialogContent className="max-w-3xl max-h-[90vh] bg-secondary border-border text-foreground">
+        <DialogContent className="sm:max-w-3xl max-h-[90vh] bg-secondary border-border text-foreground">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               {selectedTemplate?.tipo_arquivo === 'docx' ? (
@@ -651,8 +651,8 @@ interface TemplateFormProps {
 function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, submitLabel }: TemplateFormProps) {
   return (
     <div className="flex flex-col h-full">
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="col-span-2">
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-2">
           <Label htmlFor="nome">Nome do Template *</Label>
           <Input
             id="nome"
@@ -691,7 +691,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
         />
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-[400px]">
+      <div className="flex min-h-[400px] flex-1 flex-col gap-4 lg:flex-row">
         {/* Editor */}
         <div className="flex-1 flex flex-col">
           <Label htmlFor="conteudo" className="mb-1">
@@ -710,7 +710,7 @@ function TemplateForm({ formData, setFormData, onInsertVar, onCancel, onSubmit, 
         </div>
 
         {/* Painel de Variáveis */}
-        <div className="w-64 bg-card rounded-lg border border-border flex flex-col max-h-[500px]">
+        <div className="w-full max-h-[500px] rounded-lg border border-border bg-card lg:w-64">
           <div className="p-3 border-b border-border flex items-center gap-2 shrink-0">
             <HelpCircle className="w-4 h-4 text-primary" />
             <span className="font-medium text-sm">Variáveis Disponíveis</span>
@@ -785,8 +785,8 @@ function WordUploadForm({
 }: WordUploadFormProps) {
   return (
     <div className="flex flex-col h-full">
-      <div className="grid grid-cols-3 gap-4 mb-4">
-        <div className="col-span-2">
+      <div className="mb-4 grid grid-cols-1 gap-4 sm:grid-cols-3">
+        <div className="sm:col-span-2">
           <Label htmlFor="nome-word">Nome do Template *</Label>
           <Input
             id="nome-word"
@@ -825,7 +825,7 @@ function WordUploadForm({
         />
       </div>
 
-      <div className="flex gap-4 flex-1 min-h-[300px]">
+      <div className="flex min-h-[300px] flex-1 flex-col gap-4 lg:flex-row">
         {/* Upload Area */}
         <div className="flex-1 flex flex-col">
           <Label className="mb-2">Arquivo Word (.docx) *</Label>
@@ -871,7 +871,7 @@ function WordUploadForm({
         </div>
 
         {/* Painel de Instruções */}
-        <div className="w-72 bg-card rounded-lg border border-border flex flex-col max-h-[400px]">
+        <div className="w-full max-h-[400px] rounded-lg border border-border bg-card lg:w-72">
           <div className="p-3 border-b border-border flex items-center gap-2 shrink-0">
             <HelpCircle className="w-4 h-4 text-primary" />
             <span className="font-medium text-sm">Como usar</span>
@@ -941,5 +941,3 @@ function WordUploadForm({
     </div>
   );
 }
-
-

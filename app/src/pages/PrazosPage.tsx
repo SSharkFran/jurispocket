@@ -173,12 +173,12 @@ export function PrazosPage() {
         </div>
         <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
           <DialogTrigger asChild>
-            <Button className="bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600">
+            <Button className="w-full bg-gradient-to-r from-cyan-500 to-blue-500 hover:from-cyan-600 hover:to-blue-600 sm:w-auto">
               <Plus className="w-4 h-4 mr-2" />
               Novo Prazo
             </Button>
           </DialogTrigger>
-          <DialogContent className="bg-slate-900 border-slate-700 text-white max-w-lg">
+          <DialogContent className="bg-slate-900 border-slate-700 text-white sm:max-w-lg">
             <DialogHeader>
               <DialogTitle>Novo Prazo</DialogTitle>
             </DialogHeader>
@@ -201,7 +201,7 @@ export function PrazosPage() {
                   </SelectContent>
                 </Select>
               </div>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label htmlFor="tipo">Tipo *</Label>
                   <Select

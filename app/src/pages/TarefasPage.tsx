@@ -245,12 +245,12 @@ export function TarefasPage() {
 
   return (
     <div className="space-y-6">
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h1 className="text-2xl font-bold">Tarefas & Prazos</h1>
-        <div className="flex gap-2">
+        <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
           <Dialog open={isPrazoDialogOpen} onOpenChange={setIsPrazoDialogOpen}>
             <DialogTrigger asChild>
-              <Button variant="outline">
+              <Button variant="outline" className="w-full sm:w-auto">
                 <Calendar className="mr-2 h-4 w-4" /> Novo Prazo
               </Button>
             </DialogTrigger>
@@ -278,7 +278,7 @@ export function TarefasPage() {
                   </Select>
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="tipo_prazo">Tipo *</Label>
                     <Select value={prazoForm.tipo} onValueChange={(v) => setPrazoForm({ ...prazoForm, tipo: v })}>
@@ -358,7 +358,7 @@ export function TarefasPage() {
 
           <Dialog open={isTarefaDialogOpen} onOpenChange={setIsTarefaDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary text-primary-foreground hover:bg-primary/90">
+              <Button className="w-full bg-primary text-primary-foreground hover:bg-primary/90 sm:w-auto">
                 <Plus className="mr-2 h-4 w-4" /> Nova Tarefa
               </Button>
             </DialogTrigger>
@@ -389,7 +389,7 @@ export function TarefasPage() {
                   />
                 </div>
 
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="processo_tarefa">Processo</Label>
                     <Select
@@ -484,7 +484,7 @@ export function TarefasPage() {
                 transition={{ delay: i * 0.03 }}
                 className="glass-card p-4"
               >
-                <div className="flex items-start justify-between gap-4">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                   <div className="flex items-start gap-3 min-w-0">
                     <div className="mt-0.5">{statusIcon(tarefa.status)}</div>
                     <div className="min-w-0">
@@ -508,7 +508,7 @@ export function TarefasPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 shrink-0 sm:w-auto sm:justify-end">
                     <span className={prioridadeColors[tarefa.prioridade] || 'badge-media'}>{tarefa.prioridade}</span>
                     {tarefa.status !== 'concluida' && (
                       <Button size="sm" variant="outline" onClick={() => handleConcluirTarefa(tarefa.id)}>
@@ -537,7 +537,7 @@ export function TarefasPage() {
                   transition={{ delay: i * 0.03 }}
                   className="glass-card p-4"
                 >
-                  <div className="flex items-start justify-between gap-4">
+                  <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
                     <div className="flex items-start gap-3 min-w-0">
                       <div className="mt-0.5">{statusIcon(prazo.status)}</div>
                       <div className="min-w-0">
@@ -550,7 +550,7 @@ export function TarefasPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-2 shrink-0">
+                    <div className="flex w-full items-center justify-between gap-2 shrink-0 sm:w-auto sm:justify-end">
                       <span className={prioridadeColors[prazo.prioridade] || 'badge-media'}>{prazo.prioridade}</span>
                       {prazo.status !== 'cumprido' && (
                         <Button size="sm" variant="outline" onClick={() => handleMarcarCumprido(prazo.id)}>

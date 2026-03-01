@@ -336,23 +336,23 @@ export function FinanceiroPage() {
           <h1 className="text-3xl font-bold text-foreground">Financeiro</h1>
           <p className="text-muted-foreground mt-1">Controle de entradas e saídas</p>
         </div>
-        <div className="flex gap-2">
+        <div className="flex flex-col gap-2 sm:flex-row">
           <Button 
             variant="outline" 
             onClick={() => setIsExtratoOpen(true)}
-            className="border-border text-foreground hover:bg-secondary"
+            className="w-full border-border text-foreground hover:bg-secondary sm:w-auto"
           >
             <FileText className="w-4 h-4 mr-2" />
             Extrato Mensal
           </Button>
           <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
             <DialogTrigger asChild>
-              <Button className="bg-primary hover:bg-primary/90">
+              <Button className="w-full bg-primary hover:bg-primary/90 sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Transação
               </Button>
             </DialogTrigger>
-            <DialogContent className="bg-card border-border text-foreground max-w-lg">
+            <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
               <DialogHeader>
                 <DialogTitle>Nova Transação</DialogTitle>
               </DialogHeader>
@@ -401,7 +401,7 @@ export function FinanceiroPage() {
                     required
                   />
                 </div>
-                <div className="grid grid-cols-2 gap-4">
+                <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <Label htmlFor="valor">Valor (R$) *</Label>
                     <Input
@@ -541,10 +541,10 @@ export function FinanceiroPage() {
                   className="rounded-lg bg-secondary/40 hover:bg-secondary transition-colors overflow-hidden"
                 >
                   <div 
-                    className="flex items-center justify-between p-4 cursor-pointer"
+                    className="flex flex-col gap-3 p-4 cursor-pointer sm:flex-row sm:items-center sm:justify-between"
                     onClick={() => setExpandedTransacao(expandedTransacao === transacao.id ? null : transacao.id)}
                   >
-                    <div className="flex items-center gap-4">
+                    <div className="flex min-w-0 items-center gap-4">
                       <div className={`p-2 rounded-lg ${
                         transacao.tipo === 'entrada' ? 'bg-emerald-500/20' : 'bg-red-500/20'
                       }`}>
@@ -554,9 +554,9 @@ export function FinanceiroPage() {
                           <ArrowDownRight className="w-5 h-5 text-red-400" />
                         )}
                       </div>
-                      <div>
+                      <div className="min-w-0">
                         <p className="font-medium text-foreground">{transacao.descricao || 'Sem descrição'}</p>
-                        <div className="flex items-center gap-2 mt-1">
+                        <div className="mt-1 flex flex-wrap items-center gap-2">
                           <Badge variant="outline" className={`text-xs ${
                             transacao.tipo === 'entrada' 
                               ? 'bg-emerald-500/10 text-emerald-400 border-emerald-500/30' 
@@ -579,8 +579,8 @@ export function FinanceiroPage() {
                         </div>
                       </div>
                     </div>
-                    <div className="flex items-center gap-4">
-                      <div className="text-right">
+                    <div className="flex items-center justify-between gap-4 sm:justify-end">
+                      <div className="text-left sm:text-right">
                         <p className={`font-bold ${
                           transacao.tipo === 'entrada' ? 'text-emerald-400' : 'text-red-400'
                         }`}>
@@ -607,9 +607,9 @@ export function FinanceiroPage() {
                       <div className="flex flex-col gap-3">
                         {/* Documentos */}
                         <div>
-                          <div className="flex items-center justify-between mb-2">
+                          <div className="mb-2 flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                             <p className="text-sm text-muted-foreground">Documentos Anexados</p>
-                            <div className="flex gap-2">
+                            <div className="flex flex-wrap gap-2">
                               <input
                                 ref={(el) => { fileInputRefs.current[transacao.id] = el; }}
                                 type="file"
@@ -625,7 +625,7 @@ export function FinanceiroPage() {
                                 variant="outline"
                                 size="sm"
                                 onClick={() => fileInputRefs.current[transacao.id]?.click()}
-                                className="border-border text-foreground hover:bg-secondary"
+                                className="w-full border-border text-foreground hover:bg-secondary sm:w-auto"
                               >
                                 <Upload className="w-3 h-3 mr-1" />
                                 Anexar
@@ -634,7 +634,7 @@ export function FinanceiroPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => openEditDialog(transacao)}
-                                className="text-muted-foreground hover:text-primary"
+                                className="w-full text-muted-foreground hover:text-primary sm:w-auto"
                               >
                                 <Edit3 className="w-3 h-3 mr-1" />
                                 Editar
@@ -643,7 +643,7 @@ export function FinanceiroPage() {
                                 variant="ghost"
                                 size="sm"
                                 onClick={() => handleDelete(transacao.id)}
-                                className="text-muted-foreground hover:text-red-400"
+                                className="w-full text-muted-foreground hover:text-red-400 sm:w-auto"
                               >
                                 <Trash2 className="w-3 h-3 mr-1" />
                                 Excluir
@@ -656,7 +656,7 @@ export function FinanceiroPage() {
                               {transacao.documentos.map((doc) => (
                                 <div 
                                   key={doc.id} 
-                                  className="flex items-center justify-between p-2 rounded bg-secondary/30"
+                                  className="flex flex-col gap-2 rounded bg-secondary/30 p-2 sm:flex-row sm:items-center sm:justify-between"
                                 >
                                   <div className="flex items-center gap-2">
                                     <FileText className="w-4 h-4 text-muted-foreground" />
@@ -706,7 +706,7 @@ export function FinanceiroPage() {
 
       {/* Dialog Extrato Mensal */}
       <Dialog open={isExtratoOpen} onOpenChange={setIsExtratoOpen}>
-        <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <FileText className="w-5 h-5 text-primary" />
@@ -715,19 +715,19 @@ export function FinanceiroPage() {
           </DialogHeader>
           <div className="space-y-6">
             {/* Seletor de Mês */}
-            <div className="flex items-center gap-4">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:gap-4">
               <Label htmlFor="mes_extrato">Mês:</Label>
               <Input
                 id="mes_extrato"
                 type="month"
                 value={mesSelecionado}
                 onChange={(e) => setMesSelecionado(e.target.value)}
-                className="bg-secondary border-border text-foreground w-48"
+                className="w-full bg-secondary border-border text-foreground sm:w-48"
               />
             </div>
             
             {/* Resumo do Mês */}
-            <div className="grid grid-cols-3 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-3">
               <div className="p-4 rounded-lg bg-emerald-500/10 border border-emerald-500/30">
                 <p className="text-sm text-emerald-400">Entradas</p>
                 <p className="text-xl font-bold text-emerald-400">{formatCurrency(resumoMes.entradas)}</p>
@@ -745,14 +745,14 @@ export function FinanceiroPage() {
             {/* Download Comprovantes */}
             {resumoMes.totalComprovantes > 0 && (
               <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
                   <div>
                     <p className="text-sm text-blue-400">Comprovantes de Saída</p>
                     <p className="text-xs text-muted-foreground">{resumoMes.totalComprovantes} documento(s) anexado(s)</p>
                   </div>
                   <Button
                     onClick={handleDownloadComprovantesMes}
-                    className="bg-blue-500 hover:bg-blue-600"
+                    className="w-full bg-blue-500 hover:bg-blue-600 sm:w-auto"
                   >
                     <FileArchive className="w-4 h-4 mr-2" />
                     Baixar Todos
@@ -769,7 +769,7 @@ export function FinanceiroPage() {
               ) : (
                 <div className="space-y-2 max-h-64 overflow-y-auto">
                   {transacoesMes.map((t) => (
-                    <div key={t.id} className="flex items-center justify-between p-3 rounded bg-secondary/40">
+                    <div key={t.id} className="flex flex-col gap-2 rounded bg-secondary/40 p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div className="flex items-center gap-2">
                         {t.tipo === 'entrada' ? (
                           <ArrowUpRight className="w-4 h-4 text-emerald-400" />
@@ -800,7 +800,7 @@ export function FinanceiroPage() {
 
       {/* Dialog Editar Transação */}
       <Dialog open={isEditDialogOpen} onOpenChange={setIsEditDialogOpen}>
-        <DialogContent className="bg-card border-border text-foreground max-w-lg">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Transação</DialogTitle>
           </DialogHeader>
@@ -833,7 +833,7 @@ export function FinanceiroPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div>
                 <Label htmlFor="edit_valor">Valor (R$) *</Label>
                 <Input
@@ -864,11 +864,11 @@ export function FinanceiroPage() {
                 </Select>
               </div>
             </div>
-            <div className="flex gap-2 pt-4">
-              <Button type="submit" className="flex-1 bg-primary hover:bg-primary">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row">
+              <Button type="submit" className="w-full bg-primary hover:bg-primary sm:flex-1">
                 Salvar Alterações
               </Button>
-              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)}>
+              <Button type="button" variant="outline" onClick={() => setIsEditDialogOpen(false)} className="w-full sm:w-auto">
                 Cancelar
               </Button>
             </div>
@@ -951,5 +951,4 @@ export function FinanceiroPage() {
     </div>
   );
 }
-
 

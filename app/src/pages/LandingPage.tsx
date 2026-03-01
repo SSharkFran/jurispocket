@@ -135,7 +135,7 @@ const LandingPage = () => {
         className="fixed top-0 left-0 right-0 z-50 border-b border-border/50"
         style={{ backdropFilter: "blur(16px)", background: "hsl(240 6% 3% / 0.8)" }}
       >
-        <div className="container mx-auto flex items-center justify-between px-6 py-4">
+        <div className="container mx-auto flex items-center justify-between px-4 py-4 sm:px-6">
           <div className="flex items-center gap-2">
             <Scale className="h-7 w-7 text-primary" />
             <span className="text-xl font-bold text-foreground">JurisPocket</span>
@@ -211,13 +211,13 @@ const LandingPage = () => {
           <motion.div custom={3} variants={fadeUp} initial="hidden" animate="visible"
             className="mt-10 flex flex-col sm:flex-row items-center justify-center gap-4"
           >
-            <Link to="/register">
-              <Button size="lg" className="bg-primary text-primary-foreground hover:bg-primary/90 glow-primary px-8 text-base">
+            <Link to="/register" className="w-full sm:w-auto">
+              <Button size="lg" className="w-full bg-primary text-primary-foreground hover:bg-primary/90 glow-primary px-8 text-base sm:w-auto">
                 Começar Gratuitamente <ArrowRight className="ml-2 h-4 w-4" />
               </Button>
             </Link>
-            <a href="#features" onClick={(e) => smoothScrollToSection(e, 'features')}>
-              <Button size="lg" variant="outline" className="border-border text-foreground hover:bg-secondary px-8 text-base">
+            <a href="#features" onClick={(e) => smoothScrollToSection(e, 'features')} className="w-full sm:w-auto">
+              <Button size="lg" variant="outline" className="w-full border-border text-foreground hover:bg-secondary px-8 text-base sm:w-auto">
                 Ver Funcionalidades
               </Button>
             </a>
@@ -225,7 +225,7 @@ const LandingPage = () => {
 
           {/* Stats */}
           <motion.div custom={4} variants={fadeUp} initial="hidden" animate="visible"
-            className="mx-auto mt-20 grid max-w-3xl grid-cols-3 gap-8"
+            className="mx-auto mt-20 grid max-w-3xl grid-cols-1 gap-8 sm:grid-cols-3"
           >
             {[
               { value: "50+", label: "Tribunais Integrados" },

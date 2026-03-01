@@ -310,7 +310,7 @@ export function DocumentosPage() {
                   initial={{ opacity: 0 }} 
                   animate={{ opacity: 1 }} 
                   transition={{ delay: i * 0.05 }}
-                  className="flex items-center justify-between p-3 rounded-lg bg-secondary/30 hover:bg-secondary/50 transition-colors"
+                  className="flex flex-col gap-3 rounded-lg bg-secondary/30 p-3 transition-colors hover:bg-secondary/50 sm:flex-row sm:items-center sm:justify-between"
                 >
                   <div className="flex items-center gap-3 min-w-0">
                     <div className="h-10 w-10 rounded-lg bg-primary/10 flex items-center justify-center shrink-0">
@@ -325,7 +325,7 @@ export function DocumentosPage() {
                       </div>
                     </div>
                   </div>
-                  <div className="flex items-center gap-2 shrink-0">
+                  <div className="flex w-full items-center justify-between gap-2 shrink-0 sm:w-auto sm:justify-end">
                     {doc.categoria && (
                       <Badge variant="outline" className="hidden sm:inline-flex">
                         {doc.categoria}
@@ -429,7 +429,7 @@ export function DocumentosPage() {
                 </SelectContent>
               </Select>
             </div>
-            <div className="flex gap-2 justify-end">
+            <div className="flex flex-col gap-2 pt-2 sm:flex-row sm:justify-end">
               <Button type="button" variant="outline" onClick={() => setIsUploadDialogOpen(false)}>
                 Cancelar
               </Button>
@@ -451,7 +451,7 @@ export function DocumentosPage() {
 
       {/* View Dialog */}
       <Dialog open={isViewDialogOpen} onOpenChange={setIsViewDialogOpen}>
-        <DialogContent className="bg-card border-border max-w-2xl">
+        <DialogContent className="bg-card border-border sm:max-w-2xl">
           <DialogHeader>
             <DialogTitle>{documentoSelecionado?.nome}</DialogTitle>
           </DialogHeader>
@@ -468,7 +468,7 @@ export function DocumentosPage() {
               </div>
             </div>
             
-            <div className="grid grid-cols-2 gap-4 text-sm">
+            <div className="grid grid-cols-1 gap-4 text-sm sm:grid-cols-2">
               <div>
                 <p className="text-muted-foreground">Categoria</p>
                 <p className="font-medium">{documentoSelecionado?.categoria || '-'}</p>
@@ -494,7 +494,7 @@ export function DocumentosPage() {
               )}
             </div>
 
-            <div className="flex gap-2 justify-end pt-4 border-t border-border">
+            <div className="flex flex-col gap-2 border-t border-border pt-4 sm:flex-row sm:justify-end">
               <Button 
                 variant="outline" 
                 onClick={() => setIsViewDialogOpen(false)}
@@ -513,5 +513,3 @@ export function DocumentosPage() {
     </div>
   );
 }
-
-

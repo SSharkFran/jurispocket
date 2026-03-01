@@ -6,7 +6,6 @@ import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
-import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogFooter } from '@/components/ui/dialog';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@/components/ui/select';
 import { Label } from '@/components/ui/label';
@@ -147,6 +146,16 @@ interface AuditLog {
   ip_address: string;
 }
 
+const ADMIN_TAB_ITEMS = [
+  { key: 'dashboard', label: 'Dashboard', icon: TrendingUp },
+  { key: 'usuarios', label: 'Usuários', icon: Users },
+  { key: 'planos', label: 'Planos', icon: DollarSign },
+  { key: 'assinaturas', label: 'Assinaturas', icon: CreditCard },
+  { key: 'configuracoes', label: 'Configurações', icon: Settings },
+  { key: 'auditoria', label: 'Auditoria', icon: Shield },
+  { key: 'backup', label: 'Backup', icon: Database },
+] as const;
+
 export function AdminDashboardPage() {
   const { user } = useAuth();
   const navigate = useNavigate();
@@ -193,8 +202,8 @@ export function AdminDashboardPage() {
       </div>
 
       {/* Header */}
-      <header className="border-b border-border/60 bg-card/80 px-6 py-4 backdrop-blur">
-        <div className="flex items-center justify-between">
+      <header className="border-b border-border/60 bg-card/80 px-4 py-4 backdrop-blur sm:px-6">
+        <div className="flex items-center justify-between gap-3">
           <div className="flex items-center gap-4">
             <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-primary to-accent flex items-center justify-center shadow-lg shadow-primary/20">
               <Crown className="w-5 h-5 text-foreground" />
@@ -204,63 +213,50 @@ export function AdminDashboardPage() {
               <p className="text-xs text-muted-foreground">Painel de Controle Global</p>
             </div>
           </div>
-          <Button variant="outline" onClick={() => navigate('/')} className="border-border text-foreground">
-            Voltar ao Sistema
+          <Button variant="outline" onClick={() => navigate('/')} className="h-9 border-border px-3 text-foreground sm:px-4">
+            <span className="hidden sm:inline">Voltar ao Sistema</span>
+            <span className="sm:hidden">Voltar</span>
           </Button>
         </div>
       </header>
 
+      <div className="lg:hidden border-b border-border/60 bg-card/60">
+        <ScrollArea className="w-full whitespace-nowrap">
+          <div className="flex min-w-max gap-2 px-4 py-3">
+            {ADMIN_TAB_ITEMS.map((item) => (
+              <Button
+                key={item.key}
+                variant={activeTab === item.key ? 'default' : 'outline'}
+                size="sm"
+                className={activeTab === item.key ? 'bg-primary text-primary-foreground' : 'border-border text-foreground'}
+                onClick={() => setActiveTab(item.key)}
+              >
+                <item.icon className="mr-1 h-4 w-4" />
+                {item.label}
+              </Button>
+            ))}
+          </div>
+        </ScrollArea>
+      </div>
+
       <div className="flex">
         {/* Sidebar */}
-        <aside className="w-64 shrink-0 border-r border-border/60 bg-card/70 min-h-[calc(100dvh-80px)] backdrop-blur">
+        <aside className="hidden min-h-[calc(100dvh-80px)] w-64 shrink-0 border-r border-border/60 bg-card/70 backdrop-blur lg:block">
           <nav className="p-4 space-y-2">
-            <SidebarItem 
-              icon={<TrendingUp className="w-4 h-4" />} 
-              label="Dashboard" 
-              active={activeTab === 'dashboard'}
-              onClick={() => setActiveTab('dashboard')}
-            />
-            <SidebarItem 
-              icon={<Users className="w-4 h-4" />} 
-              label="Usuários" 
-              active={activeTab === 'usuarios'}
-              onClick={() => setActiveTab('usuarios')}
-            />
-            <SidebarItem 
-              icon={<DollarSign className="w-4 h-4" />} 
-              label="Planos" 
-              active={activeTab === 'planos'}
-              onClick={() => setActiveTab('planos')}
-            />
-            <SidebarItem 
-              icon={<CreditCard className="w-4 h-4" />} 
-              label="Gestão de Assinaturas" 
-              active={activeTab === 'assinaturas'}
-              onClick={() => setActiveTab('assinaturas')}
-            />
-            <SidebarItem 
-              icon={<Settings className="w-4 h-4" />} 
-              label="Configurações" 
-              active={activeTab === 'configuracoes'}
-              onClick={() => setActiveTab('configuracoes')}
-            />
-            <SidebarItem 
-              icon={<Shield className="w-4 h-4" />} 
-              label="Auditoria" 
-              active={activeTab === 'auditoria'}
-              onClick={() => setActiveTab('auditoria')}
-            />
-            <SidebarItem 
-              icon={<Database className="w-4 h-4" />} 
-              label="Backup" 
-              active={activeTab === 'backup'}
-              onClick={() => setActiveTab('backup')}
-            />
+            {ADMIN_TAB_ITEMS.map((item) => (
+              <SidebarItem
+                key={item.key}
+                icon={<item.icon className="w-4 h-4" />}
+                label={item.key === 'assinaturas' ? 'Gestão de Assinaturas' : item.label}
+                active={activeTab === item.key}
+                onClick={() => setActiveTab(item.key)}
+              />
+            ))}
           </nav>
         </aside>
 
         {/* Content */}
-        <main className="flex-1 p-6 md:p-8">
+        <main className="flex-1 p-4 sm:p-6 md:p-8">
           {activeTab === 'dashboard' && <DashboardTab estatisticas={estatisticas} />}
           {activeTab === 'usuarios' && <UsuariosTab />}
           {activeTab === 'planos' && <PlanosTab />}
@@ -561,7 +557,7 @@ function BackupTab() {
 
       {/* Dialog de Confirmação */}
       <Dialog open={showRestoreDialog} onOpenChange={setShowRestoreDialog}>
-        <DialogContent className="bg-card border-border text-foreground">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-amber-400">
               <AlertTriangle className="w-5 h-5" />
@@ -616,7 +612,7 @@ function SidebarItem({ icon, label, active, onClick }: { icon: React.ReactNode; 
       }`}
     >
       {icon}
-      <span className="font-medium">{label}</span>
+      <span className="font-medium truncate">{label}</span>
     </button>
   );
 }
@@ -835,8 +831,8 @@ function UsuariosTab() {
 
   return (
     <div className="space-y-4">
-      <div className="flex items-center justify-between">
-        <div className="relative w-96">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
+        <div className="relative w-full sm:w-96">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por nome ou email..."
@@ -845,7 +841,7 @@ function UsuariosTab() {
             className="pl-10 bg-card border-border"
           />
         </div>
-        <Button onClick={carregarUsuarios} variant="outline" className="border-border">
+        <Button onClick={carregarUsuarios} variant="outline" className="w-full border-border sm:w-auto">
           <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
@@ -853,7 +849,7 @@ function UsuariosTab() {
 
       <Card className="glass-card border-border/60">
         <CardContent className="p-0">
-          <Table>
+          <Table className="min-w-[860px]">
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Nome</TableHead>
@@ -955,17 +951,17 @@ function UsuariosTab() {
       </Card>
 
       {/* Paginação */}
-      <div className="flex items-center justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <p className="text-muted-foreground text-sm">
           Página {page} de {totalPages}
         </p>
-        <div className="flex gap-2">
+        <div className="flex w-full gap-2 sm:w-auto">
           <Button
             variant="outline"
             size="sm"
             onClick={() => setPage(p => Math.max(1, p - 1))}
             disabled={page === 1}
-            className="border-border"
+            className="flex-1 border-border sm:flex-none"
           >
             <ChevronLeft className="w-4 h-4" />
           </Button>
@@ -974,7 +970,7 @@ function UsuariosTab() {
             size="sm"
             onClick={() => setPage(p => Math.min(totalPages, p + 1))}
             disabled={page === totalPages}
-            className="border-border"
+            className="flex-1 border-border sm:flex-none"
           >
             <ChevronRight className="w-4 h-4" />
           </Button>
@@ -983,7 +979,7 @@ function UsuariosTab() {
 
       {/* Dialog de Edição */}
       <Dialog open={showEditDialog} onOpenChange={setShowEditDialog}>
-        <DialogContent className="bg-card border-border text-foreground">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Editar Usuário</DialogTitle>
           </DialogHeader>
@@ -1043,7 +1039,7 @@ function UsuariosTab() {
 
       {/* Dialog de Alterar Plano */}
       <Dialog open={showPlanoDialog} onOpenChange={setShowPlanoDialog}>
-        <DialogContent className="bg-card border-border text-foreground">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <DollarSign className="w-5 h-5 text-emerald-400" />
@@ -1140,7 +1136,7 @@ function UsuariosTab() {
 
       {/* Dialog de Reset de Senha */}
       <Dialog open={showResetDialog} onOpenChange={setShowResetDialog}>
-        <DialogContent className="bg-card border-border text-foreground">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Resetar Senha</DialogTitle>
           </DialogHeader>
@@ -1174,7 +1170,7 @@ function UsuariosTab() {
 
       {/* Dialog de Exclusão */}
       <Dialog open={showDeleteDialog} onOpenChange={setShowDeleteDialog}>
-        <DialogContent className="bg-card border-border text-foreground">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-lg">
           <DialogHeader>
             <DialogTitle>Desativar Usuário</DialogTitle>
           </DialogHeader>
@@ -1224,9 +1220,9 @@ function PlanosTab() {
 
   return (
     <div className="space-y-6">
-      <div className="flex justify-between">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
         <h2 className="text-xl font-semibold text-foreground">Planos e Preços</h2>
-        <Button className="bg-primary hover:bg-primary/90">
+        <Button className="w-full bg-primary hover:bg-primary/90 sm:w-auto">
           <DollarSign className="w-4 h-4 mr-2" />
           Novo Plano
         </Button>
@@ -1236,8 +1232,8 @@ function PlanosTab() {
         {planos.map((plano) => (
           <Card key={plano.id} className="glass-card border-border/60">
             <CardHeader>
-              <div className="flex items-center justify-between">
-                <CardTitle className="text-foreground">{plano.nome}</CardTitle>
+              <div className="flex items-center justify-between gap-2">
+                <CardTitle className="text-foreground truncate">{plano.nome}</CardTitle>
                 {plano.ativo ? (
                   <Badge className="bg-green-500/20 text-green-400">Ativo</Badge>
                 ) : (
@@ -1545,18 +1541,18 @@ function ConfiguracoesTab() {
         <CardContent className="p-6">
           <div className="space-y-6">
             {configuracoes.map((config) => (
-              <div key={config.chave} className="flex items-center justify-between p-4 bg-secondary/40 rounded-lg">
-                <div>
+              <div key={config.chave} className="flex flex-col gap-3 rounded-lg bg-secondary/40 p-4 sm:flex-row sm:items-center sm:justify-between">
+                <div className="min-w-0">
                   <p className="text-foreground font-medium">{config.chave}</p>
                   <p className="text-muted-foreground text-sm">{config.descricao}</p>
                 </div>
-                <div className="flex items-center gap-3">
+                <div className="w-full sm:w-auto">
                   {config.chave === 'modo_manutencao' ? (
                     <Select 
                       value={config.valor} 
                       onValueChange={(v) => handleUpdateConfig(config.chave, v)}
                     >
-                      <SelectTrigger className="w-32 bg-secondary border-border">
+                      <SelectTrigger className="w-full bg-secondary border-border sm:w-40">
                         <SelectValue />
                       </SelectTrigger>
                       <SelectContent className="bg-secondary border-border">
@@ -1568,7 +1564,7 @@ function ConfiguracoesTab() {
                     <Input
                       value={config.valor}
                       onChange={(e) => handleUpdateConfig(config.chave, e.target.value)}
-                      className="w-48 bg-secondary border-border"
+                      className="w-full bg-secondary border-border sm:w-56"
                     />
                   )}
                 </div>
@@ -1620,33 +1616,33 @@ function ConfiguracoesTab() {
           </label>
 
           <div className="rounded-lg bg-secondary/40 p-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Status</span>
               <span className={platformStatus?.connected ? 'text-emerald-400' : 'text-amber-400'}>
                 {platformStatus?.connected ? 'Conectado' : 'Desconectado'}
               </span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Estado</span>
               <span className="text-foreground">{platformStatus?.state || '-'}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Provedor</span>
               <span className="text-foreground">{platformStatus?.provider || '-'}</span>
             </div>
           </div>
 
           <div className="flex flex-wrap gap-2">
-            <Button onClick={handleSavePlatform} disabled={platformLoading}>
+            <Button onClick={handleSavePlatform} disabled={platformLoading} className="w-full sm:w-auto">
               <Check className="w-4 h-4 mr-2" /> Salvar
             </Button>
-            <Button variant="outline" onClick={carregarWhatsAppPlataforma} disabled={platformLoading}>
+            <Button variant="outline" onClick={carregarWhatsAppPlataforma} disabled={platformLoading} className="w-full sm:w-auto">
               <RefreshCw className="w-4 h-4 mr-2" /> Atualizar status
             </Button>
-            <Button variant="outline" onClick={handlePlatformQr} disabled={platformLoading}>
+            <Button variant="outline" onClick={handlePlatformQr} disabled={platformLoading} className="w-full sm:w-auto">
               <QrCode className="w-4 h-4 mr-2" /> Gerar QR
             </Button>
-            <Button variant="outline" onClick={handlePlatformDisconnect} disabled={platformLoading}>
+            <Button variant="outline" onClick={handlePlatformDisconnect} disabled={platformLoading} className="w-full sm:w-auto">
               <PowerOff className="w-4 h-4 mr-2" /> Desconectar
             </Button>
           </div>
@@ -1679,16 +1675,16 @@ function ConfiguracoesTab() {
           </label>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Label className="text-foreground">
                 Workspaces alvo ({workspaceIdsAviso.length || workspacesAviso.length})
               </Label>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-col gap-2 sm:w-auto sm:flex-row">
                 <Button
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="border-border text-foreground"
+                  className="w-full border-border text-foreground sm:w-auto"
                   onClick={() => setWorkspaceIdsAviso(workspacesAviso.map((w) => w.id))}
                 >
                   Marcar todos
@@ -1697,7 +1693,7 @@ function ConfiguracoesTab() {
                   type="button"
                   variant="outline"
                   size="sm"
-                  className="border-border text-foreground"
+                  className="w-full border-border text-foreground sm:w-auto"
                   onClick={() => setWorkspaceIdsAviso([])}
                 >
                   Todos (sem filtro)
@@ -1731,6 +1727,7 @@ function ConfiguracoesTab() {
               type="button"
               onClick={handleEnviarAvisoWhatsapp}
               disabled={enviandoAviso || !mensagemAviso.trim()}
+              className="w-full sm:w-auto"
             >
               {enviandoAviso ? (
                 <Loader2 className="w-4 h-4 mr-2 animate-spin" />
@@ -1752,7 +1749,7 @@ function ConfiguracoesTab() {
             <Button
               type="button"
               variant="outline"
-              className="border-border text-foreground"
+              className="w-full border-border text-foreground sm:w-auto"
               onClick={handleAgendarAvisoWhatsapp}
               disabled={agendandoAviso || !mensagemAviso.trim() || !agendamentoAviso}
             >
@@ -1766,13 +1763,13 @@ function ConfiguracoesTab() {
           </div>
 
           <div className="space-y-2">
-            <div className="flex items-center justify-between">
+            <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
               <Label className="text-foreground">Campanhas agendadas</Label>
               <Button
                 type="button"
                 variant="outline"
                 size="sm"
-                className="border-border text-foreground"
+                className="w-full border-border text-foreground sm:w-auto"
                 onClick={carregarCampanhasWhatsapp}
                 disabled={loadingCampanhas}
               >
@@ -1802,7 +1799,7 @@ function ConfiguracoesTab() {
                         key={campanha.id}
                         className="rounded-md border border-border bg-secondary/40 p-3 space-y-2"
                       >
-                        <div className="flex items-start justify-between gap-2">
+                        <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                           <div className="min-w-0">
                             <p className="text-sm text-foreground font-medium truncate">
                               #{campanha.id} - {campanha.mensagem}
@@ -1901,7 +1898,7 @@ function AuditoriaTab() {
 
       <Card className="glass-card border-border/60">
         <CardContent className="p-0">
-          <Table>
+          <Table className="min-w-[720px]">
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Data</TableHead>
@@ -2148,8 +2145,8 @@ function AssinaturasTab() {
       </div>
 
       {/* Filtros */}
-      <div className="flex gap-4">
-        <div className="relative flex-1 max-w-md">
+      <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
+        <div className="relative w-full sm:flex-1 sm:max-w-md">
           <Search className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-muted-foreground" />
           <Input
             placeholder="Buscar por workspace ou responsável..."
@@ -2159,7 +2156,7 @@ function AssinaturasTab() {
           />
         </div>
         <Select value={statusFilter} onValueChange={setStatusFilter}>
-          <SelectTrigger className="w-40 bg-card border-border">
+          <SelectTrigger className="w-full bg-card border-border sm:w-40">
             <SelectValue placeholder="Todos status" />
           </SelectTrigger>
           <SelectContent className="bg-card border-border">
@@ -2170,7 +2167,7 @@ function AssinaturasTab() {
             <SelectItem value="cancelado">Cancelado</SelectItem>
           </SelectContent>
         </Select>
-        <Button onClick={carregarDados} variant="outline" className="border-border">
+        <Button onClick={carregarDados} variant="outline" className="w-full border-border sm:w-auto">
           <RefreshCw className="w-4 h-4 mr-2" />
           Atualizar
         </Button>
@@ -2179,7 +2176,7 @@ function AssinaturasTab() {
       {/* Tabela */}
       <Card className="glass-card border-border/60">
         <CardContent className="p-0">
-          <Table>
+          <Table className="min-w-[980px]">
             <TableHeader>
               <TableRow className="border-border hover:bg-transparent">
                 <TableHead className="text-muted-foreground">Workspace</TableHead>
@@ -2294,7 +2291,7 @@ function AssinaturasTab() {
 
       {/* Dialog Registrar Pagamento */}
       <Dialog open={showPagamentoDialog} onOpenChange={setShowPagamentoDialog}>
-        <DialogContent className="bg-card border-border text-foreground max-w-md">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Wallet className="w-5 h-5 text-green-400" />
@@ -2310,7 +2307,7 @@ function AssinaturasTab() {
                 <p className="text-muted-foreground text-sm mt-1">Plano: {assinaturaSelecionada.plano_nome}</p>
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                 <div>
                   <Label>Valor Pago *</Label>
                   <Input
@@ -2410,7 +2407,7 @@ function AssinaturasTab() {
 
       {/* Dialog Histórico */}
       <Dialog open={showHistoricoDialog} onOpenChange={setShowHistoricoDialog}>
-        <DialogContent className="bg-card border-border text-foreground max-w-2xl max-h-[80vh] overflow-y-auto">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-2xl max-h-[80vh] overflow-y-auto">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2">
               <Receipt className="w-5 h-5 text-primary" />
@@ -2430,8 +2427,8 @@ function AssinaturasTab() {
               ) : (
                 <div className="space-y-2">
                   {assinaturaSelecionada?.pagamentos?.map((pagamento) => (
-                    <div key={pagamento.id} className="p-3 bg-secondary rounded-lg flex items-center justify-between">
-                      <div className="flex items-center gap-3">
+                    <div key={pagamento.id} className="flex flex-col gap-3 rounded-lg bg-secondary p-3 sm:flex-row sm:items-center sm:justify-between">
+                      <div className="flex items-center gap-3 min-w-0">
                         <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
                           pagamento.status === 'confirmado' ? 'bg-green-500/20' : 'bg-amber-500/20'
                         }`}>
@@ -2453,8 +2450,8 @@ function AssinaturasTab() {
                           )}
                         </div>
                       </div>
-                      <div className="flex items-center gap-3">
-                        <div className="text-right">
+                      <div className="flex items-center justify-between gap-3 sm:justify-end">
+                        <div className="text-left sm:text-right">
                           <p className="text-muted-foreground text-sm">
                             {new Date(pagamento.data_pagamento).toLocaleDateString('pt-BR')}
                           </p>
@@ -2492,7 +2489,7 @@ function AssinaturasTab() {
 
       {/* Dialog Confirmar Exclusão de Pagamento */}
       <Dialog open={showDeletePagamentoDialog} onOpenChange={setShowDeletePagamentoDialog}>
-        <DialogContent className="bg-card border-border text-foreground max-w-md">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Trash2 className="w-5 h-5" />
@@ -2541,7 +2538,7 @@ function AssinaturasTab() {
 
       {/* Dialog Confirmar Exclusão de Assinatura */}
       <Dialog open={showDeleteAssinaturaDialog} onOpenChange={setShowDeleteAssinaturaDialog}>
-        <DialogContent className="bg-card border-border text-foreground max-w-md">
+        <DialogContent className="bg-card border-border text-foreground sm:max-w-md">
           <DialogHeader>
             <DialogTitle className="flex items-center gap-2 text-red-400">
               <Trash2 className="w-5 h-5" />

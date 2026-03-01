@@ -894,7 +894,7 @@ export function ProcessoDetalhePage() {
 
       {processo.numero_cnj && (
         <Card className="bg-gradient-to-r from-primary/10 to-accent/10 border-primary/30">
-          <CardHeader className="flex flex-row items-center justify-between">
+          <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle className="text-white flex items-center gap-2">
               <Gavel className="w-5 h-5 text-primary" />
               Monitoramento PJe
@@ -1036,21 +1036,21 @@ export function ProcessoDetalhePage() {
       )}
 
       <Tabs defaultValue="prazos">
-        <TabsList className="bg-secondary border-white/10">
-          <TabsTrigger value="prazos" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+        <TabsList className="w-full justify-start overflow-x-auto bg-secondary border-white/10">
+          <TabsTrigger value="prazos" className="flex-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Prazos ({processo.prazos?.length || 0})
           </TabsTrigger>
-          <TabsTrigger value="tarefas" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="tarefas" className="flex-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Tarefas ({processo.tarefas?.length || 0})
           </TabsTrigger>
-          <TabsTrigger value="financeiro" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="financeiro" className="flex-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             Financeiro
           </TabsTrigger>
-          <TabsTrigger value="documentos" className="data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
+          <TabsTrigger value="documentos" className="flex-none data-[state=active]:bg-primary/20 data-[state=active]:text-primary">
             <FileText className="w-4 h-4 mr-2" />
             Documentos
           </TabsTrigger>
-          <TabsTrigger value="datajud" className="data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400 relative">
+          <TabsTrigger value="datajud" className="relative flex-none data-[state=active]:bg-blue-500/20 data-[state=active]:text-blue-400">
             <RefreshCw className="w-4 h-4 mr-2" />
             Movimentações Datajud ({processo.movimentacoes_datajud?.length || 0})
             {processo.movimentacoes_novas_count ? (
@@ -1061,9 +1061,9 @@ export function ProcessoDetalhePage() {
 
         <TabsContent value="prazos" className="mt-4">
           <Card className="bg-card/50 border-white/10">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-white">Prazos</CardTitle>
-              <Button size="sm" onClick={() => setPrazoDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
+              <Button size="sm" onClick={() => setPrazoDialogOpen(true)} className="w-full bg-primary hover:bg-primary/90 text-white sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Novo Prazo
               </Button>
@@ -1075,7 +1075,7 @@ export function ProcessoDetalhePage() {
                     <p className="text-muted-foreground text-center py-4">Nenhum prazo cadastrado</p>
                   )}
                   {processo.prazos?.map((prazo) => (
-                    <div key={prazo.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div key={prazo.id} className="flex flex-col gap-2 rounded-lg bg-secondary/50 p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-white font-medium">{prazo.descricao}</p>
                         <div className="flex items-center gap-2 mt-1">
@@ -1109,9 +1109,9 @@ export function ProcessoDetalhePage() {
 
         <TabsContent value="tarefas" className="mt-4">
           <Card className="bg-card/50 border-white/10">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <CardTitle className="text-white">Tarefas</CardTitle>
-              <Button size="sm" onClick={() => setTarefaDialogOpen(true)} className="bg-primary hover:bg-primary/90 text-white">
+              <Button size="sm" onClick={() => setTarefaDialogOpen(true)} className="w-full bg-primary hover:bg-primary/90 text-white sm:w-auto">
                 <Plus className="w-4 h-4 mr-2" />
                 Nova Tarefa
               </Button>
@@ -1123,7 +1123,7 @@ export function ProcessoDetalhePage() {
                     <p className="text-muted-foreground text-center py-4">Nenhuma tarefa</p>
                   )}
                   {processo.tarefas?.map((tarefa) => (
-                    <div key={tarefa.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div key={tarefa.id} className="flex flex-col gap-2 rounded-lg bg-secondary/50 p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-white font-medium">{tarefa.titulo}</p>
                         <Badge className={getPrioridadeColor(tarefa.prioridade)}>{tarefa.prioridade}</Badge>
@@ -1151,7 +1151,7 @@ export function ProcessoDetalhePage() {
                     <p className="text-muted-foreground text-center py-4">Nenhuma transação</p>
                   )}
                   {processo.transacoes?.map((trans) => (
-                    <div key={trans.id} className="flex items-center justify-between p-3 bg-secondary/50 rounded-lg">
+                    <div key={trans.id} className="flex flex-col gap-2 rounded-lg bg-secondary/50 p-3 sm:flex-row sm:items-center sm:justify-between">
                       <div>
                         <p className="text-white">{trans.descricao}</p>
                         <p className="text-sm text-muted-foreground">{new Date(trans.data_transacao).toLocaleDateString('pt-BR')}</p>
@@ -1177,7 +1177,7 @@ export function ProcessoDetalhePage() {
 
         <TabsContent value="datajud" className="mt-4">
           <Card className="bg-card/50 border-white/10">
-            <CardHeader className="flex flex-row items-center justify-between">
+            <CardHeader className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
               <div>
                 <CardTitle className="text-white flex items-center gap-2">
                   <RefreshCw className="w-5 h-5 text-blue-400" />
@@ -1219,7 +1219,7 @@ export function ProcessoDetalhePage() {
                             ? 'bg-gradient-to-r from-amber-500/10 to-orange-500/10 border-amber-500 shadow-sm' 
                             : 'bg-secondary/50 border-blue-500'
                         }`}>
-                          <div className="flex items-start justify-between">
+                          <div className="flex flex-col gap-2 sm:flex-row sm:items-start sm:justify-between">
                             <div className="flex-1">
                               <div className="flex items-center gap-2">
                                 <p className={`font-medium ${isNova ? 'text-amber-100' : 'text-white'}`}>
@@ -1295,7 +1295,7 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog PJe */}
       <Dialog open={pjeDialogOpen} onOpenChange={setPjeDialogOpen}>
-        <DialogContent className="bg-card border-white/10 max-w-lg">
+        <DialogContent className="bg-card border-white/10 sm:max-w-lg">
           <DialogHeader>
             <DialogTitle className="text-white">
               Consulta PJe - {pjeConsultaData?.tribunal_nome}
@@ -1437,7 +1437,7 @@ export function ProcessoDetalhePage() {
 
       {/* Dialog Gerar Documento */}
       <Dialog open={gerarDocOpen} onOpenChange={setGerarDocOpen}>
-        <DialogContent className="bg-card border-white/10 max-w-4xl max-h-[90vh]">
+        <DialogContent className="bg-card border-white/10 sm:max-w-4xl max-h-[90vh]">
           <DialogHeader>
             <DialogTitle className="text-white flex items-center gap-2">
               <FileCode className="w-5 h-5 text-purple-400" />
@@ -1502,18 +1502,18 @@ export function ProcessoDetalhePage() {
                   </div>
                 )}
 
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col gap-2 pt-4 sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => setGerarDocOpen(false)}
-                    className="flex-1 border-white/10 text-muted-foreground hover:text-white"
+                    className="w-full border-white/10 text-muted-foreground hover:text-white sm:flex-1"
                   >
                     Cancelar
                   </Button>
                   <Button
                     onClick={gerarDocumento}
                     disabled={!templateSelecionado || gerandoDoc || templates.length === 0}
-                    className="flex-1 bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30"
+                    className="w-full bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 sm:flex-1"
                   >
                     {gerandoDoc ? (
                       <Loader2 className="w-4 h-4 animate-spin mr-2" />
@@ -1539,7 +1539,7 @@ export function ProcessoDetalhePage() {
                     Clique no botão abaixo para fazer o download.
                   </p>
                 </div>
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col gap-2 pt-4 sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => {
@@ -1553,7 +1553,7 @@ export function ProcessoDetalhePage() {
                   </Button>
                   <Button
                     onClick={downloadDocumento}
-                    className="flex-1 bg-blue-600 hover:bg-blue-700"
+                    className="w-full bg-blue-600 hover:bg-blue-700 sm:flex-1"
                   >
                     <Download className="w-4 h-4 mr-2" />
                     Baixar Documento .docx
@@ -1567,7 +1567,7 @@ export function ProcessoDetalhePage() {
                     {documentoGerado}
                   </pre>
                 </div>
-                <div className="flex gap-3 pt-4">
+                <div className="flex flex-col gap-2 pt-4 sm:flex-row">
                   <Button
                     variant="outline"
                     onClick={() => setDocumentoGerado(null)}
@@ -1593,7 +1593,7 @@ export function ProcessoDetalhePage() {
                   </Button>
                   <Button
                     onClick={() => setGerarDocOpen(false)}
-                    className="bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 ml-auto"
+                    className="w-full bg-purple-500/20 border border-purple-500/30 text-purple-400 hover:bg-purple-500/30 sm:ml-auto sm:w-auto"
                   >
                     Concluir
                   </Button>
@@ -1617,11 +1617,11 @@ export function ProcessoDetalhePage() {
             <p className="text-muted-foreground text-sm">
               Esta ação não pode ser desfeita. Todos os prazos, tarefas e dados financeiros associados também serão removidos.
             </p>
-            <div className="flex gap-3 pt-4">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row">
               <Button
                 variant="outline"
                 onClick={() => setDeleteDialogOpen(false)}
-                className="flex-1 border-white/10 text-muted-foreground hover:text-white"
+                className="w-full border-white/10 text-muted-foreground hover:text-white sm:flex-1"
               >
                 Cancelar
               </Button>
@@ -1635,7 +1635,7 @@ export function ProcessoDetalhePage() {
                     toast.error('Erro ao excluir processo');
                   }
                 }}
-                className="flex-1 bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30"
+                className="w-full bg-red-500/20 border border-red-500/30 text-red-400 hover:bg-red-500/30 sm:flex-1"
               >
                 <Trash2 className="w-4 h-4 mr-2" />
                 Excluir
@@ -1662,7 +1662,7 @@ export function ProcessoDetalhePage() {
               />
             </div>
             
-            <div className="grid grid-cols-2 gap-4">
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
               <div className="space-y-2">
                 <Label className="text-muted-foreground">Data Final</Label>
                 <Input
@@ -1711,18 +1711,18 @@ export function ProcessoDetalhePage() {
               </Select>
             </div>
             
-            <div className="flex gap-2 pt-4">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row">
               <Button
                 variant="outline"
                 onClick={() => setPrazoDialogOpen(false)}
-                className="flex-1 border-white/10 text-white hover:bg-secondary"
+                className="w-full border-white/10 text-white hover:bg-secondary sm:flex-1"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSalvarPrazo}
                 disabled={salvandoPrazo}
-                className="flex-1 bg-primary hover:bg-primary/90 text-white"
+                className="w-full bg-primary hover:bg-primary/90 text-white sm:flex-1"
               >
                 {salvandoPrazo ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
               </Button>
@@ -1777,18 +1777,18 @@ export function ProcessoDetalhePage() {
               </Select>
             </div>
             
-            <div className="flex gap-2 pt-4">
+            <div className="flex flex-col gap-2 pt-4 sm:flex-row">
               <Button
                 variant="outline"
                 onClick={() => setTarefaDialogOpen(false)}
-                className="flex-1 border-white/10 text-white hover:bg-secondary"
+                className="w-full border-white/10 text-white hover:bg-secondary sm:flex-1"
               >
                 Cancelar
               </Button>
               <Button
                 onClick={handleSalvarTarefa}
                 disabled={salvandoTarefa}
-                className="flex-1 bg-primary hover:bg-primary/90 text-white"
+                className="w-full bg-primary hover:bg-primary/90 text-white sm:flex-1"
               >
                 {salvandoTarefa ? <Loader2 className="w-4 h-4 animate-spin" /> : 'Salvar'}
               </Button>

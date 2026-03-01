@@ -211,7 +211,7 @@ export function DashboardLayout() {
                     )}
                   </Button>
                 </DropdownMenuTrigger>
-                <DropdownMenuContent align="end" className="w-80 bg-slate-900 border-white/10">
+                <DropdownMenuContent align="end" className="w-[min(22rem,calc(100vw-1rem))] bg-slate-900 border-white/10">
                   <DropdownMenuLabel className="text-slate-300 flex items-center justify-between">
                     <span>Notificações</span>
                     {naoLidas > 0 && (

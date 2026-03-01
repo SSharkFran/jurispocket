@@ -580,7 +580,7 @@ const WhatsAppPage = () => {
               <p className="text-sm text-muted-foreground">Conexao real com clientes e envio de notificacoes</p>
             </div>
           </div>
-          <div className="flex items-center gap-2">
+          <div className="flex w-full flex-wrap items-center gap-2 sm:w-auto sm:justify-end">
             <span className={isConectado ? 'badge-ativo flex items-center gap-1' : 'badge-pendente flex items-center gap-1'}>
               <span className={`h-2 w-2 rounded-full ${isConectado ? 'bg-success animate-pulse' : 'bg-warning'}`} />
               {isConectado ? 'Conectado' : 'Desconectado'}
@@ -641,15 +641,15 @@ const WhatsAppPage = () => {
           </h3>
 
           <div className="rounded-lg bg-secondary/30 p-4 space-y-2 text-sm">
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Provedor</span>
               <span className="font-medium">{status?.provider || '-'}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Estado</span>
               <span className="font-medium">{estadoConexao}</span>
             </div>
-            <div className="flex items-center justify-between">
+            <div className="flex items-center justify-between gap-3">
               <span className="text-muted-foreground">Configurado</span>
               <span className="font-medium">{status?.configurado ? 'Sim' : 'Nao'}</span>
             </div>
@@ -658,13 +658,13 @@ const WhatsAppPage = () => {
             ) : null}
           </div>
 
-          <div className="flex gap-2">
-            <Button variant="outline" className="flex-1" onClick={() => carregarStatus()} disabled={isRefreshingStatus}>
+          <div className="flex flex-col gap-2 sm:flex-row">
+            <Button variant="outline" className="w-full sm:flex-1" onClick={() => carregarStatus()} disabled={isRefreshingStatus}>
               {isRefreshingStatus ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <RefreshCw className="mr-2 h-4 w-4" />}
               Atualizar status
             </Button>
             {!isConectado && (
-              <Button className="flex-1" onClick={handleConectar} disabled={isLoading}>
+              <Button className="w-full sm:flex-1" onClick={handleConectar} disabled={isLoading}>
                 <QrCode className="mr-2 h-4 w-4" /> Gerar QR
               </Button>
             )}
@@ -687,7 +687,7 @@ const WhatsAppPage = () => {
 
             <div className="space-y-3 text-sm">
               <div className="rounded-lg bg-secondary/30 p-3 text-xs text-muted-foreground">
-                <div className="flex items-center justify-between">
+                <div className="flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                   <span>WhatsApp oficial da plataforma</span>
                   <span className={platformConectado ? 'text-success' : 'text-warning'}>
                     {platformConectado ? 'Conectado' : 'Desconectado'} ({platformEstado})
@@ -780,7 +780,7 @@ const WhatsAppPage = () => {
               </label>
 
               <div className="space-y-2">
-                <div className="flex items-center justify-between gap-2">
+                <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                   <label className="text-xs text-muted-foreground">
                     Prompt do escritório para IA (opcional)
                   </label>
@@ -821,9 +821,9 @@ const WhatsAppPage = () => {
               </div>
             </div>
 
-            <div className="flex gap-2">
+            <div className="flex flex-col gap-2 sm:flex-row">
               <Button
-                className="flex-1"
+                className="w-full sm:flex-1"
                 onClick={handleSalvarAutomacoes}
                 disabled={!isAdminWorkspace || isSavingAutomacao}
               >
@@ -834,6 +834,7 @@ const WhatsAppPage = () => {
                 variant="outline"
                 onClick={handleEnviarResumoTeste}
                 disabled={!isAdminWorkspace || isEnviandoResumoTeste}
+                className="w-full sm:w-auto"
               >
                 {isEnviandoResumoTeste ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Bell className="mr-2 h-4 w-4" />}
                 Testar resumo
@@ -886,7 +887,7 @@ const WhatsAppPage = () => {
             />
 
             <div className="rounded-lg border border-border/60 p-4 space-y-3">
-              <div className="flex items-center justify-between gap-3">
+              <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
                 <p className="text-xs font-medium">Enviar mensagem gerada</p>
                 <span
                   className={
@@ -899,7 +900,7 @@ const WhatsAppPage = () => {
                 </span>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   size="sm"
@@ -1013,7 +1014,7 @@ const WhatsAppPage = () => {
 
       <div className="grid gap-6 lg:grid-cols-2">
         <div className="glass-card p-5 space-y-4">
-          <div className="flex items-center justify-between gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row sm:items-center sm:justify-between">
             <h3 className="font-semibold text-sm flex items-center gap-2">
               <MessageSquare className="h-4 w-4 text-muted-foreground" /> Caixa de Entrada
             </h3>
@@ -1038,7 +1039,7 @@ const WhatsAppPage = () => {
             onChange={(e) => setInboxSearch(e.target.value)}
           />
 
-          <div className="grid grid-cols-4 gap-2">
+          <div className="grid grid-cols-2 gap-2 sm:grid-cols-4">
             <Button
               size="sm"
               variant={inboxStatusFilter === 'todos' ? 'default' : 'outline'}
@@ -1100,7 +1101,7 @@ const WhatsAppPage = () => {
                   <p className="text-xs text-muted-foreground mt-2 line-clamp-2">
                     {conversa.last_message_text || '(sem preview)'}
                   </p>
-                  <div className="mt-2 flex items-center justify-between text-[11px]">
+                  <div className="mt-2 flex flex-col gap-1 text-[11px] sm:flex-row sm:items-center sm:justify-between">
                     <span className={getSlaColorClass(conversa.sla_level)}>
                       SLA: {conversa.sla_label || '-'}
                     </span>
@@ -1145,7 +1146,7 @@ const WhatsAppPage = () => {
                 </p>
               </div>
 
-              <div className="grid grid-cols-3 gap-2">
+              <div className="grid grid-cols-1 gap-2 sm:grid-cols-3">
                 <Button
                   type="button"
                   size="sm"
@@ -1194,7 +1195,7 @@ const WhatsAppPage = () => {
                           : 'bg-primary/10 border border-primary/20'
                       }`}
                     >
-                      <div className="flex items-center justify-between gap-2 mb-1">
+                      <div className="mb-1 flex flex-col gap-1 sm:flex-row sm:items-center sm:justify-between">
                         <span className="font-medium">
                           {mensagem.direction === 'inbound' ? 'Cliente' : 'Equipe'}
                         </span>
