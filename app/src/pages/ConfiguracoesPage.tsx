@@ -63,7 +63,6 @@ export function ConfiguracoesPage() {
     oab: '',
   });
   const [notificacoes, setNotificacoes] = useState({
-    email: true,
     whatsapp: true,
     resumoDiario: false,
   });
@@ -77,7 +76,6 @@ export function ConfiguracoesPage() {
       oab: user.oab || '',
     });
     setNotificacoes({
-      email: user.alerta_email !== false,
       whatsapp: user.alerta_whatsapp !== false,
       resumoDiario: user.resumo_diario || false,
     });
@@ -97,7 +95,6 @@ export function ConfiguracoesPage() {
       await auth.updateProfile({
         nome: formData.nome,
         telefone: formData.telefone,
-        alerta_email: notificacoes.email,
         alerta_whatsapp: notificacoes.whatsapp,
         resumo_diario: notificacoes.resumoDiario,
       });
@@ -261,7 +258,6 @@ export function ConfiguracoesPage() {
         </h3>
         <div className="space-y-4">
           {[
-            { key: 'email', label: 'Alertas por Email', desc: 'Receber notificacoes de movimentacoes por email' },
             { key: 'whatsapp', label: 'Alertas por WhatsApp', desc: 'Receber notificacoes de prazos por WhatsApp' },
             { key: 'resumoDiario', label: 'Resumo diario', desc: 'Receber resumo diario das atividades do escritorio' },
           ].map((n) => (

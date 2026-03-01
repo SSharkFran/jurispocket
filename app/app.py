@@ -386,11 +386,27 @@ def init_db():
         )
     ''')
 
-    # Verificação de email para cadastro
+    # Verificação de email para cadastro (legado)
     db.execute('''
         CREATE TABLE IF NOT EXISTS email_verification_codes (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             email TEXT UNIQUE NOT NULL,
+            nome TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            workspace_nome TEXT NOT NULL,
+            code_hash TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
+        )
+    ''')
+
+    # Verificação de cadastro por WhatsApp (fluxo atual)
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS phone_verification_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            telefone TEXT UNIQUE NOT NULL,
             nome TEXT NOT NULL,
             password_hash TEXT NOT NULL,
             workspace_nome TEXT NOT NULL,
@@ -1196,45 +1212,95 @@ def hash_senha(senha: str) -> str:
     return hashlib.sha256(senha.encode()).hexdigest()
 
 
-EMAIL_VERIFICATION_TTL_MINUTES = int(os.environ.get('EMAIL_VERIFICATION_TTL_MINUTES', '10'))
-EMAIL_VERIFICATION_MAX_ATTEMPTS = int(os.environ.get('EMAIL_VERIFICATION_MAX_ATTEMPTS', '5'))
+REGISTRATION_VERIFICATION_TTL_MINUTES = int(
+    os.environ.get(
+        'REGISTRATION_VERIFICATION_TTL_MINUTES',
+        os.environ.get('EMAIL_VERIFICATION_TTL_MINUTES', '10'),
+    )
+)
+REGISTRATION_VERIFICATION_MAX_ATTEMPTS = int(
+    os.environ.get(
+        'REGISTRATION_VERIFICATION_MAX_ATTEMPTS',
+        os.environ.get('EMAIL_VERIFICATION_MAX_ATTEMPTS', '5'),
+    )
+)
+EMAIL_NOTIFICATIONS_ENABLED = os.environ.get('ENABLE_EMAIL_NOTIFICATIONS', 'false').strip().lower() in {
+    '1',
+    'true',
+    'yes',
+    'on',
+}
 
 
 def normalize_email(email: str) -> str:
     return (email or '').strip().lower()
 
 
-def gerar_codigo_verificacao_email() -> str:
+def normalize_phone_for_verification(phone: str) -> str:
+    digits = re.sub(r'\D', '', phone or '')
+    if digits.startswith('55') and len(digits) in (12, 13):
+        return digits
+    if len(digits) in (10, 11):
+        return f'55{digits}'
+    return digits
+
+
+def is_valid_phone_for_verification(phone: str) -> bool:
+    return bool(phone) and phone.isdigit() and len(phone) in (12, 13) and phone.startswith('55')
+
+
+def mask_phone_for_display(phone: str) -> str:
+    digits = normalize_phone_for_verification(phone)
+    if not digits:
+        return ''
+    if len(digits) < 6:
+        return f"+{digits}"
+    return f"+{digits[:2]} ****{digits[-4:]}"
+
+
+def gerar_codigo_verificacao_registro() -> str:
     return f"{secrets.randbelow(1000000):06d}"
 
 
-def enviar_codigo_verificacao_email(destinatario: str, nome: str, codigo: str) -> Dict[str, Any]:
-    if not EMAIL_SERVICE_DISPONIVEL:
-        return {'success': False, 'error': 'Serviço de email indisponível'}
+def enviar_codigo_verificacao_whatsapp(telefone: str, nome: str, codigo: str) -> Dict[str, Any]:
+    if not WHATSAPP_SERVICE_DISPONIVEL or whatsapp_service is None:
+        return {'success': False, 'error': 'Serviço WhatsApp indisponível'}
 
-    if not email_service.is_configured():
-        return {'success': False, 'error': 'Serviço de email não configurado'}
+    if not whatsapp_service.is_configured():
+        return {'success': False, 'error': 'Serviço WhatsApp não configurado'}
 
-    assunto = "Código de verificação - JurisPocket"
-    texto = (
-        f"Olá, {nome}!\n\n"
-        f"Seu código de verificação do JurisPocket é: {codigo}\n\n"
-        f"Esse código expira em {EMAIL_VERIFICATION_TTL_MINUTES} minutos.\n"
-        "Se você não solicitou esse cadastro, ignore este email."
+    db = get_db()
+    platform_config = ensure_platform_whatsapp_config(db)
+    if not parse_bool(platform_config.get('enabled', True)):
+        return {'success': False, 'error': 'WhatsApp oficial da plataforma está desativado'}
+
+    session_key = str(platform_config.get('session_key') or PLATFORM_WHATSAPP_SESSION_KEY)
+    status = whatsapp_service.get_connection_status(session_key) or {}
+    connected = status.get('connected')
+    if connected is None:
+        connected = status.get('conectado', False)
+    if not connected:
+        return {
+            'success': False,
+            'error': 'WhatsApp oficial da plataforma está desconectado. Conecte no painel Super Admin.',
+        }
+
+    mensagem = (
+        f"Ola, {nome}!\n\n"
+        f"Seu codigo de verificacao do JurisPocket e: *{codigo}*\n\n"
+        f"Esse codigo expira em {REGISTRATION_VERIFICATION_TTL_MINUTES} minutos.\n"
+        f"Se voce nao solicitou esse cadastro, ignore esta mensagem."
     )
-    html = f"""
-    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #111827;">
-      <h2 style="margin: 0 0 12px 0;">Confirmação de cadastro - JurisPocket</h2>
-      <p>Olá, <strong>{nome}</strong>!</p>
-      <p>Use o código abaixo para concluir seu cadastro:</p>
-      <div style="font-size: 28px; font-weight: 700; letter-spacing: 4px; padding: 12px 16px; background: #f3f4f6; border-radius: 8px; display: inline-block;">
-        {codigo}
-      </div>
-      <p style="margin-top: 16px;">Este código expira em {EMAIL_VERIFICATION_TTL_MINUTES} minutos.</p>
-      <p style="color: #6b7280;">Se você não solicitou esse cadastro, ignore este email.</p>
-    </div>
-    """
-    return email_service.send_email(destinatario, assunto, html, texto)
+    resultado = whatsapp_service.send_text_message(session_key, telefone, mensagem) or {}
+
+    if resultado.get('success') or resultado.get('sucesso'):
+        return {'success': True, 'telefone': whatsapp_service.format_phone(telefone)}
+
+    return {
+        'success': False,
+        'error': resultado.get('error') or resultado.get('erro') or 'Falha ao enviar mensagem WhatsApp',
+        'details': resultado,
+    }
 
 
 def gerar_jwt_token(user_id: int, workspace_id: int, is_admin: bool = False) -> str:
@@ -2484,7 +2550,12 @@ class DatajudMonitor:
             # ============================================================================
             # ENVIO DE EMAIL PARA MOVIMENTAÇÕES
             # ============================================================================
-            if EMAIL_SERVICE_DISPONIVEL and email_service.is_configured() and alertas_criados > 0:
+            if (
+                EMAIL_NOTIFICATIONS_ENABLED
+                and EMAIL_SERVICE_DISPONIVEL
+                and email_service.is_configured()
+                and alertas_criados > 0
+            ):
                 try:
                     # Envia email de notificação
                     resultado_email = notificador_email.notificar_nova_movimentacao(
@@ -6814,12 +6885,13 @@ else:
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """Inicia cadastro enviando código de verificação por email."""
+    """Inicia cadastro enviando código temporário por WhatsApp."""
     data = request.get_json() or {}
 
     nome = (data.get('nome') or '').strip()
     email = normalize_email(data.get('email'))
     password = data.get('password') or ''
+    telefone = normalize_phone_for_verification(data.get('telefone') or data.get('phone'))
     workspace_nome = (
         data.get('workspace_nome')
         or data.get('workshop')  # compatibilidade com frontend legado
@@ -6828,77 +6900,94 @@ def register():
     )
     workspace_nome = str(workspace_nome).strip() if workspace_nome else f'Escritório de {nome}'
 
-    if not all([nome, email, password]):
-        return jsonify({'error': 'Dados incompletos: nome, email e senha são obrigatórios'}), 400
+    if not all([nome, email, password, telefone]):
+        return jsonify({'error': 'Dados incompletos: nome, email, telefone e senha são obrigatórios'}), 400
 
     if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
         return jsonify({'error': 'Email inválido'}), 400
 
+    if not is_valid_phone_for_verification(telefone):
+        return jsonify({'error': 'Telefone inválido. Informe DDD + número (com ou sem 55)'}), 400
+
     if len(password) < 6:
         return jsonify({'error': 'A senha deve ter no mínimo 6 caracteres'}), 400
 
-    if EMAIL_SERVICE_DISPONIVEL:
-        apply_email_config_from_storage()
-
-    if not EMAIL_SERVICE_DISPONIVEL or not email_service.is_configured():
+    if not WHATSAPP_SERVICE_DISPONIVEL or whatsapp_service is None or not whatsapp_service.is_configured():
         return jsonify({
-            'error': 'Cadastro indisponível no momento: serviço de email não configurado no servidor'
+            'error': 'Cadastro indisponível no momento: serviço WhatsApp não configurado no servidor'
         }), 503
 
     db = get_db()
+    platform_config = ensure_platform_whatsapp_config(db)
+    if not parse_bool(platform_config.get('enabled', True)):
+        return jsonify({
+            'error': 'Cadastro indisponível: WhatsApp oficial da plataforma está desativado'
+        }), 503
 
     # Check if email exists
     if db.execute('SELECT id FROM users WHERE lower(email) = ?', (email,)).fetchone():
         return jsonify({'error': 'Email já cadastrado'}), 409
 
-    codigo = gerar_codigo_verificacao_email()
-    expires_at = (datetime.utcnow() + timedelta(minutes=EMAIL_VERIFICATION_TTL_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
+    codigo = gerar_codigo_verificacao_registro()
+    expires_at = (datetime.utcnow() + timedelta(minutes=REGISTRATION_VERIFICATION_TTL_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
 
-    db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+    db.execute('DELETE FROM phone_verification_codes WHERE email = ? OR telefone = ?', (email, telefone))
     db.execute(
-        '''INSERT INTO email_verification_codes
-           (email, nome, password_hash, workspace_nome, code_hash, attempts, expires_at)
-           VALUES (?, ?, ?, ?, ?, 0, ?)''',
-        (email, nome, hash_senha(password), workspace_nome, hash_senha(codigo), expires_at)
+        '''INSERT INTO phone_verification_codes
+           (email, telefone, nome, password_hash, workspace_nome, code_hash, attempts, expires_at)
+           VALUES (?, ?, ?, ?, ?, ?, 0, ?)''',
+        (email, telefone, nome, hash_senha(password), workspace_nome, hash_senha(codigo), expires_at)
     )
 
-    envio = enviar_codigo_verificacao_email(email, nome, codigo)
+    envio = enviar_codigo_verificacao_whatsapp(telefone, nome, codigo)
     if not envio.get('success'):
-        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        db.execute('DELETE FROM phone_verification_codes WHERE email = ? OR telefone = ?', (email, telefone))
         db.commit()
         return jsonify({
             'error': f"Não foi possível enviar o código de verificação: {envio.get('error', 'erro desconhecido')}"
-        }), 500
+        }), 503
 
     db.commit()
 
     return jsonify({
         'requires_verification': True,
         'email': email,
-        'expires_in_minutes': EMAIL_VERIFICATION_TTL_MINUTES,
-        'message': 'Código de verificação enviado para o seu email.'
+        'telefone': telefone,
+        'masked_phone': mask_phone_for_display(telefone),
+        'expires_in_minutes': REGISTRATION_VERIFICATION_TTL_MINUTES,
+        'message': 'Código de verificação enviado para o seu WhatsApp.'
     })
 
 
 @app.route('/api/auth/register/verify', methods=['POST'])
 def verify_register():
-    """Confirma código de email e finaliza o cadastro do usuário."""
+    """Confirma código de WhatsApp e finaliza o cadastro do usuário."""
     data = request.get_json() or {}
 
     email = normalize_email(data.get('email'))
+    telefone = normalize_phone_for_verification(data.get('telefone') or data.get('phone'))
     code = str(data.get('code') or '').strip()
 
-    if not email or not code:
-        return jsonify({'error': 'Dados incompletos: email e código são obrigatórios'}), 400
+    if (not email and not telefone) or not code:
+        return jsonify({'error': 'Dados incompletos: telefone (ou email) e código são obrigatórios'}), 400
 
     if not re.match(r'^\d{6}$', code):
-        return jsonify({'error': 'Código inválido. Informe os 6 dígitos enviados por email'}), 400
+        return jsonify({'error': 'Código inválido. Informe os 6 dígitos enviados por WhatsApp'}), 400
 
     db = get_db()
-    pending = db.execute(
-        'SELECT * FROM email_verification_codes WHERE email = ?',
-        (email,)
-    ).fetchone()
+    pending = None
+
+    if telefone:
+        pending = db.execute(
+            'SELECT * FROM phone_verification_codes WHERE telefone = ?',
+            (telefone,),
+        ).fetchone()
+
+    if not pending and email:
+        pending = db.execute(
+            'SELECT * FROM phone_verification_codes WHERE email = ?',
+            (email,),
+        ).fetchone()
 
     if not pending:
         return jsonify({'error': 'Código não encontrado ou expirado. Solicite um novo cadastro'}), 404
@@ -6909,30 +6998,31 @@ def verify_register():
         expires_at = datetime.utcnow() - timedelta(seconds=1)
 
     if expires_at < datetime.utcnow():
-        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        db.execute('DELETE FROM phone_verification_codes WHERE id = ?', (pending['id'],))
         db.commit()
         return jsonify({'error': 'Código expirado. Solicite um novo código'}), 410
 
     if pending['code_hash'] != hash_senha(code):
         attempts = int(pending['attempts'] or 0) + 1
-        tentativas_restantes = EMAIL_VERIFICATION_MAX_ATTEMPTS - attempts
+        tentativas_restantes = REGISTRATION_VERIFICATION_MAX_ATTEMPTS - attempts
 
-        if attempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS:
-            db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        if attempts >= REGISTRATION_VERIFICATION_MAX_ATTEMPTS:
+            db.execute('DELETE FROM phone_verification_codes WHERE id = ?', (pending['id'],))
             db.commit()
             return jsonify({'error': 'Código inválido. Limite de tentativas excedido. Solicite novo código'}), 400
 
         db.execute(
-            'UPDATE email_verification_codes SET attempts = ? WHERE email = ?',
-            (attempts, email)
+            'UPDATE phone_verification_codes SET attempts = ? WHERE id = ?',
+            (attempts, pending['id'])
         )
         db.commit()
         return jsonify({
             'error': f'Código inválido. Você ainda tem {tentativas_restantes} tentativa(s)'
         }), 400
 
-    if db.execute('SELECT id FROM users WHERE lower(email) = ?', (email,)).fetchone():
-        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+    pending_email = normalize_email(pending['email'])
+    if db.execute('SELECT id FROM users WHERE lower(email) = ?', (pending_email,)).fetchone():
+        db.execute('DELETE FROM phone_verification_codes WHERE id = ?', (pending['id'],))
         db.commit()
         return jsonify({'error': 'Este email já foi cadastrado'}), 409
 
@@ -6944,12 +7034,12 @@ def verify_register():
 
     # Create user as admin
     cursor = db.execute(
-        'INSERT INTO users (workspace_id, nome, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-        (workspace_id, pending['nome'], email, pending['password_hash'], 'admin')
+        'INSERT INTO users (workspace_id, nome, email, telefone, password_hash, role) VALUES (?, ?, ?, ?, ?, ?)',
+        (workspace_id, pending['nome'], pending_email, pending['telefone'], pending['password_hash'], 'admin')
     )
     user_id = cursor.lastrowid
 
-    db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+    db.execute('DELETE FROM phone_verification_codes WHERE id = ?', (pending['id'],))
     db.commit()
 
     token = gerar_jwt_token(user_id, workspace_id, is_admin=True)
@@ -6960,7 +7050,8 @@ def verify_register():
         'user': {
             'id': user_id,
             'nome': pending['nome'],
-            'email': email,
+            'email': pending_email,
+            'telefone': pending['telefone'],
             'role': 'admin',
             'workspace_id': workspace_id
         }
@@ -8659,7 +8750,7 @@ def create_tarefa():
     db.commit()
     print(f"🔔 Notificação criada para user_id={assigned_to}: {mensagem}")
     
-    if EMAIL_SERVICE_DISPONIVEL and email_service.is_configured():
+    if EMAIL_NOTIFICATIONS_ENABLED and EMAIL_SERVICE_DISPONIVEL and email_service.is_configured():
         titulo_tarefa = data.get('titulo')
         descricao = data.get('descricao')
         data_vencimento = data.get('data_vencimento')
@@ -12132,6 +12223,15 @@ def email_status():
     """
     Retorna status do serviço de email
     """
+    if not EMAIL_NOTIFICATIONS_ENABLED:
+        return jsonify({
+            'configurado': False,
+            'provider': None,
+            'smtp_host': None,
+            'smtp_from': None,
+            'mensagem': 'Canal de email desativado nesta implantação'
+        })
+
     if not EMAIL_SERVICE_DISPONIVEL:
         return jsonify({
             'configurado': False,
@@ -12165,6 +12265,12 @@ def email_teste():
         "assunto": "Teste de Email" (opcional)
     }
     """
+    if not EMAIL_NOTIFICATIONS_ENABLED:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Canal de email desativado. Use o WhatsApp para notificações.'
+        }), 410
+
     if not EMAIL_SERVICE_DISPONIVEL:
         return jsonify({
             'sucesso': False,
@@ -12231,6 +12337,12 @@ def email_notificar_movimentacao():
         "data_movimento": "2024-01-15"
     }
     """
+    if not EMAIL_NOTIFICATIONS_ENABLED:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Canal de email desativado. Use o WhatsApp para notificações.'
+        }), 410
+
     if not EMAIL_SERVICE_DISPONIVEL:
         return jsonify({'sucesso': False, 'erro': 'Serviço não disponível'}), 503
     

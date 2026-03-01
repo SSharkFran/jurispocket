@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion } from 'framer-motion';
-import { Scale, Mail, Lock, User, Building, ArrowRight, ArrowLeft, Eye, EyeOff, Loader2 } from 'lucide-react';
+import { Scale, Mail, Lock, User, Building, ArrowRight, ArrowLeft, Eye, EyeOff, Loader2, Phone } from 'lucide-react';
 import { Button } from '@/components/ui/button';
 import { Input } from '@/components/ui/input';
 import { Label } from '@/components/ui/label';
@@ -10,23 +10,62 @@ import { toast } from 'sonner';
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { register, verifyRegisterEmail } = useAuth();
+  const { register, verifyRegisterPhone } = useAuth();
   const [form, setForm] = useState({
     nome: '',
     email: '',
+    phone: '',
     password: '',
     confirmPassword: '',
     workspace_nome: '',
   });
   const [step, setStep] = useState<'register' | 'verify'>('register');
   const [verificationCode, setVerificationCode] = useState('');
-  const [pendingEmail, setPendingEmail] = useState('');
+  const [pendingPhone, setPendingPhone] = useState('');
+  const [pendingPhoneRaw, setPendingPhoneRaw] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
 
+  const formatPhoneInput = (value: string) => {
+    const digits = value.replace(/\D/g, '').slice(0, 13);
+    const hasCountry = digits.startsWith('55');
+    const local = hasCountry ? digits.slice(2) : digits;
+    const ddd = local.slice(0, 2);
+    const number = local.slice(2);
+
+    let formattedNumber = number;
+    if (number.length > 4 && number.length <= 8) {
+      formattedNumber = `${number.slice(0, 4)}-${number.slice(4, 8)}`;
+    } else if (number.length > 8) {
+      formattedNumber = `${number.slice(0, 5)}-${number.slice(5, 9)}`;
+    }
+
+    const localFormatted = ddd ? `(${ddd}) ${formattedNumber}`.trim() : formattedNumber;
+    return hasCountry ? `+55 ${localFormatted}`.trim() : localFormatted;
+  };
+
+  const normalizePhoneDigits = (value: string) => {
+    const digits = value.replace(/\D/g, '');
+    if (!digits) return '';
+    if (digits.startsWith('55') && (digits.length === 12 || digits.length === 13)) return digits;
+    if (digits.length === 10 || digits.length === 11) return `55${digits}`;
+    return digits;
+  };
+
+  const maskPhone = (value: string) => {
+    const digits = normalizePhoneDigits(value);
+    if (digits.length < 4) return value;
+    return `+${digits.slice(0, 2)} ****${digits.slice(-4)}`;
+  };
+
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    setForm((prev) => ({ ...prev, [e.target.name]: e.target.value }));
+    const { name, value } = e.target;
+    if (name === 'phone') {
+      setForm((prev) => ({ ...prev, phone: formatPhoneInput(value) }));
+      return;
+    }
+    setForm((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -38,6 +77,13 @@ export function RegisterPage() {
       return;
     }
 
+    const normalizedPhone = normalizePhoneDigits(form.phone);
+    if (!normalizedPhone || (normalizedPhone.length !== 12 && normalizedPhone.length !== 13)) {
+      setErrorMessage('Informe um telefone válido para receber o código no WhatsApp');
+      toast.error('Informe um telefone válido para receber o código no WhatsApp', { duration: 5000 });
+      return;
+    }
+
     setIsLoading(true);
     setErrorMessage(null);
 
@@ -45,17 +91,19 @@ export function RegisterPage() {
       const response = await register({
         nome: form.nome,
         email: form.email,
+        phone: normalizedPhone,
         password: form.password,
         workspace_nome: form.workspace_nome.trim() || undefined,
       });
 
       if (response?.requires_verification) {
-        const destinationEmail = response.email || form.email.trim().toLowerCase();
-        setPendingEmail(destinationEmail);
+        const destinationPhone = response.masked_phone || maskPhone(response.telefone || form.phone);
+        setPendingPhone(destinationPhone);
+        setPendingPhoneRaw(response.telefone || normalizePhoneDigits(form.phone));
         setStep('verify');
         toast.success(
           response.message ||
-            `Código enviado para ${destinationEmail}. Confira sua caixa de entrada.`
+            `Código enviado para ${destinationPhone}.`
         );
         return;
       }
@@ -66,6 +114,7 @@ export function RegisterPage() {
       const message =
         error.response?.data?.error ||
         error.response?.data?.message ||
+        error.message ||
         'Erro ao criar conta';
       setErrorMessage(message);
       toast.error(message, { duration: 5000 });
@@ -74,20 +123,24 @@ export function RegisterPage() {
     }
   };
 
-  const handleVerifyEmail = async (e: React.FormEvent) => {
+  const handleVerifyPhone = async (e: React.FormEvent) => {
     e.preventDefault();
     setIsLoading(true);
     setErrorMessage(null);
 
     try {
-      const emailToVerify = (pendingEmail || form.email).trim().toLowerCase();
-      await verifyRegisterEmail(emailToVerify, verificationCode.trim());
-      toast.success('Email confirmado com sucesso! Sua conta foi criada.');
+      const phoneToVerify = normalizePhoneDigits(pendingPhoneRaw || form.phone);
+      if (!phoneToVerify) {
+        throw new Error('Telefone inválido para confirmação');
+      }
+      await verifyRegisterPhone(phoneToVerify, verificationCode.trim());
+      toast.success('WhatsApp confirmado com sucesso! Sua conta foi criada.');
       navigate('/app');
     } catch (error: any) {
       const message =
         error.response?.data?.error ||
         error.response?.data?.message ||
+        error.message ||
         'Erro ao confirmar código';
       setErrorMessage(message);
       toast.error(message, { duration: 5000 });
@@ -101,17 +154,23 @@ export function RegisterPage() {
     setErrorMessage(null);
 
     try {
+      const normalizedPhone = normalizePhoneDigits(form.phone);
+      if (!normalizedPhone || (normalizedPhone.length !== 12 && normalizedPhone.length !== 13)) {
+        throw new Error('Telefone inválido para reenviar o código');
+      }
       await register({
         nome: form.nome,
         email: form.email,
+        phone: normalizedPhone,
         password: form.password,
         workspace_nome: form.workspace_nome.trim() || undefined,
       });
-      toast.success('Novo código enviado para seu email.');
+      toast.success('Novo código enviado para seu WhatsApp.');
     } catch (error: any) {
       const message =
         error.response?.data?.error ||
         error.response?.data?.message ||
+        error.message ||
         'Erro ao reenviar código';
       setErrorMessage(message);
       toast.error(message, { duration: 5000 });
@@ -176,6 +235,23 @@ export function RegisterPage() {
                     className="pl-10 bg-secondary border-border"
                     name="email"
                     value={form.email}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Telefone (WhatsApp)</Label>
+                <div className="relative">
+                  <Phone className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="tel"
+                    placeholder="(11) 99999-9999"
+                    className="pl-10 bg-secondary border-border"
+                    name="phone"
+                    value={form.phone}
                     onChange={handleChange}
                     required
                     disabled={isLoading}
@@ -255,9 +331,9 @@ export function RegisterPage() {
               </Button>
             </form>
           ) : (
-            <form onSubmit={handleVerifyEmail} className="space-y-5">
+            <form onSubmit={handleVerifyPhone} className="space-y-5">
               <div className="text-sm text-muted-foreground">
-                Enviamos um código de verificação para <span className="text-foreground font-medium">{pendingEmail}</span>.
+                Enviamos um código de verificação para <span className="text-foreground font-medium">{pendingPhone}</span> no WhatsApp.
               </div>
 
               <div className="space-y-2">
@@ -305,6 +381,8 @@ export function RegisterPage() {
                   onClick={() => {
                     setStep('register');
                     setVerificationCode('');
+                    setPendingPhone('');
+                    setPendingPhoneRaw('');
                     setErrorMessage(null);
                   }}
                   disabled={isLoading}

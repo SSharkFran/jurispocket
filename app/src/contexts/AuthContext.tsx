@@ -39,10 +39,12 @@ interface AuthContextType {
   register: (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) => Promise<{
     requires_verification?: boolean;
     email?: string;
+    telefone?: string;
+    masked_phone?: string;
     expires_in_minutes?: number;
     message?: string;
   }>;
-  verifyRegisterEmail: (email: string, code: string) => Promise<void>;
+  verifyRegisterPhone: (telefone: string, code: string) => Promise<void>;
   logout: () => void;
   finishLogoutTransition: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
@@ -117,8 +119,8 @@ export function AuthProvider({ children }: { children: ReactNode }) {
     return { requires_verification: false };
   };
 
-  const verifyRegisterEmail = async (email: string, code: string) => {
-    const response = await auth.verifyRegister({ email, code });
+  const verifyRegisterPhone = async (telefone: string, code: string) => {
+    const response = await auth.verifyRegister({ telefone, code });
     localStorage.setItem('token', response.data.token);
     setUser(response.data.user);
     await refreshUser();
@@ -160,7 +162,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         login,
         register,
-        verifyRegisterEmail,
+        verifyRegisterPhone,
         logout,
         finishLogoutTransition,
         updateProfile,
