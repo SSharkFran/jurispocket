@@ -15,6 +15,12 @@ from datetime import datetime
 import sqlite3
 
 
+def _parse_bool(value: Any, default: bool = False) -> bool:
+    if value is None:
+        return default
+    return str(value).strip().lower() in {'1', 'true', 'yes', 'on', 'sim'}
+
+
 class EmailService:
     """Serviço para envio de notificações por email"""
     
@@ -26,6 +32,7 @@ class EmailService:
         self.smtp_pass = os.getenv('SMTP_PASS', '')
         self.smtp_from = os.getenv('SMTP_FROM', '')
         self.smtp_timeout_seconds = float(os.getenv('SMTP_TIMEOUT_SECONDS', '12'))
+        self.smtp_force_ipv4 = _parse_bool(os.getenv('SMTP_FORCE_IPV4', 'false'))
 
         # Configurações Resend (API HTTPS - útil em ambientes que bloqueiam SMTP)
         self.resend_api_key = os.getenv('RESEND_API_KEY', '').strip()
@@ -63,11 +70,26 @@ class EmailService:
     def _create_smtp_connection(self):
         """Cria conexão SMTP segura"""
         context = ssl.create_default_context()
+        smtp_connect_host = self.smtp_host
+
+        # Em alguns ambientes (ex.: IPv6 sem rota), forçar IPv4 evita [Errno 101]
+        if self.smtp_force_ipv4:
+            try:
+                infos = socket.getaddrinfo(
+                    self.smtp_host,
+                    self.smtp_port,
+                    socket.AF_INET,
+                    socket.SOCK_STREAM
+                )
+                if infos:
+                    smtp_connect_host = infos[0][4][0]
+            except Exception:
+                smtp_connect_host = self.smtp_host
         
         if self.smtp_port == 465:
             # SSL direto
             server = smtplib.SMTP_SSL(
-                self.smtp_host,
+                smtp_connect_host,
                 self.smtp_port,
                 context=context,
                 timeout=self.smtp_timeout_seconds
@@ -76,7 +98,7 @@ class EmailService:
         else:
             # STARTTLS
             server = smtplib.SMTP(
-                self.smtp_host,
+                smtp_connect_host,
                 self.smtp_port,
                 timeout=self.smtp_timeout_seconds
             )
@@ -151,12 +173,29 @@ class EmailService:
         except (socket.timeout, TimeoutError):
             return {
                 'success': False,
-                'error': f'Timeout ao conectar no SMTP ({self.smtp_host}:{self.smtp_port})'
+                'error': f'Timeout ao conectar no SMTP ({self.smtp_host}:{self.smtp_port})',
+                'provider': 'smtp'
+            }
+        except OSError as e:
+            if getattr(e, 'errno', None) == 101:
+                return {
+                    'success': False,
+                    'error': (
+                        f'Rede indisponível para SMTP ({self.smtp_host}:{self.smtp_port}). '
+                        'Isso normalmente indica bloqueio de saída na hospedagem.'
+                    ),
+                    'provider': 'smtp'
+                }
+            return {
+                'success': False,
+                'error': str(e),
+                'provider': 'smtp'
             }
         except Exception as e:
             return {
                 'success': False,
-                'error': str(e)
+                'error': str(e),
+                'provider': 'smtp'
             }
 
     def _send_email_resend(self, to_email: str, subject: str, html_content: str,
@@ -208,17 +247,20 @@ class EmailService:
 
             return {
                 'success': False,
-                'error': f'Resend HTTP {response.status_code}: {error_msg}'
+                'error': f'Resend HTTP {response.status_code}: {error_msg}',
+                'provider': 'resend'
             }
         except requests.Timeout:
             return {
                 'success': False,
-                'error': 'Timeout ao conectar no Resend API'
+                'error': 'Timeout ao conectar no Resend API',
+                'provider': 'resend'
             }
         except requests.RequestException as e:
             return {
                 'success': False,
-                'error': f'Falha de rede ao enviar via Resend: {e}'
+                'error': f'Falha de rede ao enviar via Resend: {e}',
+                'provider': 'resend'
             }
     
     def send_email_to_multiple(self, to_emails: List[str], subject: str, 
