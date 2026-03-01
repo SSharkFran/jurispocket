@@ -48,8 +48,11 @@ import {
   Wallet,
   AlertCircle,
   Check,
+  Eye,
+  EyeOff,
   PowerOff,
-  SendHorizontal
+  SendHorizontal,
+  Mail
 } from 'lucide-react';
 
 interface Estatisticas {
@@ -135,6 +138,16 @@ interface Configuracao {
   valor: string;
   descricao: string;
   updated_at: string;
+}
+
+interface EmailConfig {
+  smtp_host: string;
+  smtp_port: number;
+  smtp_user: string;
+  smtp_from: string;
+  smtp_pass?: string;
+  has_password: boolean;
+  configurado: boolean;
 }
 
 interface AuditLog {
@@ -1279,6 +1292,20 @@ function PlanosTab() {
 function ConfiguracoesTab() {
   const [configuracoes, setConfiguracoes] = useState<Configuracao[]>([]);
   const [loading, setLoading] = useState(true);
+  const [emailConfig, setEmailConfig] = useState<EmailConfig>({
+    smtp_host: '',
+    smtp_port: 587,
+    smtp_user: '',
+    smtp_from: '',
+    smtp_pass: '',
+    has_password: false,
+    configurado: false,
+  });
+  const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
+  const [savingEmailConfig, setSavingEmailConfig] = useState(false);
+  const [clearEmailPassword, setClearEmailPassword] = useState(false);
+  const [testingEmailConfig, setTestingEmailConfig] = useState(false);
+  const [showEmailPassword, setShowEmailPassword] = useState(false);
   const [platformForm, setPlatformForm] = useState<WhatsAppPlatformConfig | null>(null);
   const [platformStatus, setPlatformStatus] = useState<{
     connected?: boolean;
@@ -1301,6 +1328,7 @@ function ConfiguracoesTab() {
 
   useEffect(() => {
     carregarConfiguracoes();
+    carregarEmailConfig();
     carregarWhatsAppPlataforma();
     carregarWorkspacesAviso();
     carregarCampanhasWhatsapp();
@@ -1314,6 +1342,29 @@ function ConfiguracoesTab() {
       toast.error('Erro ao carregar configurações');
     } finally {
       setLoading(false);
+    }
+  };
+
+  const carregarEmailConfig = async () => {
+    try {
+      setLoadingEmailConfig(true);
+      const response = await api.get('/admin/email-config');
+      const data = response.data || {};
+      setEmailConfig((prev) => ({
+        ...prev,
+        smtp_host: data.smtp_host || '',
+        smtp_port: Number(data.smtp_port) || 587,
+        smtp_user: data.smtp_user || '',
+        smtp_from: data.smtp_from || '',
+        smtp_pass: '',
+        has_password: Boolean(data.has_password),
+        configurado: Boolean(data.configurado),
+      }));
+      setClearEmailPassword(false);
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao carregar configuração de e-mail');
+    } finally {
+      setLoadingEmailConfig(false);
     }
   };
 
@@ -1537,9 +1588,192 @@ function ConfiguracoesTab() {
     }
   };
 
+  const handleSaveEmailConfig = async () => {
+    try {
+      setSavingEmailConfig(true);
+      const payload: Record<string, any> = {
+        smtp_host: emailConfig.smtp_host,
+        smtp_port: emailConfig.smtp_port,
+        smtp_user: emailConfig.smtp_user,
+        smtp_from: emailConfig.smtp_from,
+        clear_password: clearEmailPassword,
+      };
+
+      if (emailConfig.smtp_pass && emailConfig.smtp_pass.trim()) {
+        payload.smtp_pass = emailConfig.smtp_pass.trim();
+      }
+
+      const response = await api.put('/admin/email-config', payload);
+      const data = response.data || {};
+
+      setEmailConfig((prev) => ({
+        ...prev,
+        smtp_host: data.smtp_host || prev.smtp_host,
+        smtp_port: Number(data.smtp_port) || prev.smtp_port,
+        smtp_user: data.smtp_user || prev.smtp_user,
+        smtp_from: data.smtp_from || prev.smtp_from,
+        smtp_pass: '',
+        has_password: Boolean(data.has_password),
+        configurado: Boolean(data.configurado),
+      }));
+      setClearEmailPassword(false);
+      toast.success(data.message || 'Configuração de e-mail atualizada');
+    } catch (error: any) {
+      toast.error(error.response?.data?.error || 'Erro ao salvar configuração de e-mail');
+    } finally {
+      setSavingEmailConfig(false);
+    }
+  };
+
+  const handleTestarEmailConfig = async () => {
+    try {
+      setTestingEmailConfig(true);
+      const response = await api.post('/email/teste', {
+        assunto: 'Teste de Email - JurisPocket (Super Admin)',
+      });
+      toast.success(response.data?.mensagem || 'Email de teste enviado');
+    } catch (error: any) {
+      toast.error(error.response?.data?.erro || error.response?.data?.error || 'Falha ao enviar email de teste');
+    } finally {
+      setTestingEmailConfig(false);
+    }
+  };
+
   return (
     <div className="space-y-6">
       <h2 className="text-xl font-semibold text-foreground">Configurações Globais</h2>
+
+      <Card className="glass-card border-border/60">
+        <CardHeader>
+          <CardTitle className="text-foreground flex items-center gap-2">
+            <Mail className="w-5 h-5 text-primary" />
+            Email Oficial (SMTP)
+          </CardTitle>
+        </CardHeader>
+        <CardContent className="space-y-4">
+          {loadingEmailConfig ? (
+            <div className="py-6 flex items-center justify-center text-muted-foreground text-sm">
+              <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              Carregando configuração de e-mail...
+            </div>
+          ) : (
+            <>
+              <div className="grid gap-4 md:grid-cols-2">
+                <div>
+                  <Label className="text-foreground">SMTP Host</Label>
+                  <Input
+                    value={emailConfig.smtp_host}
+                    onChange={(e) => setEmailConfig((prev) => ({ ...prev, smtp_host: e.target.value }))}
+                    className="mt-1 bg-secondary border-border"
+                    placeholder="smtp.seu-provedor.com"
+                  />
+                </div>
+                <div>
+                  <Label className="text-foreground">SMTP Port</Label>
+                  <Input
+                    type="number"
+                    value={emailConfig.smtp_port}
+                    onChange={(e) => setEmailConfig((prev) => ({ ...prev, smtp_port: Number(e.target.value) || 587 }))}
+                    className="mt-1 bg-secondary border-border"
+                    placeholder="587"
+                  />
+                </div>
+                <div>
+                  <Label className="text-foreground">Usuário SMTP</Label>
+                  <Input
+                    value={emailConfig.smtp_user}
+                    onChange={(e) => setEmailConfig((prev) => ({ ...prev, smtp_user: e.target.value }))}
+                    className="mt-1 bg-secondary border-border"
+                    placeholder="contato@jurispocket.com.br"
+                  />
+                </div>
+                <div>
+                  <Label className="text-foreground">Remetente (From)</Label>
+                  <Input
+                    value={emailConfig.smtp_from}
+                    onChange={(e) => setEmailConfig((prev) => ({ ...prev, smtp_from: e.target.value }))}
+                    className="mt-1 bg-secondary border-border"
+                    placeholder="contato@jurispocket.com.br"
+                  />
+                </div>
+              </div>
+
+              <div>
+                <Label className="text-foreground">Senha SMTP</Label>
+                <div className="relative mt-1">
+                  <Input
+                    type={showEmailPassword ? 'text' : 'password'}
+                    value={emailConfig.smtp_pass || ''}
+                    onChange={(e) => setEmailConfig((prev) => ({ ...prev, smtp_pass: e.target.value }))}
+                    className="bg-secondary border-border pr-10"
+                    placeholder={emailConfig.has_password ? '******** (senha já configurada)' : 'Digite a senha SMTP'}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowEmailPassword((prev) => !prev)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground"
+                    aria-label={showEmailPassword ? 'Ocultar senha SMTP' : 'Mostrar senha SMTP'}
+                  >
+                    {showEmailPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+                <div className="mt-2 flex items-center gap-2 text-xs text-muted-foreground">
+                  <input
+                    type="checkbox"
+                    checked={clearEmailPassword}
+                    onChange={(e) => setClearEmailPassword(e.target.checked)}
+                  />
+                  Remover senha salva no servidor
+                </div>
+              </div>
+
+              <div className="rounded-lg bg-secondary/40 p-3 text-sm space-y-1">
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Status SMTP</span>
+                  <span className={emailConfig.configurado ? 'text-emerald-400' : 'text-amber-400'}>
+                    {emailConfig.configurado ? 'Configurado' : 'Incompleto'}
+                  </span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Senha cadastrada</span>
+                  <span className="text-foreground">{emailConfig.has_password ? 'Sim' : 'Não'}</span>
+                </div>
+              </div>
+
+              <div className="flex flex-wrap gap-2">
+                <Button onClick={handleSaveEmailConfig} disabled={savingEmailConfig}>
+                  {savingEmailConfig ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Check className="w-4 h-4 mr-2" />
+                  )}
+                  Salvar Email Oficial
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={handleTestarEmailConfig}
+                  disabled={testingEmailConfig || savingEmailConfig}
+                >
+                  {testingEmailConfig ? (
+                    <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+                  ) : (
+                    <Mail className="w-4 h-4 mr-2" />
+                  )}
+                  Enviar Email de Teste
+                </Button>
+                <Button
+                  variant="outline"
+                  onClick={carregarEmailConfig}
+                  disabled={loadingEmailConfig || savingEmailConfig}
+                >
+                  <RefreshCw className="w-4 h-4 mr-2" />
+                  Recarregar
+                </Button>
+              </div>
+            </>
+          )}
+        </CardContent>
+      </Card>
 
       <Card className="glass-card border-border/60">
         <CardContent className="p-6">

@@ -27,7 +27,10 @@ export function LoginPage() {
       toast.success('Login realizado com sucesso!');
       navigate('/app');
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao fazer login';
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Erro ao fazer login';
       setErrorMessage(message);
       toast.error(message, { duration: 5000 });
     } finally {

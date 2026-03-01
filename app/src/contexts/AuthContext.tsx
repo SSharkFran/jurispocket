@@ -36,7 +36,13 @@ interface AuthContextType {
   isAuthenticated: boolean;
   refreshUser: () => Promise<void>;
   login: (email: string, password: string) => Promise<void>;
-  register: (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) => Promise<void>;
+  register: (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) => Promise<{
+    requires_verification?: boolean;
+    email?: string;
+    expires_in_minutes?: number;
+    message?: string;
+  }>;
+  verifyRegisterEmail: (email: string, code: string) => Promise<void>;
   logout: () => void;
   finishLogoutTransition: () => void;
   updateProfile: (data: Partial<User>) => Promise<void>;
@@ -101,6 +107,18 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const register = async (data: { email: string; password: string; nome: string; phone?: string; workspace_nome?: string }) => {
     const response = await auth.register(data);
+    if (response.data?.requires_verification) {
+      return response.data;
+    }
+
+    localStorage.setItem('token', response.data.token);
+    setUser(response.data.user);
+    await refreshUser();
+    return { requires_verification: false };
+  };
+
+  const verifyRegisterEmail = async (email: string, code: string) => {
+    const response = await auth.verifyRegister({ email, code });
     localStorage.setItem('token', response.data.token);
     setUser(response.data.user);
     await refreshUser();
@@ -142,6 +160,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
         refreshUser,
         login,
         register,
+        verifyRegisterEmail,
         logout,
         finishLogoutTransition,
         updateProfile,

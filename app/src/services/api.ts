@@ -42,6 +42,8 @@ export const auth = {
       telefone: data.phone,
       workspace_nome: data.workspace_nome,
     }),
+  verifyRegister: (data: { email: string; code: string }) =>
+    api.post('/auth/register/verify', data),
   me: () => api.get('/auth/me'),
   updateProfile: (data: Partial<{ nome: string; telefone: string; alerta_email: boolean; alerta_whatsapp: boolean; resumo_diario: boolean }>) =>
     api.put('/auth/me', data),

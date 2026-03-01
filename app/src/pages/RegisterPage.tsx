@@ -10,7 +10,7 @@ import { toast } from 'sonner';
 
 export function RegisterPage() {
   const navigate = useNavigate();
-  const { register } = useAuth();
+  const { register, verifyRegisterEmail } = useAuth();
   const [form, setForm] = useState({
     nome: '',
     email: '',
@@ -18,6 +18,9 @@ export function RegisterPage() {
     confirmPassword: '',
     workspace_nome: '',
   });
+  const [step, setStep] = useState<'register' | 'verify'>('register');
+  const [verificationCode, setVerificationCode] = useState('');
+  const [pendingEmail, setPendingEmail] = useState('');
   const [showPassword, setShowPassword] = useState(false);
   const [isLoading, setIsLoading] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
@@ -39,16 +42,77 @@ export function RegisterPage() {
     setErrorMessage(null);
 
     try {
+      const response = await register({
+        nome: form.nome,
+        email: form.email,
+        password: form.password,
+        workspace_nome: form.workspace_nome.trim() || undefined,
+      });
+
+      if (response?.requires_verification) {
+        const destinationEmail = response.email || form.email.trim().toLowerCase();
+        setPendingEmail(destinationEmail);
+        setStep('verify');
+        toast.success(
+          response.message ||
+            `Código enviado para ${destinationEmail}. Confira sua caixa de entrada.`
+        );
+        return;
+      }
+
+      toast.success('Conta criada com sucesso!');
+      navigate('/app');
+    } catch (error: any) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Erro ao criar conta';
+      setErrorMessage(message);
+      toast.error(message, { duration: 5000 });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleVerifyEmail = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
+      const emailToVerify = (pendingEmail || form.email).trim().toLowerCase();
+      await verifyRegisterEmail(emailToVerify, verificationCode.trim());
+      toast.success('Email confirmado com sucesso! Sua conta foi criada.');
+      navigate('/app');
+    } catch (error: any) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Erro ao confirmar código';
+      setErrorMessage(message);
+      toast.error(message, { duration: 5000 });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handleResendCode = async () => {
+    setIsLoading(true);
+    setErrorMessage(null);
+
+    try {
       await register({
         nome: form.nome,
         email: form.email,
         password: form.password,
         workspace_nome: form.workspace_nome.trim() || undefined,
       });
-      toast.success('Conta criada com sucesso!');
-      navigate('/app');
+      toast.success('Novo código enviado para seu email.');
     } catch (error: any) {
-      const message = error.response?.data?.message || 'Erro ao criar conta';
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Erro ao reenviar código';
       setErrorMessage(message);
       toast.error(message, { duration: 5000 });
     } finally {
@@ -84,111 +148,173 @@ export function RegisterPage() {
             </motion.div>
           )}
 
-          <form onSubmit={handleSubmit} className="space-y-5">
-            <div className="space-y-2">
-              <Label>Nome completo</Label>
-              <div className="relative">
-                <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+          {step === 'register' ? (
+            <form onSubmit={handleSubmit} className="space-y-5">
+              <div className="space-y-2">
+                <Label>Nome completo</Label>
+                <div className="relative">
+                  <User className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Dr. João Silva"
+                    className="pl-10 bg-secondary border-border"
+                    name="nome"
+                    value={form.nome}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Email</Label>
+                <div className="relative">
+                  <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="email"
+                    placeholder="seu@email.com"
+                    className="pl-10 bg-secondary border-border"
+                    name="email"
+                    value={form.email}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Nome do escritório</Label>
+                <div className="relative">
+                  <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    placeholder="Escritório Silva & Associados"
+                    className="pl-10 bg-secondary border-border"
+                    name="workspace_nome"
+                    value={form.workspace_nome}
+                    onChange={handleChange}
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type={showPassword ? 'text' : 'password'}
+                    placeholder="••••••••"
+                    className="pl-10 pr-10 bg-secondary border-border"
+                    name="password"
+                    value={form.password}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                  <button
+                    type="button"
+                    onClick={() => setShowPassword(!showPassword)}
+                    className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                    disabled={isLoading}
+                  >
+                    {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
+                  </button>
+                </div>
+              </div>
+
+              <div className="space-y-2">
+                <Label>Confirmar senha</Label>
+                <div className="relative">
+                  <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
+                  <Input
+                    type="password"
+                    placeholder="••••••••"
+                    className="pl-10 bg-secondary border-border"
+                    name="confirmPassword"
+                    value={form.confirmPassword}
+                    onChange={handleChange}
+                    required
+                    disabled={isLoading}
+                  />
+                </div>
+              </div>
+
+              <Button
+                type="submit"
+                disabled={isLoading}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Criar Conta <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
+            </form>
+          ) : (
+            <form onSubmit={handleVerifyEmail} className="space-y-5">
+              <div className="text-sm text-muted-foreground">
+                Enviamos um código de verificação para <span className="text-foreground font-medium">{pendingEmail}</span>.
+              </div>
+
+              <div className="space-y-2">
+                <Label>Código de verificação</Label>
                 <Input
-                  placeholder="Dr. João Silva"
-                  className="pl-10 bg-secondary border-border"
-                  name="nome"
-                  value={form.nome}
-                  onChange={handleChange}
+                  type="text"
+                  inputMode="numeric"
+                  maxLength={6}
+                  placeholder="000000"
+                  value={verificationCode}
+                  onChange={(e) => setVerificationCode(e.target.value.replace(/\D/g, ''))}
                   required
                   disabled={isLoading}
+                  className="bg-secondary border-border tracking-[0.3em] text-center text-lg font-semibold"
                 />
               </div>
-            </div>
 
-            <div className="space-y-2">
-              <Label>Email</Label>
-              <div className="relative">
-                <Mail className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="email"
-                  placeholder="seu@email.com"
-                  className="pl-10 bg-secondary border-border"
-                  name="email"
-                  value={form.email}
-                  onChange={handleChange}
-                  required
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
+              <Button
+                type="submit"
+                disabled={isLoading || verificationCode.length !== 6}
+                className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
+              >
+                {isLoading ? (
+                  <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                ) : (
+                  <>
+                    Confirmar Código <ArrowRight className="ml-2 h-4 w-4" />
+                  </>
+                )}
+              </Button>
 
-            <div className="space-y-2">
-              <Label>Nome do escritório</Label>
-              <div className="relative">
-                <Building className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  placeholder="Escritório Silva & Associados"
-                  className="pl-10 bg-secondary border-border"
-                  name="workspace_nome"
-                  value={form.workspace_nome}
-                  onChange={handleChange}
-                  disabled={isLoading}
-                />
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type={showPassword ? 'text' : 'password'}
-                  placeholder="••••••••"
-                  className="pl-10 pr-10 bg-secondary border-border"
-                  name="password"
-                  value={form.password}
-                  onChange={handleChange}
-                  required
-                  disabled={isLoading}
-                />
-                <button
+              <div className="flex items-center justify-between gap-3">
+                <Button
                   type="button"
-                  onClick={() => setShowPassword(!showPassword)}
-                  className="absolute right-3 top-1/2 -translate-y-1/2 text-muted-foreground hover:text-foreground disabled:opacity-50"
+                  variant="outline"
+                  onClick={handleResendCode}
                   disabled={isLoading}
+                  className="flex-1"
                 >
-                  {showPassword ? <EyeOff className="w-4 h-4" /> : <Eye className="w-4 h-4" />}
-                </button>
-              </div>
-            </div>
-
-            <div className="space-y-2">
-              <Label>Confirmar senha</Label>
-              <div className="relative">
-                <Lock className="absolute left-3 top-3 h-4 w-4 text-muted-foreground" />
-                <Input
-                  type="password"
-                  placeholder="••••••••"
-                  className="pl-10 bg-secondary border-border"
-                  name="confirmPassword"
-                  value={form.confirmPassword}
-                  onChange={handleChange}
-                  required
+                  Reenviar código
+                </Button>
+                <Button
+                  type="button"
+                  variant="ghost"
+                  onClick={() => {
+                    setStep('register');
+                    setVerificationCode('');
+                    setErrorMessage(null);
+                  }}
                   disabled={isLoading}
-                />
+                  className="flex-1"
+                >
+                  Alterar dados
+                </Button>
               </div>
-            </div>
-
-            <Button
-              type="submit"
-              disabled={isLoading}
-              className="w-full bg-primary text-primary-foreground hover:bg-primary/90"
-            >
-              {isLoading ? (
-                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-              ) : (
-                <>
-                  Criar Conta <ArrowRight className="ml-2 h-4 w-4" />
-                </>
-              )}
-            </Button>
-          </form>
+            </form>
+          )}
         </div>
 
         <p className="text-center text-sm text-muted-foreground mt-6">

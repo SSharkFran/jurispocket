@@ -219,13 +219,109 @@ def get_db():
         g.db.row_factory = sqlite3.Row
     return g.db
 
+
+EMAIL_CONFIG_KEYS = ('smtp_host', 'smtp_port', 'smtp_user', 'smtp_pass', 'smtp_from')
+EMAIL_CONFIG_DESCRIPTIONS = {
+    'smtp_host': 'Servidor SMTP para envio de e-mails transacionais',
+    'smtp_port': 'Porta SMTP (ex: 587 para STARTTLS, 465 para SSL)',
+    'smtp_user': 'Usuário/login SMTP do e-mail oficial',
+    'smtp_pass': 'Senha SMTP (senha de app ou token do provedor)',
+    'smtp_from': 'E-mail remetente exibido para o destinatário',
+}
+
+
+def _parse_smtp_port(value: Any) -> int:
+    try:
+        port = int(str(value).strip())
+        if port < 1 or port > 65535:
+            raise ValueError()
+        return port
+    except Exception:
+        return 587
+
+
+def _load_email_config_from_storage(db=None) -> Dict[str, Any]:
+    """Carrega configuração SMTP combinando banco e variáveis de ambiente.
+
+    Regra: se a chave existir no banco, ela tem prioridade (mesmo vazia).
+    """
+    db = db or get_db()
+    placeholders = ','.join(['?' for _ in EMAIL_CONFIG_KEYS])
+
+    config_rows = {}
+    try:
+        rows = db.execute(
+            f"SELECT chave, valor FROM configuracoes_globais WHERE chave IN ({placeholders})",
+            EMAIL_CONFIG_KEYS
+        ).fetchall()
+        config_rows = {r['chave']: r['valor'] for r in rows}
+    except Exception:
+        config_rows = {}
+
+    def _pick(key: str, env_name: str, default: str = '') -> str:
+        if key in config_rows:
+            return str(config_rows.get(key) or '').strip()
+        return str(os.environ.get(env_name, default) or '').strip()
+
+    smtp_host = _pick('smtp_host', 'SMTP_HOST')
+    smtp_port = _parse_smtp_port(_pick('smtp_port', 'SMTP_PORT', '587'))
+    smtp_user = _pick('smtp_user', 'SMTP_USER')
+    smtp_pass = _pick('smtp_pass', 'SMTP_PASS')
+    smtp_from = _pick('smtp_from', 'SMTP_FROM')
+
+    return {
+        'smtp_host': smtp_host,
+        'smtp_port': smtp_port,
+        'smtp_user': smtp_user,
+        'smtp_pass': smtp_pass,
+        'smtp_from': smtp_from,
+        'enabled': all([smtp_host, smtp_user, smtp_pass]),
+    }
+
+
+def apply_email_config_from_storage(db=None) -> Dict[str, Any]:
+    """Aplica config SMTP dinâmica no serviço de e-mail em memória."""
+    config = _load_email_config_from_storage(db=db)
+
+    if not EMAIL_SERVICE_DISPONIVEL:
+        return config
+
+    email_service.smtp_host = config['smtp_host']
+    email_service.smtp_port = config['smtp_port']
+    email_service.smtp_user = config['smtp_user']
+    email_service.smtp_pass = config['smtp_pass']
+    email_service.smtp_from = config['smtp_from']
+    email_service.enabled = bool(config['enabled'])
+
+    return config
+
+
+def upsert_global_config(db, chave: str, valor: str, descricao: Optional[str] = None, updated_by: Optional[int] = None):
+    """Cria/atualiza uma configuração global."""
+    atual = db.execute(
+        'SELECT chave, descricao FROM configuracoes_globais WHERE chave = ?',
+        (chave,)
+    ).fetchone()
+
+    descricao_final = descricao if descricao is not None else (atual['descricao'] if atual else None)
+
+    if atual:
+        db.execute(
+            '''UPDATE configuracoes_globais
+               SET valor = ?, descricao = ?, updated_at = CURRENT_TIMESTAMP, updated_by = ?
+               WHERE chave = ?''',
+            (valor, descricao_final, updated_by, chave)
+        )
+    else:
+        db.execute(
+            '''INSERT INTO configuracoes_globais (chave, valor, descricao, updated_at, updated_by)
+               VALUES (?, ?, ?, CURRENT_TIMESTAMP, ?)''',
+            (chave, valor, descricao_final, updated_by)
+        )
+
 # Configura o serviço de email com acesso ao banco
 if EMAIL_SERVICE_DISPONIVEL:
     notificador_email.get_db = get_db
-    if email_service.is_configured():
-        print(f"✅ Serviço de Email configurado: {email_service.smtp_host}")
-    else:
-        print("⚠️  Serviço de Email não configurado. Adicione SMTP_HOST, SMTP_USER e SMTP_PASS no .env")
 
 @app.teardown_appcontext
 def close_db(exception):
@@ -264,6 +360,21 @@ def init_db():
             resumo_diario BOOLEAN DEFAULT 0,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             FOREIGN KEY (workspace_id) REFERENCES workspaces (id)
+        )
+    ''')
+
+    # Verificação de email para cadastro
+    db.execute('''
+        CREATE TABLE IF NOT EXISTS email_verification_codes (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            email TEXT UNIQUE NOT NULL,
+            nome TEXT NOT NULL,
+            password_hash TEXT NOT NULL,
+            workspace_nome TEXT NOT NULL,
+            code_hash TEXT NOT NULL,
+            attempts INTEGER DEFAULT 0,
+            expires_at TIMESTAMP NOT NULL,
+            created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
     
@@ -993,6 +1104,18 @@ def init_db():
     except:
         db.execute('ALTER TABLE users ADD COLUMN resumo_diario BOOLEAN DEFAULT 0')
 
+    # Migration: garantir colunas novas em email_verification_codes
+    try:
+        db.execute('SELECT attempts FROM email_verification_codes LIMIT 1')
+    except:
+        db.execute('ALTER TABLE email_verification_codes ADD COLUMN attempts INTEGER DEFAULT 0')
+    try:
+        db.execute('SELECT created_at FROM email_verification_codes LIMIT 1')
+    except:
+        db.execute('ALTER TABLE email_verification_codes ADD COLUMN created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP')
+    # Limpa códigos expirados para manter a tabela enxuta
+    db.execute("DELETE FROM email_verification_codes WHERE expires_at < datetime('now')")
+
     # Migration: garantir colunas novas em workspace_whatsapp_config
     try:
         db.execute('SELECT auto_nova_tarefa FROM workspace_whatsapp_config LIMIT 1')
@@ -1030,6 +1153,12 @@ print("🚀 Iniciando JurisPocket...")
 try:
     with app.app_context():
         init_db()
+        if EMAIL_SERVICE_DISPONIVEL:
+            smtp_config = apply_email_config_from_storage()
+            if smtp_config.get('enabled'):
+                print(f"✅ Serviço de Email configurado: {smtp_config.get('smtp_host')}")
+            else:
+                print("⚠️  Serviço de Email não configurado. Ajuste SMTP no Super Admin ou no .env")
     print("✅ Banco de dados inicializado com sucesso")
 except Exception as e:
     print(f"⚠️ Erro ao inicializar banco de dados: {e}")
@@ -1042,6 +1171,47 @@ except Exception as e:
 def hash_senha(senha: str) -> str:
     """Gera hash SHA-256 simples (compatível com o sistema de login desejado)."""
     return hashlib.sha256(senha.encode()).hexdigest()
+
+
+EMAIL_VERIFICATION_TTL_MINUTES = int(os.environ.get('EMAIL_VERIFICATION_TTL_MINUTES', '10'))
+EMAIL_VERIFICATION_MAX_ATTEMPTS = int(os.environ.get('EMAIL_VERIFICATION_MAX_ATTEMPTS', '5'))
+
+
+def normalize_email(email: str) -> str:
+    return (email or '').strip().lower()
+
+
+def gerar_codigo_verificacao_email() -> str:
+    return f"{secrets.randbelow(1000000):06d}"
+
+
+def enviar_codigo_verificacao_email(destinatario: str, nome: str, codigo: str) -> Dict[str, Any]:
+    if not EMAIL_SERVICE_DISPONIVEL:
+        return {'success': False, 'error': 'Serviço de email indisponível'}
+
+    if not email_service.is_configured():
+        return {'success': False, 'error': 'Serviço de email não configurado'}
+
+    assunto = "Código de verificação - JurisPocket"
+    texto = (
+        f"Olá, {nome}!\n\n"
+        f"Seu código de verificação do JurisPocket é: {codigo}\n\n"
+        f"Esse código expira em {EMAIL_VERIFICATION_TTL_MINUTES} minutos.\n"
+        "Se você não solicitou esse cadastro, ignore este email."
+    )
+    html = f"""
+    <div style="font-family: Arial, sans-serif; max-width: 520px; margin: 0 auto; color: #111827;">
+      <h2 style="margin: 0 0 12px 0;">Confirmação de cadastro - JurisPocket</h2>
+      <p>Olá, <strong>{nome}</strong>!</p>
+      <p>Use o código abaixo para concluir seu cadastro:</p>
+      <div style="font-size: 28px; font-weight: 700; letter-spacing: 4px; padding: 12px 16px; background: #f3f4f6; border-radius: 8px; display: inline-block;">
+        {codigo}
+      </div>
+      <p style="margin-top: 16px;">Este código expira em {EMAIL_VERIFICATION_TTL_MINUTES} minutos.</p>
+      <p style="color: #6b7280;">Se você não solicitou esse cadastro, ignore este email.</p>
+    </div>
+    """
+    return email_service.send_email(destinatario, assunto, html, texto)
 
 
 def gerar_jwt_token(user_id: int, workspace_id: int, is_admin: bool = False) -> str:
@@ -6621,49 +6791,152 @@ else:
 
 @app.route('/api/auth/register', methods=['POST'])
 def register():
-    """Register new user with workspace"""
+    """Inicia cadastro enviando código de verificação por email."""
     data = request.get_json() or {}
-    
-    nome = data.get('nome')
-    email = data.get('email')
-    password = data.get('password')
+
+    nome = (data.get('nome') or '').strip()
+    email = normalize_email(data.get('email'))
+    password = data.get('password') or ''
     workspace_nome = (
         data.get('workspace_nome')
         or data.get('workshop')  # compatibilidade com frontend legado
         or data.get('workspace')
         or f'Escritório de {nome}'
     )
-    
+    workspace_nome = str(workspace_nome).strip() if workspace_nome else f'Escritório de {nome}'
+
     if not all([nome, email, password]):
-        return jsonify({'error': 'Dados incompletos'}), 400
-    
+        return jsonify({'error': 'Dados incompletos: nome, email e senha são obrigatórios'}), 400
+
+    if not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', email):
+        return jsonify({'error': 'Email inválido'}), 400
+
+    if len(password) < 6:
+        return jsonify({'error': 'A senha deve ter no mínimo 6 caracteres'}), 400
+
+    if EMAIL_SERVICE_DISPONIVEL:
+        apply_email_config_from_storage()
+
+    if not EMAIL_SERVICE_DISPONIVEL or not email_service.is_configured():
+        return jsonify({
+            'error': 'Cadastro indisponível no momento: serviço de email não configurado no servidor'
+        }), 503
+
     db = get_db()
-    
+
     # Check if email exists
-    if db.execute('SELECT id FROM users WHERE email = ?', (email,)).fetchone():
+    if db.execute('SELECT id FROM users WHERE lower(email) = ?', (email,)).fetchone():
         return jsonify({'error': 'Email já cadastrado'}), 409
-    
-    # Create workspace
-    cursor = db.execute('INSERT INTO workspaces (nome) VALUES (?)', (workspace_nome,))
-    workspace_id = cursor.lastrowid
-    
-    # Create user as admin
-    password_hash = hash_senha(password)
-    cursor = db.execute(
-        'INSERT INTO users (workspace_id, nome, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
-        (workspace_id, nome, email, password_hash, 'admin')
+
+    codigo = gerar_codigo_verificacao_email()
+    expires_at = (datetime.utcnow() + timedelta(minutes=EMAIL_VERIFICATION_TTL_MINUTES)).strftime('%Y-%m-%d %H:%M:%S')
+
+    db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+    db.execute(
+        '''INSERT INTO email_verification_codes
+           (email, nome, password_hash, workspace_nome, code_hash, attempts, expires_at)
+           VALUES (?, ?, ?, ?, ?, 0, ?)''',
+        (email, nome, hash_senha(password), workspace_nome, hash_senha(codigo), expires_at)
     )
-    user_id = cursor.lastrowid
+
+    envio = enviar_codigo_verificacao_email(email, nome, codigo)
+    if not envio.get('success'):
+        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        db.commit()
+        return jsonify({
+            'error': f"Não foi possível enviar o código de verificação: {envio.get('error', 'erro desconhecido')}"
+        }), 500
 
     db.commit()
 
+    return jsonify({
+        'requires_verification': True,
+        'email': email,
+        'expires_in_minutes': EMAIL_VERIFICATION_TTL_MINUTES,
+        'message': 'Código de verificação enviado para o seu email.'
+    })
+
+
+@app.route('/api/auth/register/verify', methods=['POST'])
+def verify_register():
+    """Confirma código de email e finaliza o cadastro do usuário."""
+    data = request.get_json() or {}
+
+    email = normalize_email(data.get('email'))
+    code = str(data.get('code') or '').strip()
+
+    if not email or not code:
+        return jsonify({'error': 'Dados incompletos: email e código são obrigatórios'}), 400
+
+    if not re.match(r'^\d{6}$', code):
+        return jsonify({'error': 'Código inválido. Informe os 6 dígitos enviados por email'}), 400
+
+    db = get_db()
+    pending = db.execute(
+        'SELECT * FROM email_verification_codes WHERE email = ?',
+        (email,)
+    ).fetchone()
+
+    if not pending:
+        return jsonify({'error': 'Código não encontrado ou expirado. Solicite um novo cadastro'}), 404
+
+    try:
+        expires_at = datetime.strptime(pending['expires_at'], '%Y-%m-%d %H:%M:%S')
+    except Exception:
+        expires_at = datetime.utcnow() - timedelta(seconds=1)
+
+    if expires_at < datetime.utcnow():
+        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        db.commit()
+        return jsonify({'error': 'Código expirado. Solicite um novo código'}), 410
+
+    if pending['code_hash'] != hash_senha(code):
+        attempts = int(pending['attempts'] or 0) + 1
+        tentativas_restantes = EMAIL_VERIFICATION_MAX_ATTEMPTS - attempts
+
+        if attempts >= EMAIL_VERIFICATION_MAX_ATTEMPTS:
+            db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+            db.commit()
+            return jsonify({'error': 'Código inválido. Limite de tentativas excedido. Solicite novo código'}), 400
+
+        db.execute(
+            'UPDATE email_verification_codes SET attempts = ? WHERE email = ?',
+            (attempts, email)
+        )
+        db.commit()
+        return jsonify({
+            'error': f'Código inválido. Você ainda tem {tentativas_restantes} tentativa(s)'
+        }), 400
+
+    if db.execute('SELECT id FROM users WHERE lower(email) = ?', (email,)).fetchone():
+        db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+        db.commit()
+        return jsonify({'error': 'Este email já foi cadastrado'}), 409
+
+    workspace_nome = (pending['workspace_nome'] or f"Escritório de {pending['nome']}").strip()
+
+    # Create workspace
+    cursor = db.execute('INSERT INTO workspaces (nome) VALUES (?)', (workspace_nome,))
+    workspace_id = cursor.lastrowid
+
+    # Create user as admin
+    cursor = db.execute(
+        'INSERT INTO users (workspace_id, nome, email, password_hash, role) VALUES (?, ?, ?, ?, ?)',
+        (workspace_id, pending['nome'], email, pending['password_hash'], 'admin')
+    )
+    user_id = cursor.lastrowid
+
+    db.execute('DELETE FROM email_verification_codes WHERE email = ?', (email,))
+    db.commit()
+
     token = gerar_jwt_token(user_id, workspace_id, is_admin=True)
-    
+
     return jsonify({
         'token': token,
+        'message': 'Cadastro confirmado com sucesso',
         'user': {
             'id': user_id,
-            'nome': nome,
+            'nome': pending['nome'],
             'email': email,
             'role': 'admin',
             'workspace_id': workspace_id
@@ -6674,33 +6947,42 @@ def register():
 def login():
     """Login user"""
     data = request.get_json() or {}
-    
-    email = data.get('email')
-    password = data.get('password')
-    
+
+    email = normalize_email(data.get('email'))
+    password = data.get('password') or ''
+
     if not all([email, password]):
-        return jsonify({'error': 'Dados incompletos'}), 400
-    
+        return jsonify({'error': 'Dados incompletos: email e senha são obrigatórios'}), 400
+
     db = get_db()
-    
+
     # Busca usuário ativo
-    user = db.execute('SELECT * FROM users WHERE email = ?', (email,)).fetchone()
-    
+    user = db.execute('SELECT * FROM users WHERE lower(email) = ?', (email,)).fetchone()
+
     # Se não encontrou, busca usuários inativos (email com sufixo .inativo.id)
     if not user:
         # Busca padrão: email termina com .inativo.{numero}
         user = db.execute(
-            "SELECT * FROM users WHERE email LIKE ? AND role = 'inativo'",
+            "SELECT * FROM users WHERE lower(email) LIKE ? AND role = 'inativo'",
             (f'{email}.inativo.%',)
         ).fetchone()
-    
-    if not user or user['password_hash'] != hash_senha(password):
-        return jsonify({'error': 'Credenciais inválidas'}), 401
+
+    if not user:
+        return jsonify({
+            'error': 'Email não encontrado',
+            'error_code': 'EMAIL_NOT_FOUND'
+        }), 401
+
+    if user['password_hash'] != hash_senha(password):
+        return jsonify({
+            'error': 'Senha incorreta',
+            'error_code': 'INVALID_PASSWORD'
+        }), 401
 
     # Determina se é admin com base na role
     is_admin = user['role'] in ['admin', 'superadmin'] if 'role' in user.keys() else False
     token = gerar_jwt_token(user['id'], user['workspace_id'], is_admin=is_admin)
-    
+
     return jsonify({
         'token': token,
         'user': {
@@ -10559,7 +10841,13 @@ def admin_atualizar_cupom(cupom_id):
 def admin_listar_configuracoes():
     """Lista todas as configurações globais."""
     db = get_db()
-    rows = db.execute('SELECT * FROM configuracoes_globais ORDER BY chave ASC').fetchall()
+    placeholders = ','.join(['?' for _ in EMAIL_CONFIG_KEYS])
+    rows = db.execute(
+        f'''SELECT * FROM configuracoes_globais
+            WHERE chave NOT IN ({placeholders})
+            ORDER BY chave ASC''',
+        EMAIL_CONFIG_KEYS
+    ).fetchall()
     return jsonify([dict(r) for r in rows])
 
 
@@ -10584,6 +10872,107 @@ def admin_atualizar_configuracao(chave):
     registrar_audit_log('editar', 'configuracoes_globais', None, dict(config), data)
     
     return jsonify({'message': 'Configuração atualizada com sucesso'})
+
+
+@app.route('/api/admin/email-config', methods=['GET'])
+@require_superadmin
+def admin_obter_email_config():
+    """Retorna configuração SMTP efetiva (sem expor senha)."""
+    if not EMAIL_SERVICE_DISPONIVEL:
+        return jsonify({'error': 'Serviço de email não disponível'}), 503
+
+    db = get_db()
+    config = apply_email_config_from_storage(db)
+
+    return jsonify({
+        'smtp_host': config.get('smtp_host', ''),
+        'smtp_port': config.get('smtp_port', 587),
+        'smtp_user': config.get('smtp_user', ''),
+        'smtp_from': config.get('smtp_from', ''),
+        'has_password': bool(config.get('smtp_pass')),
+        'configurado': bool(config.get('enabled')),
+    })
+
+
+@app.route('/api/admin/email-config', methods=['PUT'])
+@require_superadmin
+def admin_atualizar_email_config():
+    """Atualiza configuração SMTP usada pelo email oficial do JurisPocket."""
+    if not EMAIL_SERVICE_DISPONIVEL:
+        return jsonify({'error': 'Serviço de email não disponível'}), 503
+
+    data = request.get_json() or {}
+    db = get_db()
+
+    smtp_host = str(data.get('smtp_host', '')).strip()
+    smtp_port_raw = data.get('smtp_port', 587)
+    smtp_user = str(data.get('smtp_user', '')).strip()
+    smtp_from = str(data.get('smtp_from', '')).strip()
+    smtp_pass = data.get('smtp_pass')
+    clear_password = bool(data.get('clear_password', False))
+
+    smtp_port = _parse_smtp_port(smtp_port_raw)
+
+    # Regras mínimas para envio real de e-mail
+    if smtp_host and ' ' in smtp_host:
+        return jsonify({'error': 'SMTP host inválido'}), 400
+
+    if smtp_from and not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', smtp_from):
+        return jsonify({'error': 'Email remetente inválido'}), 400
+
+    if smtp_user and not re.match(r'^[^\s@]+@[^\s@]+\.[^\s@]+$', smtp_user):
+        return jsonify({'error': 'Usuário SMTP inválido'}), 400
+
+    upsert_global_config(
+        db, 'smtp_host', smtp_host, EMAIL_CONFIG_DESCRIPTIONS['smtp_host'], g.auth['user_id']
+    )
+    upsert_global_config(
+        db, 'smtp_port', str(smtp_port), EMAIL_CONFIG_DESCRIPTIONS['smtp_port'], g.auth['user_id']
+    )
+    upsert_global_config(
+        db, 'smtp_user', smtp_user, EMAIL_CONFIG_DESCRIPTIONS['smtp_user'], g.auth['user_id']
+    )
+    upsert_global_config(
+        db, 'smtp_from', smtp_from, EMAIL_CONFIG_DESCRIPTIONS['smtp_from'], g.auth['user_id']
+    )
+
+    if clear_password:
+        upsert_global_config(
+            db, 'smtp_pass', '', EMAIL_CONFIG_DESCRIPTIONS['smtp_pass'], g.auth['user_id']
+        )
+    elif isinstance(smtp_pass, str) and smtp_pass.strip():
+        upsert_global_config(
+            db, 'smtp_pass', smtp_pass.strip(), EMAIL_CONFIG_DESCRIPTIONS['smtp_pass'], g.auth['user_id']
+        )
+
+    db.commit()
+
+    config_aplicada = apply_email_config_from_storage(db)
+
+    registrar_audit_log(
+        'editar',
+        'configuracoes_globais',
+        None,
+        None,
+        {
+            'smtp_host': smtp_host,
+            'smtp_port': smtp_port,
+            'smtp_user': smtp_user,
+            'smtp_from': smtp_from,
+            'smtp_pass_alterado': bool(clear_password or (isinstance(smtp_pass, str) and smtp_pass.strip())),
+            'smtp_pass_limpo': clear_password,
+        }
+    )
+
+    return jsonify({
+        'message': 'Configuração de email atualizada com sucesso',
+        'configurado': bool(config_aplicada.get('enabled')),
+        'smtp_host': config_aplicada.get('smtp_host', ''),
+        'smtp_port': config_aplicada.get('smtp_port', 587),
+        'smtp_user': config_aplicada.get('smtp_user', ''),
+        'smtp_from': config_aplicada.get('smtp_from', ''),
+        'has_password': bool(config_aplicada.get('smtp_pass')),
+    })
 
 
 @app.route('/api/admin/auditoria', methods=['GET'])
@@ -11723,11 +12112,13 @@ def email_status():
             'configurado': False,
             'mensagem': 'Serviço de email não disponível'
         }), 503
+
+    config = apply_email_config_from_storage()
     
     return jsonify({
-        'configurado': email_service.is_configured(),
-        'smtp_host': email_service.smtp_host if email_service.is_configured() else None,
-        'smtp_from': email_service.smtp_from if email_service.is_configured() else None
+        'configurado': bool(config.get('enabled')),
+        'smtp_host': config.get('smtp_host') if config.get('enabled') else None,
+        'smtp_from': config.get('smtp_from') if config.get('enabled') else None
     })
 
 @app.route('/api/email/teste', methods=['POST'])
@@ -11746,11 +12137,13 @@ def email_teste():
             'sucesso': False,
             'erro': 'Serviço de email não disponível'
         }), 503
+
+    apply_email_config_from_storage()
     
     if not email_service.is_configured():
         return jsonify({
             'sucesso': False,
-            'erro': 'Serviço de email não configurado. Verifique o .env'
+            'erro': 'Serviço de email não configurado. Ajuste SMTP no Super Admin'
         }), 400
     
     data = request.get_json() or {}
