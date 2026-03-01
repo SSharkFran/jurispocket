@@ -266,7 +266,9 @@ def _load_email_config_from_storage(db=None) -> Dict[str, Any]:
 
     def _pick(key: str, env_name: str, default: str = '') -> str:
         if key in config_rows:
-            return str(config_rows.get(key) or '').strip()
+            stored_value = str(config_rows.get(key) or '').strip()
+            if stored_value:
+                return stored_value
         return str(os.environ.get(env_name, default) or '').strip()
 
     smtp_host = _pick('smtp_host', 'SMTP_HOST')
@@ -292,12 +294,27 @@ def apply_email_config_from_storage(db=None) -> Dict[str, Any]:
     if not EMAIL_SERVICE_DISPONIVEL:
         return config
 
-    email_service.smtp_host = config['smtp_host']
-    email_service.smtp_port = config['smtp_port']
-    email_service.smtp_user = config['smtp_user']
-    email_service.smtp_pass = config['smtp_pass']
-    email_service.smtp_from = config['smtp_from']
-    email_service.enabled = bool(config['enabled'])
+    services = [email_service]
+    notifier_service = getattr(notificador_email, 'email_service', None)
+    if notifier_service and notifier_service is not email_service:
+        services.append(notifier_service)
+
+    for service in services:
+        service.smtp_host = config['smtp_host']
+        service.smtp_port = config['smtp_port']
+        service.smtp_user = config['smtp_user']
+        service.smtp_pass = config['smtp_pass']
+        service.smtp_from = config['smtp_from']
+        if hasattr(service, 'refresh_enabled_state'):
+            service.refresh_enabled_state()
+        else:
+            service.enabled = bool(config['enabled'])
+
+    config['enabled'] = bool(email_service.is_configured())
+    if hasattr(email_service, 'get_active_provider'):
+        config['provider'] = email_service.get_active_provider()
+    else:
+        config['provider'] = 'smtp' if config['enabled'] else None
 
     return config
 
@@ -10897,6 +10914,7 @@ def admin_obter_email_config():
         'smtp_from': config.get('smtp_from', ''),
         'has_password': bool(config.get('smtp_pass')),
         'configurado': bool(config.get('enabled')),
+        'provider': config.get('provider'),
     })
 
 
@@ -10978,6 +10996,7 @@ def admin_atualizar_email_config():
         'smtp_user': config_aplicada.get('smtp_user', ''),
         'smtp_from': config_aplicada.get('smtp_from', ''),
         'has_password': bool(config_aplicada.get('smtp_pass')),
+        'provider': config_aplicada.get('provider'),
     })
 
 
@@ -12121,10 +12140,18 @@ def email_status():
 
     config = apply_email_config_from_storage()
     
+    provider = config.get('provider')
+    from_address = (
+        config.get('smtp_from')
+        if provider == 'smtp'
+        else (getattr(email_service, 'resend_from', None) or config.get('smtp_from'))
+    )
+
     return jsonify({
         'configurado': bool(config.get('enabled')),
-        'smtp_host': config.get('smtp_host') if config.get('enabled') else None,
-        'smtp_from': config.get('smtp_from') if config.get('enabled') else None
+        'provider': provider,
+        'smtp_host': config.get('smtp_host') if provider == 'smtp' else None,
+        'smtp_from': from_address if config.get('enabled') else None
     })
 
 @app.route('/api/email/teste', methods=['POST'])
@@ -12149,7 +12176,7 @@ def email_teste():
     if not email_service.is_configured():
         return jsonify({
             'sucesso': False,
-            'erro': 'Serviço de email não configurado. Ajuste SMTP no Super Admin'
+            'erro': 'Serviço de email não configurado. Ajuste Email Oficial no Super Admin'
         }), 400
     
     data = request.get_json() or {}

@@ -148,6 +148,7 @@ interface EmailConfig {
   smtp_pass?: string;
   has_password: boolean;
   configurado: boolean;
+  provider?: string | null;
 }
 
 interface AuditLog {
@@ -1300,6 +1301,7 @@ function ConfiguracoesTab() {
     smtp_pass: '',
     has_password: false,
     configurado: false,
+    provider: null,
   });
   const [loadingEmailConfig, setLoadingEmailConfig] = useState(false);
   const [savingEmailConfig, setSavingEmailConfig] = useState(false);
@@ -1359,6 +1361,7 @@ function ConfiguracoesTab() {
         smtp_pass: '',
         has_password: Boolean(data.has_password),
         configurado: Boolean(data.configurado),
+        provider: data.provider || null,
       }));
       setClearEmailPassword(false);
     } catch (error: any) {
@@ -1615,6 +1618,7 @@ function ConfiguracoesTab() {
         smtp_pass: '',
         has_password: Boolean(data.has_password),
         configurado: Boolean(data.configurado),
+        provider: data.provider || null,
       }));
       setClearEmailPassword(false);
       toast.success(data.message || 'Configuração de e-mail atualizada');
@@ -1737,6 +1741,10 @@ function ConfiguracoesTab() {
                 <div className="flex items-center justify-between">
                   <span className="text-muted-foreground">Senha cadastrada</span>
                   <span className="text-foreground">{emailConfig.has_password ? 'Sim' : 'Não'}</span>
+                </div>
+                <div className="flex items-center justify-between">
+                  <span className="text-muted-foreground">Provedor ativo</span>
+                  <span className="text-foreground">{emailConfig.provider || '-'}</span>
                 </div>
               </div>
 

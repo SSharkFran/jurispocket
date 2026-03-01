@@ -7,6 +7,7 @@ import os
 import smtplib
 import ssl
 import socket
+import requests
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Optional, Dict, Any
@@ -25,13 +26,39 @@ class EmailService:
         self.smtp_pass = os.getenv('SMTP_PASS', '')
         self.smtp_from = os.getenv('SMTP_FROM', '')
         self.smtp_timeout_seconds = float(os.getenv('SMTP_TIMEOUT_SECONDS', '12'))
+
+        # Configurações Resend (API HTTPS - útil em ambientes que bloqueiam SMTP)
+        self.resend_api_key = os.getenv('RESEND_API_KEY', '').strip()
+        self.resend_api_url = os.getenv('RESEND_API_URL', 'https://api.resend.com/emails').strip()
+        self.resend_from = os.getenv('RESEND_FROM', '').strip()
+        self.resend_timeout_seconds = float(os.getenv('RESEND_TIMEOUT_SECONDS', '12'))
         
         # Configurações de envio
-        self.enabled = all([self.smtp_host, self.smtp_user, self.smtp_pass])
+        self.enabled = False
+        self.refresh_enabled_state()
+
+    def _is_smtp_configured(self) -> bool:
+        return bool(self.smtp_host and self.smtp_user and self.smtp_pass)
+
+    def _is_resend_configured(self) -> bool:
+        from_address = self.resend_from or self.smtp_from or self.smtp_user
+        return bool(self.resend_api_key and from_address)
+
+    def refresh_enabled_state(self) -> bool:
+        self.enabled = self._is_smtp_configured() or self._is_resend_configured()
+        return self.enabled
+
+    def get_active_provider(self) -> Optional[str]:
+        # Prioriza HTTPS (Resend) quando disponível
+        if self._is_resend_configured():
+            return 'resend'
+        if self._is_smtp_configured():
+            return 'smtp'
+        return None
         
     def is_configured(self) -> bool:
         """Verifica se o serviço está configurado"""
-        return self.enabled
+        return self.refresh_enabled_state()
     
     def _create_smtp_connection(self):
         """Cria conexão SMTP segura"""
@@ -79,7 +106,20 @@ class EmailService:
                 'success': False,
                 'error': 'Serviço de email não configurado'
             }
-        
+
+        provider = self.get_active_provider()
+        if provider == 'resend':
+            return self._send_email_resend(to_email, subject, html_content, text_content)
+        if provider == 'smtp':
+            return self._send_email_smtp(to_email, subject, html_content, text_content)
+
+        return {
+            'success': False,
+            'error': 'Nenhum provedor de email ativo'
+        }
+
+    def _send_email_smtp(self, to_email: str, subject: str, html_content: str,
+                         text_content: str = None) -> Dict[str, Any]:
         try:
             # Cria mensagem
             msg = MIMEMultipart('alternative')
@@ -104,7 +144,8 @@ class EmailService:
             
             return {
                 'success': True,
-                'message': 'Email enviado com sucesso'
+                'message': 'Email enviado com sucesso',
+                'provider': 'smtp'
             }
             
         except (socket.timeout, TimeoutError):
@@ -116,6 +157,68 @@ class EmailService:
             return {
                 'success': False,
                 'error': str(e)
+            }
+
+    def _send_email_resend(self, to_email: str, subject: str, html_content: str,
+                           text_content: str = None) -> Dict[str, Any]:
+        from_email = self.resend_from or self.smtp_from or self.smtp_user
+        if not self.resend_api_key or not from_email:
+            return {
+                'success': False,
+                'error': 'Resend não configurado corretamente'
+            }
+
+        payload: Dict[str, Any] = {
+            'from': from_email,
+            'to': [to_email],
+            'subject': subject,
+            'html': html_content,
+        }
+        if text_content:
+            payload['text'] = text_content
+
+        try:
+            response = requests.post(
+                self.resend_api_url,
+                headers={
+                    'Authorization': f'Bearer {self.resend_api_key}',
+                    'Content-Type': 'application/json',
+                },
+                json=payload,
+                timeout=self.resend_timeout_seconds,
+            )
+            if response.status_code in (200, 201, 202):
+                return {
+                    'success': True,
+                    'message': 'Email enviado com sucesso',
+                    'provider': 'resend'
+                }
+
+            error_msg = response.text
+            try:
+                error_json = response.json()
+                if isinstance(error_json, dict):
+                    error_msg = (
+                        error_json.get('message')
+                        or error_json.get('error')
+                        or str(error_json)
+                    )
+            except Exception:
+                pass
+
+            return {
+                'success': False,
+                'error': f'Resend HTTP {response.status_code}: {error_msg}'
+            }
+        except requests.Timeout:
+            return {
+                'success': False,
+                'error': 'Timeout ao conectar no Resend API'
+            }
+        except requests.RequestException as e:
+            return {
+                'success': False,
+                'error': f'Falha de rede ao enviar via Resend: {e}'
             }
     
     def send_email_to_multiple(self, to_emails: List[str], subject: str, 
@@ -138,8 +241,8 @@ class EmailService:
 class NotificadorEmail:
     """Notificador específico para o JurisGestão"""
     
-    def __init__(self, db_connection_func=None):
-        self.email_service = EmailService()
+    def __init__(self, db_connection_func=None, email_service_instance: Optional[EmailService] = None):
+        self.email_service = email_service_instance or EmailService()
         self.get_db = db_connection_func
     
     def _get_logo_url(self) -> str:
@@ -460,7 +563,7 @@ class NotificadorEmail:
 
 # Instância global
 email_service = EmailService()
-notificador_email = NotificadorEmail()
+notificador_email = NotificadorEmail(email_service_instance=email_service)
 
 
 def configurar_db(db_func):
