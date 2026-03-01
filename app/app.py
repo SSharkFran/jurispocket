@@ -51,6 +51,7 @@ from flask import Flask, request, jsonify, g, send_from_directory
 from flask_cors import CORS
 import jwt
 from werkzeug.utils import secure_filename
+from werkzeug.exceptions import HTTPException
 from apscheduler.schedulers.background import BackgroundScheduler
 import requests
 from openai import OpenAI
@@ -200,9 +201,14 @@ os.makedirs(app.config['UPLOAD_FOLDER'], exist_ok=True)
 # Error handler to ensure CORS headers on errors
 @app.errorhandler(Exception)
 def handle_exception(e):
-    """Ensure CORS headers are present even on errors"""
-    response = jsonify({'error': str(e)})
-    response.status_code = 500
+    """Ensure CORS headers are present even on errors."""
+    if isinstance(e, HTTPException):
+        response = jsonify({'error': e.description or str(e)})
+        response.status_code = e.code or 500
+    else:
+        response = jsonify({'error': str(e)})
+        response.status_code = 500
+
     response.headers.add('Access-Control-Allow-Origin', '*')
     response.headers.add('Access-Control-Allow-Headers', 'Content-Type, Authorization, Accept')
     response.headers.add('Access-Control-Allow-Methods', 'GET, POST, PUT, DELETE, OPTIONS')

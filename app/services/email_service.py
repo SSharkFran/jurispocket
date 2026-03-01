@@ -6,6 +6,7 @@ Integração com SMTP (Gmail, Outlook, etc) ou serviços como SendGrid
 import os
 import smtplib
 import ssl
+import socket
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 from typing import List, Optional, Dict, Any
@@ -23,6 +24,7 @@ class EmailService:
         self.smtp_user = os.getenv('SMTP_USER', '')
         self.smtp_pass = os.getenv('SMTP_PASS', '')
         self.smtp_from = os.getenv('SMTP_FROM', '')
+        self.smtp_timeout_seconds = float(os.getenv('SMTP_TIMEOUT_SECONDS', '12'))
         
         # Configurações de envio
         self.enabled = all([self.smtp_host, self.smtp_user, self.smtp_pass])
@@ -37,11 +39,23 @@ class EmailService:
         
         if self.smtp_port == 465:
             # SSL direto
-            server = smtplib.SMTP_SSL(self.smtp_host, self.smtp_port, context=context)
+            server = smtplib.SMTP_SSL(
+                self.smtp_host,
+                self.smtp_port,
+                context=context,
+                timeout=self.smtp_timeout_seconds
+            )
+            server.ehlo()
         else:
             # STARTTLS
-            server = smtplib.SMTP(self.smtp_host, self.smtp_port)
+            server = smtplib.SMTP(
+                self.smtp_host,
+                self.smtp_port,
+                timeout=self.smtp_timeout_seconds
+            )
+            server.ehlo()
             server.starttls(context=context)
+            server.ehlo()
         
         server.login(self.smtp_user, self.smtp_pass)
         return server
@@ -93,6 +107,11 @@ class EmailService:
                 'message': 'Email enviado com sucesso'
             }
             
+        except (socket.timeout, TimeoutError):
+            return {
+                'success': False,
+                'error': f'Timeout ao conectar no SMTP ({self.smtp_host}:{self.smtp_port})'
+            }
         except Exception as e:
             return {
                 'success': False,
