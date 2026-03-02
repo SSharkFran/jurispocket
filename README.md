@@ -146,6 +146,9 @@ O arquivo de referencia e `.env.example` na raiz.
 - `SECRET_KEY`: chave JWT/sessao do backend.
 - `DATAJUD_API_KEY`: chave da API Datajud.
 - `GROQ_API_KEY` ou `OPENAI_API_KEY`: habilita copiloto IA.
+- `GROQ_MODEL`: define modelo usado quando provider for Groq.
+- `OPENAI_MODEL`: define modelo usado quando provider for OpenAI.
+- `IA_MODEL`: sobrescreve o modelo de qualquer provider (prioridade maxima).
 - `VITE_API_URL`: URL base do frontend para API.
 - `WHATSAPP_MICROSERVICE_URL`: URL do microservico WhatsApp.
 - `WHATSAPP_MICROSERVICE_TOKEN`: token interno Flask -> microservico.
@@ -305,6 +308,11 @@ Jobs configurados no backend:
 
 - **IA nao responde**
   - configure `GROQ_API_KEY` ou `OPENAI_API_KEY`.
+
+- **Quero trocar o modelo da IA no Railway**
+  - em `Variables`, ajuste `GROQ_MODEL` (ou `OPENAI_MODEL`);
+  - opcional: use `IA_MODEL` para forcar um modelo unico;
+  - faça `Redeploy` para aplicar as variaveis.
 
 - **WhatsApp sem conectar**
   - valide token interno entre Flask e microservico;

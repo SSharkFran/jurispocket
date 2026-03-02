@@ -150,6 +150,14 @@ OPENAI_API_KEY = os.environ.get('OPENAI_API_KEY', '')
 GROQ_API_KEY = os.environ.get('GROQ_API_KEY', '')
 GROQ_API_URL = os.environ.get('GROQ_API_URL', 'https://api.groq.com/openai/v1')
 
+# Modelos de IA configuráveis por variável de ambiente (Railway-friendly)
+DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile'
+DEFAULT_OPENAI_MODEL = 'gpt-3.5-turbo'
+GROQ_MODEL = (os.environ.get('GROQ_MODEL') or DEFAULT_GROQ_MODEL).strip() or DEFAULT_GROQ_MODEL
+OPENAI_MODEL = (os.environ.get('OPENAI_MODEL') or DEFAULT_OPENAI_MODEL).strip() or DEFAULT_OPENAI_MODEL
+# IA_MODEL, quando definido, sobrescreve qualquer seleção por provider.
+IA_MODEL = (os.environ.get('IA_MODEL') or '').strip()
+
 # Inicializa cliente de IA (prioridade: Groq > OpenAI)
 ia_client = None
 ia_provider = None
@@ -165,7 +173,7 @@ if GROQ_API_KEY:
             http_client=http_client
         )
         ia_provider = 'groq'
-        print(f"✅ IA Client configurado: Groq (API compatível)")
+        print(f"✅ IA Client configurado: Groq (API compatível) | modelo={IA_MODEL or GROQ_MODEL}")
     except Exception as e:
         print(f"⚠️  Erro ao configurar Groq: {e}")
 
@@ -178,7 +186,7 @@ if not ia_client and OPENAI_API_KEY:
             http_client=http_client
         )
         ia_provider = 'openai'
-        print(f"✅ IA Client configurado: OpenAI")
+        print(f"✅ IA Client configurado: OpenAI | modelo={IA_MODEL or OPENAI_MODEL}")
     except Exception as e:
         print(f"⚠️  Erro ao configurar OpenAI: {e}")
 
@@ -2631,11 +2639,11 @@ class DatajudMonitor:
 class AssistenteIA:
     """Assistente IA com OpenAI/Groq Function Calling"""
     
-    # Modelos por provider (atualizados em 2025)
+    # Modelos por provider (configuráveis via env)
     MODELS = {
-        'groq': 'llama-3.3-70b-versatile',  # Modelo poderoso disponível gratuitamente no Groq
-        'openai': 'gpt-3.5-turbo',
-        'default': 'llama-3.3-70b-versatile'
+        'groq': GROQ_MODEL,
+        'openai': OPENAI_MODEL,
+        'default': GROQ_MODEL
     }
     
     FUNCTIONS = [
@@ -2945,6 +2953,8 @@ class AssistenteIA:
     @staticmethod
     def get_modelo() -> str:
         """Retorna o modelo apropriado baseado no provider configurado"""
+        if IA_MODEL:
+            return IA_MODEL
         return AssistenteIA.MODELS.get(ia_provider, AssistenteIA.MODELS['default'])
 
     @staticmethod
@@ -6032,7 +6042,7 @@ def maybe_generate_whatsapp_message_with_ai(
     if not openai_client:
         return base_message
 
-    model = 'llama-3.3-70b-versatile' if ia_provider == 'groq' else 'gpt-3.5-turbo'
+    model = AssistenteIA.get_modelo()
     system_prompt = (
         "Voce escreve mensagens para WhatsApp de escritorio juridico com tom humano e profissional, "
         "como uma secretaria executiva atenciosa. "
