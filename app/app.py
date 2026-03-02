@@ -2979,10 +2979,31 @@ class AssistenteIA:
 
     @staticmethod
     def normalizar_session_id(session_id: Any) -> str:
-        """Normaliza session_id para evitar valores inválidos/excessivos."""
+        """Normaliza session_id para evitar valores inválidos/excessivos.
+
+        Por compatibilidade, mantém fallback para `default`.
+        """
         value = str(session_id or '').strip()
         if not value:
             value = 'default'
+        return value[:120]
+
+    @staticmethod
+    def gerar_session_id() -> str:
+        """Gera um identificador de sessão curto para isolar novas conversas."""
+        stamp = datetime.now().strftime('%Y%m%d%H%M%S')
+        return f'sess-{stamp}-{secrets.token_hex(4)}'
+
+    @staticmethod
+    def normalizar_session_id_chat(session_id: Any) -> str:
+        """Normaliza session_id para chat, criando sessão nova quando ausente/default.
+
+        Evita reutilizar histórico legado em `default` após recarregar a página.
+        """
+        value = str(session_id or '').strip()
+        lowered = value.lower()
+        if not value or lowered in {'default', 'none', 'null', 'undefined'}:
+            return AssistenteIA.gerar_session_id()
         return value[:120]
 
     @staticmethod
@@ -3725,7 +3746,7 @@ class AssistenteIA:
         global ia_client, ia_provider
 
         started_at = datetime.now()
-        session_id = AssistenteIA.normalizar_session_id(session_id)
+        session_id = AssistenteIA.normalizar_session_id_chat(session_id)
         modelo = AssistenteIA.get_modelo()
         funcoes_chamadas: List[Dict[str, Any]] = []
         rastreio_funcoes: List[Dict[str, Any]] = []
@@ -10624,7 +10645,7 @@ def chat_assistente():
     """Chat with AI assistant"""
     data = request.get_json() or {}
     mensagem = data.get('mensagem')
-    session_id = AssistenteIA.normalizar_session_id(data.get('session_id', 'default'))
+    session_id = data.get('session_id')
     
     if not mensagem:
         return jsonify({'error': 'Mensagem não fornecida'}), 400

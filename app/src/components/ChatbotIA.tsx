@@ -53,6 +53,7 @@ interface Message {
 }
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const createSessionId = () => `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 export function ChatbotIA() {
   const [isOpen, setIsOpen] = useState(false);
@@ -66,7 +67,7 @@ export function ChatbotIA() {
   ]);
   const [input, setInput] = useState('');
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [sessionId, setSessionId] = useState<string>(() => createSessionId());
   const scrollRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {

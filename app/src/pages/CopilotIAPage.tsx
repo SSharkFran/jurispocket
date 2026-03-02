@@ -37,12 +37,13 @@ interface Message {
 }
 
 const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
+const createSessionId = () => `web-${Date.now()}-${Math.random().toString(36).slice(2, 10)}`;
 
 const CopilotIAPage = () => {
   const [input, setInput] = useState('');
   const [messages, setMessages] = useState<Message[]>([]);
   const [isLoading, setIsLoading] = useState(false);
-  const [sessionId, setSessionId] = useState<string | undefined>(undefined);
+  const [sessionId, setSessionId] = useState<string>(() => createSessionId());
   const messagesEndRef = useRef<HTMLDivElement>(null);
 
   const scrollToBottom = () => {
