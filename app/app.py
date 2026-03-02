@@ -42,12 +42,14 @@ import sqlite3
 import hashlib
 import hmac
 import secrets
+import io
+import zipfile
 import threading
 from datetime import datetime, timedelta
 from functools import wraps
 from typing import Optional, List, Dict, Any
 
-from flask import Flask, request, jsonify, g, send_from_directory
+from flask import Flask, request, jsonify, g, send_from_directory, send_file
 from flask_cors import CORS
 import jwt
 from werkzeug.utils import secure_filename
@@ -8958,6 +8960,420 @@ def list_financeiro():
         result.append(transacao)
     
     return jsonify(result)
+
+
+def _parse_mes_extrato(mes_raw: Optional[str]) -> tuple[str, str, str]:
+    """Normaliza mes no formato YYYY-MM e retorna (mes_ref, inicio, fim)."""
+    mes_ref = str(mes_raw or '').strip()
+    try:
+        base = datetime.strptime(mes_ref, '%Y-%m')
+    except ValueError:
+        base = datetime.now()
+
+    from calendar import monthrange
+    ultimo_dia = monthrange(base.year, base.month)[1]
+    inicio = base.replace(day=1).strftime('%Y-%m-%d')
+    fim = base.replace(day=ultimo_dia).strftime('%Y-%m-%d')
+    return base.strftime('%Y-%m'), inicio, fim
+
+
+def _format_currency_br(value: Any) -> str:
+    try:
+        numero = float(value or 0)
+    except (TypeError, ValueError):
+        numero = 0.0
+    return f"R$ {numero:,.2f}".replace(',', '_').replace('.', ',').replace('_', '.')
+
+
+def _format_date_br(date_raw: Any) -> str:
+    valor = str(date_raw or '').strip()[:10]
+    if not valor:
+        return '-'
+    try:
+        return datetime.strptime(valor, '%Y-%m-%d').strftime('%d/%m/%Y')
+    except ValueError:
+        return valor
+
+
+def _build_financeiro_extrato(workspace_id: int, mes_raw: Optional[str]) -> Dict[str, Any]:
+    """Monta dados do extrato mensal com resumo, historico e comprovantes."""
+    db = get_db()
+    mes_ref, inicio, fim = _parse_mes_extrato(mes_raw)
+
+    transacoes_rows = db.execute(
+        '''SELECT f.*, p.numero as processo_numero, p.titulo as processo_titulo, c.nome as cliente_nome
+           FROM financeiro f
+           LEFT JOIN processos p ON f.processo_id = p.id
+           LEFT JOIN clientes c ON f.cliente_id = c.id
+           WHERE f.workspace_id = ? AND f.data BETWEEN ? AND ?
+           ORDER BY f.data DESC, f.id DESC''',
+        (workspace_id, inicio, fim)
+    ).fetchall()
+
+    transacoes_ids = [int(r['id']) for r in transacoes_rows]
+    docs_by_transacao: Dict[int, List[Dict[str, Any]]] = {tid: [] for tid in transacoes_ids}
+
+    if transacoes_ids:
+        placeholders = ','.join(['?'] * len(transacoes_ids))
+        docs_rows = db.execute(
+            f'''SELECT d.id, d.financeiro_id, d.nome, d.filename, d.file_path, d.file_size,
+                       d.mime_type, d.categoria, d.descricao, d.created_at, u.nome as uploaded_by_nome
+                FROM documentos d
+                LEFT JOIN users u ON d.uploaded_by = u.id
+                WHERE d.workspace_id = ? AND d.financeiro_id IN ({placeholders})
+                ORDER BY d.created_at DESC''',
+            [workspace_id, *transacoes_ids]
+        ).fetchall()
+        for doc_row in docs_rows:
+            doc = dict(doc_row)
+            financeiro_id = int(doc.get('financeiro_id'))
+            docs_by_transacao.setdefault(financeiro_id, []).append(doc)
+
+    transacoes: List[Dict[str, Any]] = []
+    entradas = 0.0
+    saidas = 0.0
+    total_comprovantes_saida = 0
+
+    for row in transacoes_rows:
+        transacao = dict(row)
+        transacao['data_transacao'] = transacao.pop('data', None)
+        transacao['documentos'] = docs_by_transacao.get(int(transacao['id']), [])
+
+        tipo_raw = str(transacao.get('tipo') or '').strip().lower()
+        valor = float(transacao.get('valor') or 0)
+        if tipo_raw in {'entrada', 'receita'}:
+            entradas += valor
+        elif tipo_raw in {'saida', 'despesa'}:
+            saidas += valor
+            total_comprovantes_saida += len(transacao['documentos'])
+
+        transacoes.append(transacao)
+
+    saldo = entradas - saidas
+
+    return {
+        'mes_referencia': mes_ref,
+        'periodo': {
+            'inicio': inicio,
+            'fim': fim,
+        },
+        'resumo': {
+            'entradas': entradas,
+            'saidas': saidas,
+            'saldo': saldo,
+            'total_transacoes': len(transacoes),
+            'total_comprovantes_saida': total_comprovantes_saida,
+        },
+        'transacoes': transacoes,
+        'gerado_em': datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+    }
+
+
+def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
+    """Renderiza extrato em HTML simples e pronto para impressao/PDF."""
+    import html
+
+    resumo = extrato.get('resumo') or {}
+    transacoes = extrato.get('transacoes') or []
+    mes_ref = str(extrato.get('mes_referencia') or '')
+    periodo = extrato.get('periodo') or {}
+    inicio_br = _format_date_br(periodo.get('inicio'))
+    fim_br = _format_date_br(periodo.get('fim'))
+    gerado_em = str(extrato.get('gerado_em') or '')
+
+    linhas_transacoes = []
+    linhas_comprovantes = []
+
+    for t in transacoes:
+        tipo_raw = str(t.get('tipo') or '').strip().lower()
+        is_entrada = tipo_raw in {'entrada', 'receita'}
+        valor_fmt = _format_currency_br(float(t.get('valor') or 0))
+        docs = t.get('documentos') or []
+
+        linhas_transacoes.append(
+            f"""
+            <tr>
+              <td>{html.escape(_format_date_br(t.get('data_transacao')))}</td>
+              <td>{html.escape(str(t.get('descricao') or '-'))}</td>
+              <td>{'Entrada' if is_entrada else 'Saída'}</td>
+              <td>{html.escape(str(t.get('categoria') or '-').replace('_', ' '))}</td>
+              <td>{html.escape(str(t.get('processo_numero') or '-'))}</td>
+              <td>{html.escape(str(t.get('status') or '-'))}</td>
+              <td style="text-align:right;color:{'#0f766e' if is_entrada else '#b91c1c'};">
+                {'+' if is_entrada else '-'}{html.escape(valor_fmt)}
+              </td>
+            </tr>
+            """
+        )
+
+        if not is_entrada and docs:
+            comprovantes_itens = ''.join(
+                [
+                    (
+                        "<li>"
+                        f"{html.escape(str(doc.get('nome') or doc.get('filename') or 'Comprovante'))}"
+                        f" ({html.escape(_format_date_br(doc.get('created_at')))})"
+                        "</li>"
+                    )
+                    for doc in docs
+                ]
+            )
+            linhas_comprovantes.append(
+                f"""
+                <div class="comprovante-bloco">
+                  <h4>Transação #{int(t.get('id'))} - {html.escape(str(t.get('descricao') or '-'))}</h4>
+                  <ul>{comprovantes_itens}</ul>
+                </div>
+                """
+            )
+
+    if not linhas_transacoes:
+        linhas_transacoes.append(
+            '<tr><td colspan="7" style="text-align:center;color:#64748b;">Nenhuma transação no período.</td></tr>'
+        )
+
+    if not linhas_comprovantes:
+        linhas_comprovantes.append('<p style="color:#64748b;">Nenhum comprovante de saída anexado neste mês.</p>')
+
+    entradas_fmt = _format_currency_br(resumo.get('entradas'))
+    saidas_fmt = _format_currency_br(resumo.get('saidas'))
+    saldo_fmt = _format_currency_br(resumo.get('saldo'))
+
+    return f"""<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Extrato Financeiro {html.escape(mes_ref)}</title>
+  <style>
+    :root {{
+      color-scheme: light;
+    }}
+    body {{
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 24px;
+      color: #0f172a;
+      background: #ffffff;
+    }}
+    h1 {{
+      margin: 0 0 8px;
+      font-size: 24px;
+    }}
+    .meta {{
+      margin-bottom: 20px;
+      color: #475569;
+      font-size: 13px;
+    }}
+    .cards {{
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 12px;
+      margin-bottom: 18px;
+    }}
+    .card {{
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 12px;
+      background: #f8fafc;
+    }}
+    .card-label {{
+      font-size: 12px;
+      color: #475569;
+      margin-bottom: 6px;
+    }}
+    .card-value {{
+      font-size: 20px;
+      font-weight: 700;
+    }}
+    .card-value.entrada {{ color: #0f766e; }}
+    .card-value.saida {{ color: #b91c1c; }}
+    .card-value.saldo {{ color: #1d4ed8; }}
+    table {{
+      width: 100%;
+      border-collapse: collapse;
+      margin-top: 8px;
+      font-size: 13px;
+    }}
+    th, td {{
+      border: 1px solid #e2e8f0;
+      padding: 8px;
+      vertical-align: top;
+    }}
+    th {{
+      background: #f1f5f9;
+      text-align: left;
+      font-weight: 600;
+    }}
+    .secao {{
+      margin-top: 22px;
+    }}
+    .comprovante-bloco {{
+      border: 1px solid #e2e8f0;
+      border-radius: 8px;
+      padding: 10px;
+      margin-bottom: 10px;
+      background: #fafafa;
+    }}
+    .comprovante-bloco h4 {{
+      margin: 0 0 6px;
+      font-size: 14px;
+    }}
+    @media print {{
+      body {{ padding: 8mm; }}
+      .no-print {{ display: none; }}
+      .cards {{ page-break-inside: avoid; }}
+      table {{ page-break-inside: auto; }}
+      tr {{ page-break-inside: avoid; page-break-after: auto; }}
+    }}
+  </style>
+</head>
+<body>
+  <h1>Extrato Financeiro - {html.escape(mes_ref)}</h1>
+  <div class="meta">
+    <div>Período: {html.escape(inicio_br)} até {html.escape(fim_br)}</div>
+    <div>Gerado em: {html.escape(_format_date_br(gerado_em))} {html.escape(gerado_em[11:16] if len(gerado_em) >= 16 else '')}</div>
+    <div>Total de transações: {int(resumo.get('total_transacoes') or 0)} | Comprovantes de saída: {int(resumo.get('total_comprovantes_saida') or 0)}</div>
+  </div>
+
+  <div class="cards">
+    <div class="card">
+      <div class="card-label">Entradas</div>
+      <div class="card-value entrada">{html.escape(entradas_fmt)}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Saídas</div>
+      <div class="card-value saida">{html.escape(saidas_fmt)}</div>
+    </div>
+    <div class="card">
+      <div class="card-label">Saldo do Mês</div>
+      <div class="card-value saldo">{html.escape(saldo_fmt)}</div>
+    </div>
+  </div>
+
+  <div class="secao">
+    <h2>Histórico de Transações</h2>
+    <table>
+      <thead>
+        <tr>
+          <th>Data</th>
+          <th>Descrição</th>
+          <th>Tipo</th>
+          <th>Categoria</th>
+          <th>Processo</th>
+          <th>Status</th>
+          <th style="text-align:right;">Valor</th>
+        </tr>
+      </thead>
+      <tbody>
+        {''.join(linhas_transacoes)}
+      </tbody>
+    </table>
+  </div>
+
+  <div class="secao">
+    <h2>Comprovantes de Saída</h2>
+    {''.join(linhas_comprovantes)}
+  </div>
+</body>
+</html>
+"""
+
+
+def _sanitize_extrato_payload(extrato: Dict[str, Any]) -> Dict[str, Any]:
+    """Remove campos internos (ex.: paths de arquivo) antes de expor payload."""
+    sanitized = dict(extrato)
+    transacoes_limpas: List[Dict[str, Any]] = []
+
+    for transacao in extrato.get('transacoes') or []:
+        item = dict(transacao)
+        docs_limpos: List[Dict[str, Any]] = []
+        for doc in item.get('documentos') or []:
+            doc_clean = dict(doc)
+            doc_clean.pop('file_path', None)
+            docs_limpos.append(doc_clean)
+        item['documentos'] = docs_limpos
+        transacoes_limpas.append(item)
+
+    sanitized['transacoes'] = transacoes_limpas
+    return sanitized
+
+
+@app.route('/api/financeiro/extrato', methods=['GET'])
+@require_auth
+def obter_extrato_financeiro():
+    """Retorna dados do extrato mensal (cards + histórico + comprovantes)."""
+    extrato = _build_financeiro_extrato(
+        workspace_id=g.auth['workspace_id'],
+        mes_raw=request.args.get('mes'),
+    )
+    return jsonify(_sanitize_extrato_payload(extrato))
+
+
+@app.route('/api/financeiro/extrato/imprimir', methods=['GET'])
+@require_auth
+def imprimir_extrato_financeiro():
+    """Retorna extrato em HTML pronto para impressão/PDF."""
+    extrato = _build_financeiro_extrato(
+        workspace_id=g.auth['workspace_id'],
+        mes_raw=request.args.get('mes'),
+    )
+    html_content = _render_financeiro_extrato_html(extrato)
+    return app.response_class(html_content, mimetype='text/html')
+
+
+@app.route('/api/financeiro/extrato/download', methods=['GET'])
+@require_auth
+def download_extrato_financeiro():
+    """Baixa pacote ZIP com extrato (HTML/JSON) e comprovantes de saída do mês."""
+    extrato = _build_financeiro_extrato(
+        workspace_id=g.auth['workspace_id'],
+        mes_raw=request.args.get('mes'),
+    )
+    mes_ref = str(extrato.get('mes_referencia') or datetime.now().strftime('%Y-%m'))
+    html_content = _render_financeiro_extrato_html(extrato)
+
+    buffer = io.BytesIO()
+    nomes_usados: set[str] = set()
+
+    with zipfile.ZipFile(buffer, mode='w', compression=zipfile.ZIP_DEFLATED) as zf:
+        zf.writestr(f'extrato_{mes_ref}.html', html_content)
+        zf.writestr(
+            f'extrato_{mes_ref}.json',
+            json.dumps(_sanitize_extrato_payload(extrato), ensure_ascii=False, indent=2),
+        )
+
+        for transacao in extrato.get('transacoes') or []:
+            tipo_raw = str(transacao.get('tipo') or '').strip().lower()
+            if tipo_raw not in {'saida', 'despesa'}:
+                continue
+
+            for doc in transacao.get('documentos') or []:
+                file_path = str(doc.get('file_path') or '').strip()
+                if not file_path or not os.path.exists(file_path):
+                    continue
+
+                nome_original = str(doc.get('nome') or doc.get('filename') or 'comprovante')
+                nome_base = secure_filename(nome_original) or f"comprovante_{doc.get('id')}"
+                nome_zip = f"comprovantes/transacao_{int(transacao.get('id'))}_{nome_base}"
+
+                if nome_zip in nomes_usados:
+                    raiz, ext = os.path.splitext(nome_base)
+                    idx = 2
+                    while f"comprovantes/transacao_{int(transacao.get('id'))}_{raiz}_{idx}{ext}" in nomes_usados:
+                        idx += 1
+                    nome_zip = f"comprovantes/transacao_{int(transacao.get('id'))}_{raiz}_{idx}{ext}"
+
+                nomes_usados.add(nome_zip)
+                zf.write(file_path, arcname=nome_zip)
+
+    buffer.seek(0)
+    return send_file(
+        buffer,
+        mimetype='application/zip',
+        as_attachment=True,
+        download_name=f'extrato_{mes_ref}.zip',
+    )
 
 @app.route('/api/financeiro/resumo', methods=['GET'])
 @require_auth

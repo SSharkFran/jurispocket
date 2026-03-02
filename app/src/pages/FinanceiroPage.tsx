@@ -23,6 +23,7 @@ import {
   FileText,
   Upload,
   Download,
+  Printer,
   X,
   FileArchive,
   Edit3,
@@ -260,12 +261,12 @@ export function FinanceiroPage() {
 
   const handleDownloadComprovantesMes = async () => {
     try {
-      toast.info('Preparando download...');
+      toast.info('Preparando pacote do extrato...');
       const response = await financeiro.downloadComprovantesMes(mesSelecionado);
       const url = window.URL.createObjectURL(new Blob([response.data]));
       const link = document.createElement('a');
       link.href = url;
-      link.setAttribute('download', `comprovantes_${mesSelecionado}.zip`);
+      link.setAttribute('download', `extrato_${mesSelecionado}.zip`);
       document.body.appendChild(link);
       link.click();
       link.remove();
@@ -273,10 +274,33 @@ export function FinanceiroPage() {
       toast.success('Download iniciado!');
     } catch (error: any) {
       if (error.response?.status === 404) {
-        toast.error('Nenhum comprovante encontrado para este mês');
+        toast.error('Nenhum dado encontrado para este mês');
       } else {
-        toast.error('Erro ao gerar arquivo');
+        toast.error('Erro ao gerar pacote do extrato');
       }
+    }
+  };
+
+  const handleAbrirExtratoImpressao = async () => {
+    try {
+      toast.info('Gerando versão para impressão...');
+      const response = await financeiro.getExtrato(mesSelecionado);
+      const blob = new Blob([response.data], { type: 'text/html;charset=utf-8' });
+      const url = window.URL.createObjectURL(blob);
+
+      const novaJanela = window.open(url, '_blank', 'noopener,noreferrer');
+      if (!novaJanela) {
+        toast.error('Não foi possível abrir a visualização. Verifique o bloqueador de pop-up.');
+        window.URL.revokeObjectURL(url);
+        return;
+      }
+
+      setTimeout(() => {
+        window.URL.revokeObjectURL(url);
+      }, 60000);
+      toast.success('Extrato aberto. Use a opção de imprimir do navegador para salvar em PDF.');
+    } catch (error) {
+      toast.error('Erro ao gerar extrato para impressão');
     }
   };
 
@@ -742,24 +766,35 @@ export function FinanceiroPage() {
               </div>
             </div>
             
-            {/* Download Comprovantes */}
-            {resumoMes.totalComprovantes > 0 && (
-              <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30">
-                <div className="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-                  <div>
-                    <p className="text-sm text-blue-400">Comprovantes de Saída</p>
-                    <p className="text-xs text-muted-foreground">{resumoMes.totalComprovantes} documento(s) anexado(s)</p>
-                  </div>
-                  <Button
-                    onClick={handleDownloadComprovantesMes}
-                    className="w-full bg-blue-500 hover:bg-blue-600 sm:w-auto"
-                  >
-                    <FileArchive className="w-4 h-4 mr-2" />
-                    Baixar Todos
-                  </Button>
-                </div>
+            {/* Ações do Extrato */}
+            <div className="p-4 rounded-lg bg-blue-500/10 border border-blue-500/30 space-y-3">
+              <div>
+                <p className="text-sm text-blue-400">Ações do Extrato</p>
+                <p className="text-xs text-muted-foreground">
+                  Inclui cards do mês, histórico de transações e comprovantes de saída (se houver).
+                </p>
               </div>
-            )}
+              <div className="flex flex-col gap-2 sm:flex-row">
+                <Button
+                  onClick={handleAbrirExtratoImpressao}
+                  variant="outline"
+                  className="w-full border-blue-400/40 text-blue-300 hover:bg-blue-500/20 sm:w-auto"
+                >
+                  <Printer className="w-4 h-4 mr-2" />
+                  Abrir para imprimir / PDF
+                </Button>
+                <Button
+                  onClick={handleDownloadComprovantesMes}
+                  className="w-full bg-blue-500 hover:bg-blue-600 sm:w-auto"
+                >
+                  <FileArchive className="w-4 h-4 mr-2" />
+                  Baixar pacote completo
+                </Button>
+              </div>
+              <p className="text-xs text-muted-foreground">
+                Comprovantes de saída anexados neste mês: {resumoMes.totalComprovantes}
+              </p>
+            </div>
             
             {/* Lista de Transações do Mês */}
             <div>

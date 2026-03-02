@@ -162,11 +162,17 @@ export const financeiro = {
     documentos.delete(docId),
   downloadDocumento: (_transacaoId: number, docId: number) =>
     documentos.download(docId),
-  // Extrato mensal - stub
+  // Extrato mensal
   getExtrato: (mes: string) =>
-    Promise.reject(new Error('Extrato mensal não implementado')),
+    api.get('/financeiro/extrato/imprimir', {
+      params: { mes },
+      responseType: 'blob',
+    }),
   downloadComprovantesMes: (mes: string) =>
-    Promise.reject(new Error('Download de comprovantes não implementado')),
+    api.get('/financeiro/extrato/download', {
+      params: { mes },
+      responseType: 'blob',
+    }),
 };
 
 export const notificacoes = {
