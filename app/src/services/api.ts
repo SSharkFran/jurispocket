@@ -47,6 +47,29 @@ export const auth = {
   me: () => api.get('/auth/me'),
   updateProfile: (data: Partial<{ nome: string; telefone: string; alerta_email: boolean; alerta_whatsapp: boolean; resumo_diario: boolean }>) =>
     api.put('/auth/me', data),
+  updateWorkspaceBranding: (data: Partial<{
+    workspace_nome: string;
+    assinatura_nome: string;
+    assinatura_cargo: string;
+    logo_url: string | null;
+    assinatura_imagem_url: string | null;
+  }>) => api.put('/auth/workspace-branding', data),
+  uploadWorkspaceLogo: (file: File) => {
+    const formData = new FormData();
+    formData.append('logo', file);
+    return api.post('/auth/workspace-branding/logo', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteWorkspaceLogo: () => api.delete('/auth/workspace-branding/logo'),
+  uploadWorkspaceAssinaturaImagem: (file: File) => {
+    const formData = new FormData();
+    formData.append('assinatura', file);
+    return api.post('/auth/workspace-branding/assinatura-imagem', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    });
+  },
+  deleteWorkspaceAssinaturaImagem: () => api.delete('/auth/workspace-branding/assinatura-imagem'),
   uploadAvatar: (file: File) => {
     const formData = new FormData();
     formData.append('avatar', file);

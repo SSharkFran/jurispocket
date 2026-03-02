@@ -20,6 +20,10 @@ export interface Workspace {
   max_users: number;
   max_processos: number;
   max_storage_mb: number;
+  logo_url?: string | null;
+  assinatura_nome?: string | null;
+  assinatura_cargo?: string | null;
+  assinatura_imagem_url?: string | null;
 }
 
 export interface Cliente {

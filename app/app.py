@@ -364,6 +364,10 @@ def init_db():
         CREATE TABLE IF NOT EXISTS workspaces (
             id INTEGER PRIMARY KEY AUTOINCREMENT,
             nome TEXT NOT NULL,
+            logo_url TEXT,
+            assinatura_nome TEXT,
+            assinatura_cargo TEXT,
+            assinatura_imagem_url TEXT,
             created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP
         )
     ''')
@@ -1144,6 +1148,24 @@ def init_db():
         db.execute('SELECT resumo_diario FROM users LIMIT 1')
     except:
         db.execute('ALTER TABLE users ADD COLUMN resumo_diario BOOLEAN DEFAULT 0')
+
+    # Migration: garantir colunas de identidade visual em workspaces
+    try:
+        db.execute('SELECT logo_url FROM workspaces LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspaces ADD COLUMN logo_url TEXT')
+    try:
+        db.execute('SELECT assinatura_nome FROM workspaces LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspaces ADD COLUMN assinatura_nome TEXT')
+    try:
+        db.execute('SELECT assinatura_cargo FROM workspaces LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspaces ADD COLUMN assinatura_cargo TEXT')
+    try:
+        db.execute('SELECT assinatura_imagem_url FROM workspaces LIMIT 1')
+    except:
+        db.execute('ALTER TABLE workspaces ADD COLUMN assinatura_imagem_url TEXT')
 
     # Migration: garantir colunas novas em email_verification_codes
     try:
@@ -7187,6 +7209,219 @@ def update_me():
     user = db.execute('SELECT * FROM users WHERE id = ?', (g.auth['user_id'],)).fetchone()
     return jsonify({'user': dict(user)})
 
+
+def _get_workspace_branding(db: sqlite3.Connection, workspace_id: int) -> Dict[str, Any]:
+    row = db.execute(
+        '''SELECT id, nome, logo_url, assinatura_nome, assinatura_cargo, assinatura_imagem_url
+           FROM workspaces
+           WHERE id = ?''',
+        (workspace_id,),
+    ).fetchone()
+    return dict(row) if row else {}
+
+
+def _require_workspace_admin():
+    role = str(g.auth.get('role') or '')
+    if role not in {'admin', 'superadmin'}:
+        return jsonify({'error': 'Apenas admins podem alterar a identidade visual do workspace'}), 403
+    return None
+
+
+@app.route('/api/auth/workspace-branding', methods=['PUT'])
+@require_auth
+def update_workspace_branding():
+    """Atualiza nome e identidade visual do workspace (admin apenas)."""
+    auth_error = _require_workspace_admin()
+    if auth_error:
+        return auth_error
+
+    data = request.get_json() or {}
+    workspace_id = g.auth['workspace_id']
+    db = get_db()
+    workspace = _get_workspace_branding(db, workspace_id)
+    if not workspace:
+        return jsonify({'error': 'Workspace não encontrado'}), 404
+
+    updates = []
+    params: List[Any] = []
+
+    if 'workspace_nome' in data or 'nome' in data:
+        workspace_nome_raw = data.get('workspace_nome', data.get('nome'))
+        workspace_nome = _normalize_optional_text(workspace_nome_raw, 120)
+        if not workspace_nome:
+            return jsonify({'error': 'Nome do escritório é obrigatório'}), 400
+        updates.append('nome = ?')
+        params.append(workspace_nome)
+
+    if 'assinatura_nome' in data:
+        updates.append('assinatura_nome = ?')
+        params.append(_normalize_optional_text(data.get('assinatura_nome'), 120))
+
+    if 'assinatura_cargo' in data:
+        updates.append('assinatura_cargo = ?')
+        params.append(_normalize_optional_text(data.get('assinatura_cargo'), 120))
+
+    if 'logo_url' in data:
+        try:
+            logo_url = _normalize_branding_url(data.get('logo_url'))
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        updates.append('logo_url = ?')
+        params.append(logo_url)
+
+    if 'assinatura_imagem_url' in data:
+        try:
+            assinatura_imagem_url = _normalize_branding_url(data.get('assinatura_imagem_url'))
+        except ValueError as exc:
+            return jsonify({'error': str(exc)}), 400
+        updates.append('assinatura_imagem_url = ?')
+        params.append(assinatura_imagem_url)
+
+    if updates:
+        params.append(workspace_id)
+        db.execute(
+            f"UPDATE workspaces SET {', '.join(updates)} WHERE id = ?",
+            params,
+        )
+        db.commit()
+
+    return jsonify({'workspace': _get_workspace_branding(db, workspace_id)})
+
+
+@app.route('/api/auth/workspace-branding/logo', methods=['POST'])
+@require_auth
+def upload_workspace_logo():
+    """Upload de logo do workspace (admin apenas)."""
+    auth_error = _require_workspace_admin()
+    if auth_error:
+        return auth_error
+
+    if 'logo' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+    file = request.files['logo']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    if ext not in allowed_extensions:
+        return jsonify({'error': 'Formato não suportado. Use PNG, JPG ou WEBP'}), 400
+
+    workspace_id = g.auth['workspace_id']
+    filename = f"workspace_logo_{workspace_id}_{int(datetime.now().timestamp())}.{ext}"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    db = get_db()
+    atual = db.execute('SELECT logo_url FROM workspaces WHERE id = ?', (workspace_id,)).fetchone()
+    logo_anterior = str(atual['logo_url'] or '') if atual else ''
+    logo_url = f"/uploads/{filename}"
+
+    db.execute('UPDATE workspaces SET logo_url = ? WHERE id = ?', (logo_url, workspace_id))
+    db.commit()
+
+    if logo_anterior and logo_anterior != logo_url:
+        _remove_upload_file_from_url(logo_anterior)
+
+    return jsonify({'logo_url': logo_url})
+
+
+@app.route('/api/auth/workspace-branding/logo', methods=['DELETE'])
+@require_auth
+def delete_workspace_logo():
+    """Remove logo do workspace (admin apenas)."""
+    auth_error = _require_workspace_admin()
+    if auth_error:
+        return auth_error
+
+    workspace_id = g.auth['workspace_id']
+    db = get_db()
+    row = db.execute('SELECT logo_url FROM workspaces WHERE id = ?', (workspace_id,)).fetchone()
+    logo_atual = str(row['logo_url'] or '') if row else ''
+
+    db.execute('UPDATE workspaces SET logo_url = NULL WHERE id = ?', (workspace_id,))
+    db.commit()
+
+    if logo_atual:
+        _remove_upload_file_from_url(logo_atual)
+
+    return jsonify({'success': True})
+
+
+@app.route('/api/auth/workspace-branding/assinatura-imagem', methods=['POST'])
+@require_auth
+def upload_workspace_assinatura_imagem():
+    """Upload de imagem de assinatura do workspace (admin apenas)."""
+    auth_error = _require_workspace_admin()
+    if auth_error:
+        return auth_error
+
+    if 'assinatura' not in request.files:
+        return jsonify({'error': 'Nenhum arquivo enviado'}), 400
+
+    file = request.files['assinatura']
+    if not file or file.filename == '':
+        return jsonify({'error': 'Nenhum arquivo selecionado'}), 400
+
+    allowed_extensions = {'png', 'jpg', 'jpeg', 'webp'}
+    ext = file.filename.rsplit('.', 1)[1].lower() if '.' in file.filename else ''
+    if ext not in allowed_extensions:
+        return jsonify({'error': 'Formato não suportado. Use PNG, JPG ou WEBP'}), 400
+
+    workspace_id = g.auth['workspace_id']
+    filename = f"workspace_assinatura_{workspace_id}_{int(datetime.now().timestamp())}.{ext}"
+    filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
+    file.save(filepath)
+
+    db = get_db()
+    atual = db.execute(
+        'SELECT assinatura_imagem_url FROM workspaces WHERE id = ?',
+        (workspace_id,),
+    ).fetchone()
+    anterior = str(atual['assinatura_imagem_url'] or '') if atual else ''
+    assinatura_url = f"/uploads/{filename}"
+
+    db.execute(
+        'UPDATE workspaces SET assinatura_imagem_url = ? WHERE id = ?',
+        (assinatura_url, workspace_id),
+    )
+    db.commit()
+
+    if anterior and anterior != assinatura_url:
+        _remove_upload_file_from_url(anterior)
+
+    return jsonify({'assinatura_imagem_url': assinatura_url})
+
+
+@app.route('/api/auth/workspace-branding/assinatura-imagem', methods=['DELETE'])
+@require_auth
+def delete_workspace_assinatura_imagem():
+    """Remove imagem de assinatura do workspace (admin apenas)."""
+    auth_error = _require_workspace_admin()
+    if auth_error:
+        return auth_error
+
+    workspace_id = g.auth['workspace_id']
+    db = get_db()
+    row = db.execute(
+        'SELECT assinatura_imagem_url FROM workspaces WHERE id = ?',
+        (workspace_id,),
+    ).fetchone()
+    atual = str(row['assinatura_imagem_url'] or '') if row else ''
+
+    db.execute(
+        'UPDATE workspaces SET assinatura_imagem_url = NULL WHERE id = ?',
+        (workspace_id,),
+    )
+    db.commit()
+
+    if atual:
+        _remove_upload_file_from_url(atual)
+
+    return jsonify({'success': True})
+
+
 @app.route('/api/auth/avatar', methods=['POST'])
 @require_auth
 def upload_avatar():
@@ -8995,10 +9230,81 @@ def _format_date_br(date_raw: Any) -> str:
         return valor
 
 
+def _normalize_optional_text(value: Any, max_len: int) -> Optional[str]:
+    text = str(value or '').strip()
+    if not text:
+        return None
+    if len(text) > max_len:
+        text = text[:max_len]
+    return text
+
+
+def _sanitize_public_asset_url(raw_url: Any) -> str:
+    """Aceita apenas URL http(s) ou caminho relativo público (/uploads/...)."""
+    value = str(raw_url or '').strip()
+    if not value:
+        return ''
+
+    lowered = value.lower()
+    if lowered.startswith('javascript:') or lowered.startswith('vbscript:') or lowered.startswith('data:'):
+        return ''
+
+    if value.startswith('/') or lowered.startswith('http://') or lowered.startswith('https://'):
+        return value
+
+    return ''
+
+
+def _normalize_branding_url(raw_url: Any, max_len: int = 1024) -> Optional[str]:
+    value = str(raw_url or '').strip()
+    if not value:
+        return None
+    safe = _sanitize_public_asset_url(value[:max_len])
+    if not safe:
+        raise ValueError('URL inválida. Use http(s) ou caminho interno em /uploads/.')
+    return safe
+
+
+def _remove_upload_file_from_url(file_url: Optional[str]) -> None:
+    """Remove arquivo interno de /uploads quando existir."""
+    value = str(file_url or '').strip()
+    if not value.startswith('/uploads/'):
+        return
+
+    rel_path = value[len('/uploads/'):].lstrip('/')
+    if not rel_path:
+        return
+
+    uploads_root = os.path.abspath(app.config['UPLOAD_FOLDER'])
+    target = os.path.abspath(os.path.join(uploads_root, rel_path))
+    if not target.startswith(uploads_root + os.sep):
+        return
+
+    try:
+        if os.path.exists(target):
+            os.remove(target)
+    except OSError:
+        pass
+
+
 def _build_financeiro_extrato(workspace_id: int, mes_raw: Optional[str]) -> Dict[str, Any]:
     """Monta dados do extrato mensal com resumo, historico e comprovantes."""
     db = get_db()
     mes_ref, inicio, fim = _parse_mes_extrato(mes_raw)
+    workspace_row = db.execute(
+        '''SELECT id, nome, logo_url, assinatura_nome, assinatura_cargo, assinatura_imagem_url
+           FROM workspaces
+           WHERE id = ?''',
+        (workspace_id,),
+    ).fetchone()
+    workspace_info = dict(workspace_row) if workspace_row else {
+        'id': workspace_id,
+        'nome': 'JurisPocket',
+        'logo_url': None,
+        'assinatura_nome': None,
+        'assinatura_cargo': None,
+        'assinatura_imagem_url': None,
+    }
 
     transacoes_rows = db.execute(
         '''SELECT f.*, p.numero as processo_numero, p.titulo as processo_titulo, c.nome as cliente_nome
@@ -9057,6 +9363,7 @@ def _build_financeiro_extrato(workspace_id: int, mes_raw: Optional[str]) -> Dict
             'inicio': inicio,
             'fim': fim,
         },
+        'workspace': workspace_info,
         'resumo': {
             'entradas': entradas,
             'saidas': saidas,
@@ -9070,16 +9377,27 @@ def _build_financeiro_extrato(workspace_id: int, mes_raw: Optional[str]) -> Dict
 
 
 def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
-    """Renderiza extrato em HTML simples e pronto para impressao/PDF."""
+    """Renderiza extrato em HTML estilizado e pronto para impressao/PDF."""
     import html
 
     resumo = extrato.get('resumo') or {}
     transacoes = extrato.get('transacoes') or []
     mes_ref = str(extrato.get('mes_referencia') or '')
     periodo = extrato.get('periodo') or {}
+    workspace_info = extrato.get('workspace') or {}
     inicio_br = _format_date_br(periodo.get('inicio'))
     fim_br = _format_date_br(periodo.get('fim'))
     gerado_em = str(extrato.get('gerado_em') or '')
+    try:
+        gerado_em_label = datetime.strptime(gerado_em, '%Y-%m-%d %H:%M:%S').strftime('%d/%m/%Y %H:%M')
+    except ValueError:
+        gerado_em_label = gerado_em or '-'
+
+    workspace_nome = str(workspace_info.get('nome') or 'JurisPocket')
+    logo_url = _sanitize_public_asset_url(workspace_info.get('logo_url'))
+    assinatura_nome = str(workspace_info.get('assinatura_nome') or workspace_nome)
+    assinatura_cargo = str(workspace_info.get('assinatura_cargo') or '').strip()
+    assinatura_imagem_url = _sanitize_public_asset_url(workspace_info.get('assinatura_imagem_url'))
 
     linhas_transacoes = []
     linhas_comprovantes = []
@@ -9087,21 +9405,52 @@ def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
     for t in transacoes:
         tipo_raw = str(t.get('tipo') or '').strip().lower()
         is_entrada = tipo_raw in {'entrada', 'receita'}
+        tipo_label = 'Entrada' if is_entrada else 'Saida'
+        tipo_class = 'pill-entrada' if is_entrada else 'pill-saida'
+
+        status_raw = str(t.get('status') or '').strip().lower()
+        status_map = {
+            'pendente': 'Pendente',
+            'pago': 'Pago',
+            'recebido': 'Recebido',
+            'confirmado': 'Confirmado',
+            'cancelado': 'Cancelado',
+        }
+        status_label = status_map.get(status_raw, (status_raw or '-').capitalize())
+        if status_raw in {'pago', 'recebido', 'confirmado'}:
+            status_class = 'pill-status-ok'
+        elif status_raw in {'pendente'}:
+            status_class = 'pill-status-warn'
+        elif status_raw in {'cancelado'}:
+            status_class = 'pill-status-muted'
+        else:
+            status_class = 'pill-status-neutral'
+
         valor_fmt = _format_currency_br(float(t.get('valor') or 0))
+        categoria = str(t.get('categoria') or '-').replace('_', ' ')
+        processo = str(t.get('processo_numero') or '-')
+        cliente = str(t.get('cliente_nome') or '-')
         docs = t.get('documentos') or []
+        docs_count = len(docs)
 
         linhas_transacoes.append(
             f"""
             <tr>
-              <td>{html.escape(_format_date_br(t.get('data_transacao')))}</td>
-              <td>{html.escape(str(t.get('descricao') or '-'))}</td>
-              <td>{'Entrada' if is_entrada else 'Saída'}</td>
-              <td>{html.escape(str(t.get('categoria') or '-').replace('_', ' '))}</td>
-              <td>{html.escape(str(t.get('processo_numero') or '-'))}</td>
-              <td>{html.escape(str(t.get('status') or '-'))}</td>
-              <td style="text-align:right;color:{'#0f766e' if is_entrada else '#b91c1c'};">
+              <td class="col-data">{html.escape(_format_date_br(t.get('data_transacao')))}</td>
+              <td>
+                <div class="tx-desc">{html.escape(str(t.get('descricao') or '-'))}</div>
+                <div class="tx-meta">
+                  <span>Categoria: {html.escape(categoria)}</span>
+                  <span>Processo: {html.escape(processo)}</span>
+                  <span>Cliente: {html.escape(cliente)}</span>
+                </div>
+              </td>
+              <td><span class="pill {tipo_class}">{tipo_label}</span></td>
+              <td><span class="pill {status_class}">{html.escape(status_label)}</span></td>
+              <td class="cell-right tx-valor {'valor-entrada' if is_entrada else 'valor-saida'}">
                 {'+' if is_entrada else '-'}{html.escape(valor_fmt)}
               </td>
+              <td class="cell-center">{docs_count if docs_count > 0 else '-'}</td>
             </tr>
             """
         )
@@ -9121,7 +9470,7 @@ def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
             linhas_comprovantes.append(
                 f"""
                 <div class="comprovante-bloco">
-                  <h4>Transação #{int(t.get('id'))} - {html.escape(str(t.get('descricao') or '-'))}</h4>
+                  <h4>Transacao #{int(t.get('id'))} - {html.escape(str(t.get('descricao') or '-'))}</h4>
                   <ul>{comprovantes_itens}</ul>
                 </div>
                 """
@@ -9133,11 +9482,26 @@ def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
         )
 
     if not linhas_comprovantes:
-        linhas_comprovantes.append('<p style="color:#64748b;">Nenhum comprovante de saída anexado neste mês.</p>')
+        linhas_comprovantes.append('<p style="color:#64748b;">Nenhum comprovante de saida anexado neste mes.</p>')
 
     entradas_fmt = _format_currency_br(resumo.get('entradas'))
     saidas_fmt = _format_currency_br(resumo.get('saidas'))
     saldo_fmt = _format_currency_br(resumo.get('saldo'))
+    saldo_valor = float(resumo.get('saldo') or 0)
+    saldo_class = 'saldo-positivo' if saldo_valor >= 0 else 'saldo-negativo'
+    logo_markup = ''
+    if logo_url:
+        logo_markup = (
+            f'<img class="logo" src="{html.escape(logo_url, quote=True)}" '
+            f'alt="Logo {html.escape(workspace_nome)}" />'
+        )
+
+    assinatura_imagem_markup = ''
+    if assinatura_imagem_url:
+        assinatura_imagem_markup = (
+            f'<img class="assinatura-imagem" src="{html.escape(assinatura_imagem_url, quote=True)}" '
+            f'alt="Assinatura de {html.escape(assinatura_nome)}" />'
+        )
 
     return f"""<!DOCTYPE html>
 <html lang="pt-BR">
@@ -9150,130 +9514,433 @@ def _render_financeiro_extrato_html(extrato: Dict[str, Any]) -> str:
       color-scheme: light;
     }}
     body {{
-      font-family: Arial, sans-serif;
+      font-family: "Segoe UI", Arial, sans-serif;
       margin: 0;
-      padding: 24px;
+      padding: 24px 16px 40px;
       color: #0f172a;
-      background: #ffffff;
+      background: linear-gradient(160deg, #f8fafc 0%, #eef2ff 100%);
     }}
-    h1 {{
-      margin: 0 0 8px;
-      font-size: 24px;
+    .relatorio {{
+      max-width: 1024px;
+      margin: 0 auto;
+      background: #ffffff;
+      border: 1px solid #dbe4ff;
+      border-radius: 14px;
+      box-shadow: 0 12px 40px rgba(15, 23, 42, 0.08);
+      overflow: hidden;
+    }}
+    .header {{
+      padding: 20px 24px;
+      background: radial-gradient(circle at top right, #1d4ed8 0%, #2563eb 55%, #1e3a8a 100%);
+      color: #eff6ff;
+    }}
+    .header-top {{
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 10px;
+      margin-bottom: 8px;
+    }}
+    .brand-wrap {{
+      display: flex;
+      align-items: center;
+      gap: 10px;
+      min-width: 0;
+    }}
+    .logo {{
+      height: 42px;
+      width: auto;
+      max-width: 150px;
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.95);
+      padding: 3px 6px;
+      object-fit: contain;
+    }}
+    .brand {{
+      font-size: 11px;
+      letter-spacing: 0.12em;
+      text-transform: uppercase;
+      font-weight: 600;
+      opacity: 0.92;
+    }}
+    .badge-mes {{
+      font-size: 12px;
+      background: rgba(255, 255, 255, 0.16);
+      border: 1px solid rgba(255, 255, 255, 0.28);
+      border-radius: 999px;
+      padding: 4px 10px;
+      font-weight: 600;
+    }}
+    .titulo {{
+      margin: 0;
+      font-size: 25px;
+      line-height: 1.2;
+      font-weight: 700;
+    }}
+    .subtitulo {{
+      margin-top: 4px;
+      font-size: 13px;
+      opacity: 0.9;
+    }}
+    .toolbar {{
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      justify-content: flex-end;
+      padding: 12px 24px;
+      background: #f8fafc;
+      border-bottom: 1px solid #e2e8f0;
+    }}
+    .btn {{
+      appearance: none;
+      border: 0;
+      border-radius: 8px;
+      padding: 8px 12px;
+      font-size: 12px;
+      font-weight: 600;
+      cursor: pointer;
+    }}
+    .btn-primary {{
+      background: #1d4ed8;
+      color: #fff;
+    }}
+    .btn-primary:hover {{
+      background: #1e40af;
+    }}
+    .btn-secondary {{
+      background: #e2e8f0;
+      color: #0f172a;
+    }}
+    .btn-secondary:hover {{
+      background: #cbd5e1;
+    }}
+    .conteudo {{
+      padding: 18px 24px 24px;
     }}
     .meta {{
-      margin-bottom: 20px;
+      margin-bottom: 16px;
       color: #475569;
       font-size: 13px;
+      line-height: 1.5;
     }}
     .cards {{
       display: grid;
       grid-template-columns: repeat(3, minmax(0, 1fr));
       gap: 12px;
-      margin-bottom: 18px;
+      margin-bottom: 20px;
     }}
     .card {{
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 12px;
-      background: #f8fafc;
+      border: 1px solid #dbe4ff;
+      border-radius: 12px;
+      padding: 14px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fafc 100%);
     }}
     .card-label {{
       font-size: 12px;
-      color: #475569;
+      color: #64748b;
       margin-bottom: 6px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
     }}
     .card-value {{
-      font-size: 20px;
+      font-size: 22px;
       font-weight: 700;
     }}
     .card-value.entrada {{ color: #0f766e; }}
     .card-value.saida {{ color: #b91c1c; }}
     .card-value.saldo {{ color: #1d4ed8; }}
+    .card-value.saldo-positivo {{ color: #1d4ed8; }}
+    .card-value.saldo-negativo {{ color: #b91c1c; }}
+    .secao {{
+      margin-top: 22px;
+    }}
+    .secao h2 {{
+      margin: 0 0 10px;
+      font-size: 17px;
+      color: #1e293b;
+    }}
     table {{
       width: 100%;
       border-collapse: collapse;
       margin-top: 8px;
       font-size: 13px;
+      border: 1px solid #dbe4ff;
+      border-radius: 10px;
+      overflow: hidden;
     }}
     th, td {{
-      border: 1px solid #e2e8f0;
+      border-bottom: 1px solid #e2e8f0;
       padding: 8px;
       vertical-align: top;
     }}
+    td {{
+      background: #ffffff;
+    }}
+    tr:nth-child(even) td {{
+      background: #f8fafc;
+    }}
     th {{
-      background: #f1f5f9;
+      background: #eff6ff;
       text-align: left;
       font-weight: 600;
+      color: #1e3a8a;
     }}
-    .secao {{
-      margin-top: 22px;
+    .col-data {{
+      width: 94px;
+      color: #334155;
+      font-weight: 600;
+      white-space: nowrap;
+    }}
+    .tx-desc {{
+      font-weight: 600;
+      color: #0f172a;
+      margin-bottom: 4px;
+    }}
+    .tx-meta {{
+      font-size: 11px;
+      color: #64748b;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }}
+    .cell-right {{
+      text-align: right;
+      white-space: nowrap;
+    }}
+    .cell-center {{
+      text-align: center;
+    }}
+    .tx-valor {{
+      font-weight: 700;
+    }}
+    .valor-entrada {{
+      color: #0f766e;
+    }}
+    .valor-saida {{
+      color: #b91c1c;
+    }}
+    .pill {{
+      display: inline-flex;
+      align-items: center;
+      border-radius: 999px;
+      padding: 3px 9px;
+      font-size: 11px;
+      font-weight: 700;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }}
+    .pill-entrada {{
+      color: #0f766e;
+      background: #ccfbf1;
+      border-color: #99f6e4;
+    }}
+    .pill-saida {{
+      color: #b91c1c;
+      background: #fee2e2;
+      border-color: #fecaca;
+    }}
+    .pill-status-ok {{
+      color: #14532d;
+      background: #dcfce7;
+      border-color: #bbf7d0;
+    }}
+    .pill-status-warn {{
+      color: #92400e;
+      background: #fef3c7;
+      border-color: #fde68a;
+    }}
+    .pill-status-muted {{
+      color: #7f1d1d;
+      background: #fee2e2;
+      border-color: #fecaca;
+    }}
+    .pill-status-neutral {{
+      color: #1e3a8a;
+      background: #dbeafe;
+      border-color: #bfdbfe;
     }}
     .comprovante-bloco {{
-      border: 1px solid #e2e8f0;
-      border-radius: 8px;
-      padding: 10px;
+      border: 1px solid #dbe4ff;
+      border-radius: 10px;
+      padding: 12px;
       margin-bottom: 10px;
-      background: #fafafa;
+      background: #f8fafc;
     }}
     .comprovante-bloco h4 {{
       margin: 0 0 6px;
       font-size: 14px;
+      color: #0f172a;
+    }}
+    .comprovante-bloco ul {{
+      margin: 0;
+      padding-left: 18px;
+    }}
+    .comprovante-bloco li {{
+      font-size: 12px;
+      margin: 4px 0;
+      color: #334155;
+    }}
+    .rodape {{
+      padding: 14px 24px 18px;
+      border-top: 1px solid #e2e8f0;
+      background: #f8fafc;
+      color: #64748b;
+      font-size: 11px;
+    }}
+    .assinatura-bloco {{
+      margin-top: 28px;
+      display: flex;
+      justify-content: flex-end;
+    }}
+    .assinatura-box {{
+      width: min(360px, 100%);
+      text-align: center;
+      color: #334155;
+    }}
+    .assinatura-imagem {{
+      max-width: 100%;
+      max-height: 80px;
+      object-fit: contain;
+      margin-bottom: 6px;
+    }}
+    .assinatura-linha {{
+      border-top: 1px solid #94a3b8;
+      margin: 8px 0 6px;
+    }}
+    .assinatura-nome {{
+      font-size: 13px;
+      font-weight: 700;
+      color: #0f172a;
+    }}
+    .assinatura-cargo {{
+      font-size: 12px;
+      color: #64748b;
+      margin-top: 3px;
     }}
     @media print {{
-      body {{ padding: 8mm; }}
+      body {{
+        padding: 0;
+        background: #fff;
+      }}
+      .relatorio {{
+        max-width: none;
+        width: 100%;
+        margin: 0;
+        border: none;
+        border-radius: 0;
+        box-shadow: none;
+      }}
       .no-print {{ display: none; }}
-      .cards {{ page-break-inside: avoid; }}
-      table {{ page-break-inside: auto; }}
+      .header {{
+        -webkit-print-color-adjust: exact;
+        print-color-adjust: exact;
+      }}
+      .cards {{
+        page-break-inside: avoid;
+      }}
+      .assinatura-bloco {{
+        page-break-inside: avoid;
+      }}
+      table {{
+        page-break-inside: auto;
+      }}
       tr {{ page-break-inside: avoid; page-break-after: auto; }}
+    }}
+    @media (max-width: 760px) {{
+      .cards {{
+        grid-template-columns: 1fr;
+      }}
+      .header-top {{
+        flex-direction: column;
+        align-items: flex-start;
+      }}
+      .toolbar {{
+        justify-content: stretch;
+        flex-wrap: wrap;
+      }}
+      .btn {{
+        width: 100%;
+      }}
     }}
   </style>
 </head>
 <body>
-  <h1>Extrato Financeiro - {html.escape(mes_ref)}</h1>
-  <div class="meta">
-    <div>Período: {html.escape(inicio_br)} até {html.escape(fim_br)}</div>
-    <div>Gerado em: {html.escape(_format_date_br(gerado_em))} {html.escape(gerado_em[11:16] if len(gerado_em) >= 16 else '')}</div>
-    <div>Total de transações: {int(resumo.get('total_transacoes') or 0)} | Comprovantes de saída: {int(resumo.get('total_comprovantes_saida') or 0)}</div>
-  </div>
-
-  <div class="cards">
-    <div class="card">
-      <div class="card-label">Entradas</div>
-      <div class="card-value entrada">{html.escape(entradas_fmt)}</div>
+  <div class="relatorio">
+    <div class="header">
+      <div class="header-top">
+        <div class="brand-wrap">
+          {logo_markup}
+          <div class="brand">{html.escape(workspace_nome)} • Relatorio Financeiro</div>
+        </div>
+        <div class="badge-mes">{html.escape(mes_ref)}</div>
+      </div>
+      <h1 class="titulo">Extrato Mensal</h1>
+      <div class="subtitulo">Periodo: {html.escape(inicio_br)} ate {html.escape(fim_br)}</div>
     </div>
-    <div class="card">
-      <div class="card-label">Saídas</div>
-      <div class="card-value saida">{html.escape(saidas_fmt)}</div>
-    </div>
-    <div class="card">
-      <div class="card-label">Saldo do Mês</div>
-      <div class="card-value saldo">{html.escape(saldo_fmt)}</div>
-    </div>
-  </div>
 
-  <div class="secao">
-    <h2>Histórico de Transações</h2>
-    <table>
-      <thead>
-        <tr>
-          <th>Data</th>
-          <th>Descrição</th>
-          <th>Tipo</th>
-          <th>Categoria</th>
-          <th>Processo</th>
-          <th>Status</th>
-          <th style="text-align:right;">Valor</th>
-        </tr>
-      </thead>
-      <tbody>
-        {''.join(linhas_transacoes)}
-      </tbody>
-    </table>
-  </div>
+    <div class="toolbar no-print">
+      <button class="btn btn-secondary" onclick="window.print()">Imprimir / Salvar PDF</button>
+      <button class="btn btn-primary" onclick="window.scrollTo({{ top: 0, behavior: 'smooth' }})">Voltar ao topo</button>
+    </div>
 
-  <div class="secao">
-    <h2>Comprovantes de Saída</h2>
-    {''.join(linhas_comprovantes)}
+    <div class="conteudo">
+      <div class="meta">
+        <div>Gerado em: {html.escape(gerado_em_label)}</div>
+        <div>Total de transacoes: {int(resumo.get('total_transacoes') or 0)} | Comprovantes de saida: {int(resumo.get('total_comprovantes_saida') or 0)}</div>
+      </div>
+
+      <div class="cards">
+        <div class="card">
+          <div class="card-label">Entradas</div>
+          <div class="card-value entrada">{html.escape(entradas_fmt)}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Saidas</div>
+          <div class="card-value saida">{html.escape(saidas_fmt)}</div>
+        </div>
+        <div class="card">
+          <div class="card-label">Saldo do Mes</div>
+          <div class="card-value saldo {saldo_class}">{html.escape(saldo_fmt)}</div>
+        </div>
+      </div>
+
+      <div class="secao">
+        <h2>Historico de Transacoes</h2>
+        <table>
+          <thead>
+            <tr>
+              <th>Data</th>
+              <th>Descricao</th>
+              <th>Tipo</th>
+              <th>Status</th>
+              <th style="text-align:right;">Valor</th>
+              <th style="text-align:center;">Docs</th>
+            </tr>
+          </thead>
+          <tbody>
+            {''.join(linhas_transacoes)}
+          </tbody>
+        </table>
+      </div>
+
+      <div class="secao">
+        <h2>Comprovantes de Saida</h2>
+        {''.join(linhas_comprovantes)}
+      </div>
+
+      <div class="assinatura-bloco">
+        <div class="assinatura-box">
+          {assinatura_imagem_markup}
+          <div class="assinatura-linha"></div>
+          <div class="assinatura-nome">{html.escape(assinatura_nome)}</div>
+          {'<div class="assinatura-cargo">' + html.escape(assinatura_cargo) + '</div>' if assinatura_cargo else ''}
+        </div>
+      </div>
+    </div>
+
+    <div class="rodape">
+      Documento gerado automaticamente por {html.escape(workspace_nome)} via JurisPocket.
+    </div>
   </div>
 </body>
 </html>

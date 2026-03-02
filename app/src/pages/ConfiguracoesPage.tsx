@@ -4,6 +4,7 @@ import { useLocation } from 'react-router-dom';
 import {
   ArrowRight,
   Bell,
+  Building2,
   CheckCircle2,
   Crown,
   Loader2,
@@ -13,6 +14,8 @@ import {
   Save,
   Shield,
   Sparkles,
+  Trash2,
+  Upload,
   User,
 } from 'lucide-react';
 import { Button } from '@/components/ui/button';
@@ -54,13 +57,22 @@ export function ConfiguracoesPage() {
   const location = useLocation();
   const [isSaving, setIsSaving] = useState(false);
   const [isUploadingAvatar, setIsUploadingAvatar] = useState(false);
+  const [isUploadingLogo, setIsUploadingLogo] = useState(false);
+  const [isUploadingAssinatura, setIsUploadingAssinatura] = useState(false);
   const [isPlanDialogOpen, setIsPlanDialogOpen] = useState(false);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
+  const logoInputRef = useRef<HTMLInputElement | null>(null);
+  const assinaturaInputRef = useRef<HTMLInputElement | null>(null);
   const [formData, setFormData] = useState({
     nome: '',
     email: '',
     telefone: '',
     oab: '',
+  });
+  const [brandingData, setBrandingData] = useState({
+    workspaceNome: '',
+    assinaturaNome: '',
+    assinaturaCargo: '',
   });
   const [notificacoes, setNotificacoes] = useState({
     whatsapp: true,
@@ -82,6 +94,14 @@ export function ConfiguracoesPage() {
   }, [user]);
 
   useEffect(() => {
+    setBrandingData({
+      workspaceNome: workspace?.nome || '',
+      assinaturaNome: workspace?.assinatura_nome || '',
+      assinaturaCargo: workspace?.assinatura_cargo || '',
+    });
+  }, [workspace?.nome, workspace?.assinatura_nome, workspace?.assinatura_cargo]);
+
+  useEffect(() => {
     const params = new URLSearchParams(location.search);
     const shouldOpen = params.get('planos');
     if (shouldOpen === '1' || shouldOpen === 'true') {
@@ -98,10 +118,24 @@ export function ConfiguracoesPage() {
         alerta_whatsapp: notificacoes.whatsapp,
         resumo_diario: notificacoes.resumoDiario,
       });
+
+      if (user?.role === 'admin' || user?.role === 'superadmin') {
+        const workspaceNome = brandingData.workspaceNome.trim();
+        if (!workspaceNome) {
+          toast.error('Informe o nome do escritório');
+          return;
+        }
+        await auth.updateWorkspaceBranding({
+          workspace_nome: workspaceNome,
+          assinatura_nome: brandingData.assinaturaNome.trim(),
+          assinatura_cargo: brandingData.assinaturaCargo.trim(),
+        });
+      }
+
       await refreshUser();
       toast.success('Configuracoes salvas com sucesso!');
-    } catch {
-      toast.error('Erro ao salvar configuracoes');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Erro ao salvar configuracoes');
     } finally {
       setIsSaving(false);
     }
@@ -130,8 +164,113 @@ export function ConfiguracoesPage() {
     }
   };
 
+  const isWorkspaceAdmin = user?.role === 'admin' || user?.role === 'superadmin';
+
+  const resolveAssetUrl = (raw?: string | null) => {
+    const value = (raw || '').trim();
+    if (!value) return '';
+    if (/^https?:\/\//i.test(value)) return value;
+    if (value.startsWith('/')) return `${API_BASE_URL}${value}`;
+    return value;
+  };
+
+  const validateBrandingImage = (file: File) => {
+    const allowedTypes = ['image/png', 'image/jpeg', 'image/jpg', 'image/webp'];
+    const allowedExtensions = ['png', 'jpg', 'jpeg', 'webp'];
+    const ext = file.name.split('.').pop()?.toLowerCase() || '';
+    if (!allowedTypes.includes(file.type) && !allowedExtensions.includes(ext)) {
+      toast.error('Formato não suportado. Use PNG, JPG ou WEBP');
+      return false;
+    }
+    if (file.size > 5 * 1024 * 1024) {
+      toast.error('Imagem muito grande. Máximo de 5MB');
+      return false;
+    }
+    return true;
+  };
+
+  const handleSelecionarLogo = () => {
+    if (!isWorkspaceAdmin) return;
+    logoInputRef.current?.click();
+  };
+
+  const handleUploadLogo = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!validateBrandingImage(file)) {
+      if (logoInputRef.current) logoInputRef.current.value = '';
+      return;
+    }
+    try {
+      setIsUploadingLogo(true);
+      await auth.uploadWorkspaceLogo(file);
+      await refreshUser();
+      toast.success('Logo atualizada com sucesso!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Erro ao enviar logo');
+    } finally {
+      if (logoInputRef.current) logoInputRef.current.value = '';
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleRemoverLogo = async () => {
+    if (!isWorkspaceAdmin) return;
+    try {
+      setIsUploadingLogo(true);
+      await auth.deleteWorkspaceLogo();
+      await refreshUser();
+      toast.success('Logo removida');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Erro ao remover logo');
+    } finally {
+      setIsUploadingLogo(false);
+    }
+  };
+
+  const handleSelecionarAssinaturaImagem = () => {
+    if (!isWorkspaceAdmin) return;
+    assinaturaInputRef.current?.click();
+  };
+
+  const handleUploadAssinaturaImagem = async (event: ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    if (!validateBrandingImage(file)) {
+      if (assinaturaInputRef.current) assinaturaInputRef.current.value = '';
+      return;
+    }
+    try {
+      setIsUploadingAssinatura(true);
+      await auth.uploadWorkspaceAssinaturaImagem(file);
+      await refreshUser();
+      toast.success('Assinatura enviada com sucesso!');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Erro ao enviar assinatura');
+    } finally {
+      if (assinaturaInputRef.current) assinaturaInputRef.current.value = '';
+      setIsUploadingAssinatura(false);
+    }
+  };
+
+  const handleRemoverAssinaturaImagem = async () => {
+    if (!isWorkspaceAdmin) return;
+    try {
+      setIsUploadingAssinatura(true);
+      await auth.deleteWorkspaceAssinaturaImagem();
+      await refreshUser();
+      toast.success('Imagem de assinatura removida');
+    } catch (error: any) {
+      toast.error(error?.response?.data?.error || 'Erro ao remover assinatura');
+    } finally {
+      setIsUploadingAssinatura(false);
+    }
+  };
+
   const initials = formData.nome?.split(' ').map((n) => n[0]).join('').slice(0, 2).toUpperCase() || '?';
-  const avatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
+  const avatarUrl = resolveAssetUrl(user?.avatar_url);
+  const logoUrl = resolveAssetUrl(workspace?.logo_url);
+  const assinaturaImagemUrl = resolveAssetUrl(workspace?.assinatura_imagem_url);
   const planoNome = workspace?.plano_nome || getPlanLabel(workspace?.plano);
   const planoCodigo = (workspace?.plano || 'gratuito').toLowerCase();
   const planosDisponiveis = useMemo(
@@ -279,6 +418,150 @@ export function ConfiguracoesPage() {
         initial={{ opacity: 0, y: 20 }}
         animate={{ opacity: 1, y: 0 }}
         transition={{ delay: 0.2 }}
+        className="glass-card p-6 lg:p-8"
+      >
+        <h3 className="font-semibold mb-4 flex items-center gap-2">
+          <Building2 className="h-4 w-4" /> Identidade do Extrato
+        </h3>
+        <p className="text-sm text-muted-foreground mb-4">
+          Configure a logo e a assinatura que aparecem no extrato de impressão/PDF.
+        </p>
+
+        <div className="space-y-2 mb-4">
+          <Label>Nome do escritório / workspace</Label>
+          <Input
+            value={brandingData.workspaceNome}
+            onChange={(e) => setBrandingData((prev) => ({ ...prev, workspaceNome: e.target.value }))}
+            className="bg-secondary border-border"
+            placeholder="Ex.: Silva & Associados"
+            disabled={!isWorkspaceAdmin}
+          />
+        </div>
+
+        <div className="grid gap-4 md:grid-cols-2">
+          <div className="rounded-lg border border-border/70 bg-secondary/20 p-4">
+            <p className="text-sm font-medium mb-3">Logo do escritório</p>
+            <div className="h-24 rounded-md border border-dashed border-border/80 bg-background/40 flex items-center justify-center overflow-hidden">
+              {logoUrl ? (
+                <img src={logoUrl} alt="Logo do workspace" className="h-full w-full object-contain p-2" />
+              ) : (
+                <span className="text-xs text-muted-foreground">Sem logo cadastrada</span>
+              )}
+            </div>
+            <input
+              ref={logoInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden"
+              onChange={handleUploadLogo}
+            />
+            <div className="mt-3 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-border text-muted-foreground"
+                onClick={handleSelecionarLogo}
+                disabled={!isWorkspaceAdmin || isUploadingLogo}
+              >
+                {isUploadingLogo ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                {logoUrl ? 'Trocar logo' : 'Enviar logo'}
+              </Button>
+              {logoUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  onClick={handleRemoverLogo}
+                  disabled={!isWorkspaceAdmin || isUploadingLogo}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Remover
+                </Button>
+              )}
+            </div>
+          </div>
+
+          <div className="rounded-lg border border-border/70 bg-secondary/20 p-4">
+            <p className="text-sm font-medium mb-3">Imagem da assinatura</p>
+            <div className="h-24 rounded-md border border-dashed border-border/80 bg-background/40 flex items-center justify-center overflow-hidden">
+              {assinaturaImagemUrl ? (
+                <img src={assinaturaImagemUrl} alt="Assinatura" className="h-full w-full object-contain p-2" />
+              ) : (
+                <span className="text-xs text-muted-foreground">Sem assinatura em imagem</span>
+              )}
+            </div>
+            <input
+              ref={assinaturaInputRef}
+              type="file"
+              accept="image/png,image/jpeg,image/jpg,image/webp"
+              className="hidden"
+              onChange={handleUploadAssinaturaImagem}
+            />
+            <div className="mt-3 flex gap-2">
+              <Button
+                type="button"
+                variant="outline"
+                size="sm"
+                className="border-border text-muted-foreground"
+                onClick={handleSelecionarAssinaturaImagem}
+                disabled={!isWorkspaceAdmin || isUploadingAssinatura}
+              >
+                {isUploadingAssinatura ? <Loader2 className="mr-2 h-4 w-4 animate-spin" /> : <Upload className="mr-2 h-4 w-4" />}
+                {assinaturaImagemUrl ? 'Trocar assinatura' : 'Enviar assinatura'}
+              </Button>
+              {assinaturaImagemUrl && (
+                <Button
+                  type="button"
+                  variant="outline"
+                  size="sm"
+                  className="border-red-500/30 text-red-400 hover:bg-red-500/10"
+                  onClick={handleRemoverAssinaturaImagem}
+                  disabled={!isWorkspaceAdmin || isUploadingAssinatura}
+                >
+                  <Trash2 className="mr-2 h-4 w-4" />
+                  Remover
+                </Button>
+              )}
+            </div>
+          </div>
+        </div>
+
+        <div className="grid gap-4 sm:grid-cols-2 mt-4">
+          <div className="space-y-2">
+            <Label>Nome na assinatura</Label>
+            <Input
+              value={brandingData.assinaturaNome}
+              onChange={(e) => setBrandingData((prev) => ({ ...prev, assinaturaNome: e.target.value }))}
+              className="bg-secondary border-border"
+              placeholder={workspace?.nome || 'Nome do responsável'}
+              disabled={!isWorkspaceAdmin}
+            />
+          </div>
+          <div className="space-y-2">
+            <Label>Cargo</Label>
+            <Input
+              value={brandingData.assinaturaCargo}
+              onChange={(e) => setBrandingData((prev) => ({ ...prev, assinaturaCargo: e.target.value }))}
+              className="bg-secondary border-border"
+              placeholder="Advogado(a), Sócio(a), Financeiro..."
+              disabled={!isWorkspaceAdmin}
+            />
+          </div>
+        </div>
+
+        {!isWorkspaceAdmin && (
+          <p className="mt-3 text-xs text-muted-foreground">
+            Somente admins do workspace podem alterar nome, logo e assinatura.
+          </p>
+        )}
+      </motion.div>
+
+      <motion.div
+        initial={{ opacity: 0, y: 20 }}
+        animate={{ opacity: 1, y: 0 }}
+        transition={{ delay: 0.3 }}
         className="glass-card p-6 lg:p-8"
       >
         <h3 className="font-semibold mb-4 flex items-center gap-2">

@@ -771,7 +771,8 @@ export function FinanceiroPage() {
               <div>
                 <p className="text-sm text-blue-400">Ações do Extrato</p>
                 <p className="text-xs text-muted-foreground">
-                  Inclui cards do mês, histórico de transações e comprovantes de saída (se houver).
+                  Inclui cards do mês, histórico de transações, comprovantes de saída e identidade visual
+                  (logo/assinatura) definida em Configurações.
                 </p>
               </div>
               <div className="flex flex-col gap-2 sm:flex-row">
@@ -781,7 +782,7 @@ export function FinanceiroPage() {
                   className="w-full border-blue-400/40 text-blue-300 hover:bg-blue-500/20 sm:w-auto"
                 >
                   <Printer className="w-4 h-4 mr-2" />
-                  Abrir para imprimir / PDF
+                  Visualizar extrato bonitinho (PDF)
                 </Button>
                 <Button
                   onClick={handleDownloadComprovantesMes}

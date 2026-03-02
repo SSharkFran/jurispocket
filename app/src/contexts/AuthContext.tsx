@@ -25,6 +25,10 @@ interface Workspace {
   max_storage_mb: number;
   plano_nome?: string;
   limites?: string;
+  logo_url?: string | null;
+  assinatura_nome?: string | null;
+  assinatura_cargo?: string | null;
+  assinatura_imagem_url?: string | null;
 }
 
 interface AuthContextType {
