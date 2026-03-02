@@ -194,6 +194,10 @@ export const dashboard = {
 export const ia = {
   chat: (mensagem: string, sessionId?: string) =>
     api.post('/ia/chat', { mensagem, session_id: sessionId }),
+  confirmarAcao: (acaoId: number, sessionId?: string) =>
+    api.post('/ia/chat', { mensagem: `CONFIRMAR ACAO ${acaoId}`, session_id: sessionId }),
+  cancelarAcao: (acaoId: number, sessionId?: string) =>
+    api.post('/ia/chat', { mensagem: `CANCELAR ACAO ${acaoId}`, session_id: sessionId }),
   historico: (sessionId?: string) =>
     api.get('/ia/historico', { params: { session_id: sessionId } }),
   auditoria: (params?: { status?: string; limit?: number }) =>

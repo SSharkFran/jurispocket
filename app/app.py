@@ -4667,9 +4667,8 @@ Parece que você atingiu o limite da sua API Key atual.
             )
 
             resposta = (
-                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
-                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
-                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+                f"Prévia da ação solicitada:\n{preview}\n\n"
+                "Use os botões de confirmação abaixo para confirmar ou recusar."
             )
             return {
                 'ok': True,
@@ -4742,9 +4741,8 @@ Parece que você atingiu o limite da sua API Key atual.
             )
 
             resposta = (
-                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
-                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
-                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+                f"Prévia da ação solicitada:\n{preview}\n\n"
+                "Use os botões de confirmação abaixo para confirmar ou recusar."
             )
             return {
                 'ok': True,
@@ -4834,9 +4832,8 @@ Parece que você atingiu o limite da sua API Key atual.
             )
 
             resposta = (
-                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
-                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
-                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+                f"Prévia da ação solicitada:\n{preview}\n\n"
+                "Use os botões de confirmação abaixo para confirmar ou recusar."
             )
             return {
                 'ok': True,
@@ -4942,9 +4939,8 @@ Parece que você atingiu o limite da sua API Key atual.
             )
 
             resposta = (
-                f"Prévia da ação #{acao['id']}:\n{preview}\n\n"
-                f"Para executar, digite `{acao['comando_confirmacao']}`.\n"
-                f"Para cancelar, digite `{acao['comando_cancelamento']}`."
+                f"Prévia da ação solicitada:\n{preview}\n\n"
+                "Use os botões de confirmação abaixo para confirmar ou recusar."
             )
             return {
                 'ok': True,

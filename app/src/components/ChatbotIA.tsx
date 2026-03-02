@@ -5,25 +5,11 @@ import { Input } from '@/components/ui/input';
 import { ScrollArea } from '@/components/ui/scroll-area';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Card } from '@/components/ui/card';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from '@/components/ui/dialog';
-import { Bot, Send, Sparkles, Loader2 } from 'lucide-react';
+import { Dialog, DialogContent, DialogHeader, DialogTitle } from '@/components/ui/dialog';
+import { Bot, Send, Sparkles, Loader2, Check, X } from 'lucide-react';
 
-// ============================================================================
-// CONFIGURAÇÃO DO COPILOTO JURÍDICO
-// ============================================================================
-
-// Nome do assistente
 const ASSISTENTE_NOME = 'Copiloto Jurídico';
-
-// Subtítulo abaixo do nome
 const ASSISTENTE_SUBTITULO = 'Assistente IA do JurisGestão';
-
-// Mensagem de boas-vindas (primeira mensagem do bot)
 const MENSAGEM_BOAS_VINDAS = `👋 Olá! Sou o **${ASSISTENTE_NOME}**.
 
 Sou seu assistente virtual especializado em gestão jurídica. Posso ajudar você a:
@@ -39,21 +25,34 @@ Sou seu assistente virtual especializado em gestão jurídica. Posso ajudar voc�
 • ⚖️ **Tirar dúvidas** sobre seus casos
 • 📝 **Sugerir ações** e organizar sua agenda
 
-Quando eu preparar uma ação real, confirme com \`CONFIRMAR ACAO <id>\` ou cancele com \`CANCELAR ACAO <id>\`.
+Quando eu preparar uma ação real, você pode confirmar ou recusar pelos botões logo abaixo da mensagem.
 
 Como posso ser útil para você hoje?`;
-
-// Texto do footer (quem fornece a IA)
 const FOOTER_TEXT = 'Powered by IA • Llama 3.3';
 
-// ============================================================================
+interface PendingAction {
+  id: number;
+  action_type?: string;
+  preview?: string;
+  status?: string;
+}
+
+interface IAChatResponse {
+  resposta?: string;
+  session_id?: string;
+  acao_pendente?: PendingAction;
+  status?: string;
+}
 
 interface Message {
   id: string;
   role: 'user' | 'assistant';
   content: string;
   timestamp: Date;
+  pendingAction?: PendingAction;
 }
+
+const createMessageId = () => `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
 
 export function ChatbotIA() {
   const [isOpen, setIsOpen] = useState(false);
@@ -76,43 +75,123 @@ export function ChatbotIA() {
     }
   }, [messages]);
 
+  const appendAssistantMessage = (data: IAChatResponse) => {
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: 'assistant',
+        content: data?.resposta || 'Não consegui gerar uma resposta agora.',
+        timestamp: new Date(),
+        pendingAction: data?.acao_pendente
+          ? {
+              ...data.acao_pendente,
+              status: String(data.acao_pendente.status || 'pending').toLowerCase(),
+            }
+          : undefined,
+      },
+    ]);
+  };
+
+  const atualizarStatusAcao = (actionId: number, status: string) => {
+    setMessages((prev) =>
+      prev.map((msg) => {
+        if (!msg.pendingAction || msg.pendingAction.id !== actionId) return msg;
+        return {
+          ...msg,
+          pendingAction: {
+            ...msg.pendingAction,
+            status,
+          },
+        };
+      })
+    );
+  };
+
   const handleSend = async () => {
-    if (!input.trim() || isLoading) return;
+    const inputLimpo = input.trim();
+    if (!inputLimpo || isLoading) return;
 
-    const userMessage: Message = {
-      id: Date.now().toString(),
-      role: 'user',
-      content: input,
-      timestamp: new Date(),
-    };
-
-    setMessages((prev) => [...prev, userMessage]);
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: 'user',
+        content: inputLimpo,
+        timestamp: new Date(),
+      },
+    ]);
     setInput('');
     setIsLoading(true);
 
     try {
-      const response = await ia.chat(input, sessionId);
-      
+      const response = await ia.chat(inputLimpo, sessionId);
+      if (response.data.session_id) {
+        setSessionId(response.data.session_id);
+      }
+      appendAssistantMessage(response.data);
+    } catch (error) {
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          role: 'assistant',
+          content: '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.',
+          timestamp: new Date(),
+        },
+      ]);
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  const handlePendingAction = async (actionId: number, decision: 'confirmar' | 'cancelar') => {
+    if (isLoading) return;
+
+    const userConfirmationText =
+      decision === 'confirmar' ? 'Confirmar ação sugerida.' : 'Recusar ação sugerida.';
+    setMessages((prev) => [
+      ...prev,
+      {
+        id: createMessageId(),
+        role: 'user',
+        content: userConfirmationText,
+        timestamp: new Date(),
+      },
+    ]);
+
+    atualizarStatusAcao(actionId, 'processing');
+    setIsLoading(true);
+
+    try {
+      const response =
+        decision === 'confirmar'
+          ? await ia.confirmarAcao(actionId, sessionId)
+          : await ia.cancelarAcao(actionId, sessionId);
+
       if (response.data.session_id) {
         setSessionId(response.data.session_id);
       }
 
-      const assistantMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: response.data.resposta,
-        timestamp: new Date(),
-      };
+      const statusResposta = String(response.data?.status || '').toLowerCase();
+      if (statusResposta === 'success') {
+        atualizarStatusAcao(actionId, decision === 'confirmar' ? 'executed' : 'canceled');
+      } else {
+        atualizarStatusAcao(actionId, 'pending');
+      }
 
-      setMessages((prev) => [...prev, assistantMessage]);
+      appendAssistantMessage(response.data);
     } catch (error) {
-      const errorMessage: Message = {
-        id: (Date.now() + 1).toString(),
-        role: 'assistant',
-        content: '❌ Desculpe, ocorreu um erro ao processar sua mensagem. Tente novamente.',
-        timestamp: new Date(),
-      };
-      setMessages((prev) => [...prev, errorMessage]);
+      atualizarStatusAcao(actionId, 'pending');
+      setMessages((prev) => [
+        ...prev,
+        {
+          id: createMessageId(),
+          role: 'assistant',
+          content: '❌ Não foi possível processar sua confirmação agora. Tente novamente.',
+          timestamp: new Date(),
+        },
+      ]);
     } finally {
       setIsLoading(false);
     }
@@ -125,17 +204,15 @@ export function ChatbotIA() {
     }
   };
 
-  const formatMessage = (content: string) => {
-    return content
+  const formatMessage = (content: string) =>
+    content
       .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
       .replace(/\*(.*?)\*/g, '<em>$1</em>')
       .replace(/`(.*?)`/g, '<code class="bg-slate-800 px-1 py-0.5 rounded text-xs">$1</code>')
       .replace(/\n/g, '<br />');
-  };
 
   return (
     <>
-      {/* Floating Button */}
       <Button
         onClick={() => setIsOpen(true)}
         className={`fixed bottom-6 right-6 w-14 h-14 rounded-full bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 shadow-lg shadow-cyan-500/30 z-50 transition-all duration-300 ${
@@ -145,10 +222,8 @@ export function ChatbotIA() {
         <Bot className="w-6 h-6 text-white" />
       </Button>
 
-      {/* Chat Dialog */}
       <Dialog open={isOpen} onOpenChange={setIsOpen}>
         <DialogContent className="sm:max-w-md bg-slate-900 border border-white/10 p-0 overflow-hidden [&>button]:hidden">
-          {/* Header sem botão de fechar duplicado */}
           <DialogHeader className="bg-gradient-to-r from-cyan-500/20 to-blue-500/20 p-4 border-b border-white/10">
             <div className="flex items-center gap-3">
               <div className="w-10 h-10 rounded-full bg-gradient-to-br from-cyan-500 to-blue-600 flex items-center justify-center">
@@ -161,41 +236,72 @@ export function ChatbotIA() {
             </div>
           </DialogHeader>
 
-          {/* Messages */}
           <ScrollArea className="h-80 px-4 py-4" ref={scrollRef}>
             <div className="space-y-4">
-              {messages.map((message) => (
-                <div
-                  key={message.id}
-                  className={`flex gap-3 ${
-                    message.role === 'user' ? 'flex-row-reverse' : ''
-                  }`}
-                >
-                  <Avatar className="w-8 h-8 flex-shrink-0">
-                    {message.role === 'user' ? (
-                      <AvatarFallback className="bg-slate-700 text-slate-300 text-xs">
-                        EU
-                      </AvatarFallback>
-                    ) : (
-                      <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-xs">
-                        <Bot className="w-4 h-4" />
-                      </AvatarFallback>
-                    )}
-                  </Avatar>
-                  <Card
-                    className={`max-w-[80%] p-3 text-sm ${
-                      message.role === 'user'
-                        ? 'bg-cyan-500/20 border-cyan-500/30 text-white'
-                        : 'bg-slate-800/50 border-white/10 text-slate-200'
-                    }`}
+              {messages.map((message) => {
+                const pendingStatus = String(message.pendingAction?.status || 'pending').toLowerCase();
+                const showPendingButtons =
+                  message.role === 'assistant' &&
+                  !!message.pendingAction &&
+                  (pendingStatus === 'pending' || pendingStatus === 'processing');
+
+                return (
+                  <div
+                    key={message.id}
+                    className={`flex gap-3 ${message.role === 'user' ? 'flex-row-reverse' : ''}`}
                   >
-                    <div
-                      dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
-                      className="prose prose-invert prose-sm max-w-none"
-                    />
-                  </Card>
-                </div>
-              ))}
+                    <Avatar className="w-8 h-8 flex-shrink-0">
+                      {message.role === 'user' ? (
+                        <AvatarFallback className="bg-slate-700 text-slate-300 text-xs">EU</AvatarFallback>
+                      ) : (
+                        <AvatarFallback className="bg-gradient-to-br from-cyan-500 to-blue-600 text-white text-xs">
+                          <Bot className="w-4 h-4" />
+                        </AvatarFallback>
+                      )}
+                    </Avatar>
+                    <Card
+                      className={`max-w-[80%] p-3 text-sm ${
+                        message.role === 'user'
+                          ? 'bg-cyan-500/20 border-cyan-500/30 text-white'
+                          : 'bg-slate-800/50 border-white/10 text-slate-200'
+                      }`}
+                    >
+                      <div
+                        dangerouslySetInnerHTML={{ __html: formatMessage(message.content) }}
+                        className="prose prose-invert prose-sm max-w-none"
+                      />
+
+                      {showPendingButtons && (
+                        <div className="mt-3 flex flex-wrap gap-2">
+                          <Button
+                            size="sm"
+                            className="h-8 px-3 bg-emerald-600 hover:bg-emerald-500 text-white"
+                            disabled={isLoading || pendingStatus === 'processing'}
+                            onClick={() => handlePendingAction(message.pendingAction!.id, 'confirmar')}
+                          >
+                            {pendingStatus === 'processing' ? (
+                              <Loader2 className="w-3.5 h-3.5 mr-1 animate-spin" />
+                            ) : (
+                              <Check className="w-3.5 h-3.5 mr-1" />
+                            )}
+                            Confirmar
+                          </Button>
+                          <Button
+                            size="sm"
+                            variant="outline"
+                            className="h-8 px-3 border-red-500/40 text-red-300 hover:bg-red-500/10"
+                            disabled={isLoading || pendingStatus === 'processing'}
+                            onClick={() => handlePendingAction(message.pendingAction!.id, 'cancelar')}
+                          >
+                            <X className="w-3.5 h-3.5 mr-1" />
+                            Recusar
+                          </Button>
+                        </div>
+                      )}
+                    </Card>
+                  </div>
+                );
+              })}
               {isLoading && (
                 <div className="flex gap-3">
                   <Avatar className="w-8 h-8 flex-shrink-0">
@@ -211,7 +317,6 @@ export function ChatbotIA() {
             </div>
           </ScrollArea>
 
-          {/* Input */}
           <div className="p-4 border-t border-white/10 bg-slate-900/50">
             <div className="flex gap-2">
               <Input
@@ -227,16 +332,10 @@ export function ChatbotIA() {
                 disabled={!input.trim() || isLoading}
                 className="bg-gradient-to-r from-cyan-500 to-blue-600 hover:from-cyan-400 hover:to-blue-500 text-white"
               >
-                {isLoading ? (
-                  <Loader2 className="w-4 h-4 animate-spin" />
-                ) : (
-                  <Send className="w-4 h-4" />
-                )}
+                {isLoading ? <Loader2 className="w-4 h-4 animate-spin" /> : <Send className="w-4 h-4" />}
               </Button>
             </div>
-            <p className="text-xs text-slate-500 mt-2 text-center">
-              {FOOTER_TEXT}
-            </p>
+            <p className="text-xs text-slate-500 mt-2 text-center">{FOOTER_TEXT}</p>
           </div>
         </DialogContent>
       </Dialog>
