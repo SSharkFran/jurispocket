@@ -8985,6 +8985,7 @@ def resumo_financeiro():
         ultimo_dia = monthrange(hoje.year, hoje.month)[1]
         fim = hoje.replace(day=ultimo_dia).strftime('%Y-%m-%d')
     
+    # Movimentação no período selecionado
     # Suporta tanto 'entrada' (novo) quanto 'receita' (legado)
     receitas = db.execute(
         "SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo IN ('entrada', 'receita') AND data BETWEEN ? AND ?",
@@ -8996,6 +8997,21 @@ def resumo_financeiro():
         "SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo IN ('saida', 'despesa') AND data BETWEEN ? AND ?",
         (g.auth['workspace_id'], inicio, fim)
     ).fetchone()['total']
+
+    # Saldo anterior ao período (carregado para o caixa atual)
+    entradas_anteriores = db.execute(
+        "SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo IN ('entrada', 'receita') AND data < ?",
+        (g.auth['workspace_id'], inicio)
+    ).fetchone()['total']
+
+    saidas_anteriores = db.execute(
+        "SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo IN ('saida', 'despesa') AND data < ?",
+        (g.auth['workspace_id'], inicio)
+    ).fetchone()['total']
+
+    saldo_anterior = entradas_anteriores - saidas_anteriores
+    saldo_periodo = receitas - despesas
+    saldo_acumulado = saldo_anterior + saldo_periodo
     
     receitas_pendentes = db.execute(
         "SELECT COALESCE(SUM(valor), 0) as total FROM financeiro WHERE workspace_id = ? AND tipo IN ('entrada', 'receita') AND status = ?",
@@ -9010,10 +9026,15 @@ def resumo_financeiro():
     return jsonify({
         'receitas': receitas,
         'despesas': despesas,
-        'saldo': receitas - despesas,
+        # Mantém "saldo" como saldo atual/acumulado para o frontend.
+        'saldo': saldo_acumulado,
+        'saldo_periodo': saldo_periodo,
+        'saldo_anterior': saldo_anterior,
         'receitas_pendentes': receitas_pendentes,
         'despesas_pendentes': despesas_pendentes,
-        'periodo': periodo
+        'periodo': periodo,
+        'inicio': inicio,
+        'fim': fim,
     })
 
 @app.route('/api/financeiro', methods=['POST'])

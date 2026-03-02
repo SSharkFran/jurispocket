@@ -486,7 +486,7 @@ export function FinanceiroPage() {
           <CardContent className="p-4">
             <div className="flex items-center justify-between">
               <div>
-                <p className="text-muted-foreground text-sm">Saldo</p>
+                <p className="text-muted-foreground text-sm">Saldo Atual</p>
                 <p className={`text-2xl font-bold ${resumo.saldo >= 0 ? 'text-primary' : 'text-red-400'}`}>
                   {formatCurrency(resumo.saldo)}
                 </p>
@@ -951,4 +951,3 @@ export function FinanceiroPage() {
     </div>
   );
 }
-
