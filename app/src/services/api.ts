@@ -20,6 +20,18 @@ api.interceptors.request.use((config) => {
 api.interceptors.response.use(
   (response) => response,
   (error) => {
+    if (error.response?.status === 503 && error.response?.data?.maintenance_mode) {
+      const message =
+        error.response?.data?.error ||
+        error.response?.data?.message ||
+        'Sistema em manutenção no momento.';
+      window.dispatchEvent(
+        new CustomEvent('jurispocket:maintenance-on', {
+          detail: { message },
+        })
+      );
+    }
+
     if (error.response?.status === 401) {
       // Evita loop na tela de auth e notifica a aplicação para encerrar sessão via SPA
       const currentPath = window.location.pathname;
@@ -218,6 +230,10 @@ export const equipe = {
 
 export const dashboard = {
   get: () => api.get('/dashboard'),
+};
+
+export const system = {
+  maintenanceStatus: () => api.get('/maintenance/status'),
 };
 
 export const ia = {

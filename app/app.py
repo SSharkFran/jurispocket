@@ -943,6 +943,7 @@ def init_db():
     # Configurações globais padrão
     configs_padrao = [
         ('modo_manutencao', 'false', 'Coloca o sistema em modo de manutenção'),
+        ('mensagem_manutencao', 'Sistema em manutenção no momento. Tente novamente em alguns minutos.', 'Mensagem exibida para usuários durante manutenção'),
         ('limite_processos_free', '10', 'Limite de processos para plano gratuito'),
         ('limite_clientes_free', '20', 'Limite de clientes para plano gratuito'),
         ('limite_usuarios_free', '2', 'Limite de usuários para plano gratuito'),
@@ -1354,6 +1355,101 @@ def decode_jwt_token(token: str) -> Optional[Dict]:
         return None
     except jwt.InvalidTokenError:
         return None
+
+
+MAINTENANCE_MODE_KEY = 'modo_manutencao'
+MAINTENANCE_MESSAGE_KEY = 'mensagem_manutencao'
+DEFAULT_MAINTENANCE_MESSAGE = 'Sistema em manutenção no momento. Tente novamente em alguns minutos.'
+
+
+def get_maintenance_status(db=None) -> Dict[str, Any]:
+    """Retorna status e mensagem efetiva do modo manutenção."""
+    db = db or get_db()
+
+    enabled = False
+    message = DEFAULT_MAINTENANCE_MESSAGE
+
+    try:
+        rows = db.execute(
+            'SELECT chave, valor FROM configuracoes_globais WHERE chave IN (?, ?)',
+            (MAINTENANCE_MODE_KEY, MAINTENANCE_MESSAGE_KEY)
+        ).fetchall()
+        config_map = {row['chave']: row['valor'] for row in rows}
+        enabled = parse_bool(config_map.get(MAINTENANCE_MODE_KEY))
+        configured_message = str(config_map.get(MAINTENANCE_MESSAGE_KEY) or '').strip()
+        if configured_message:
+            message = configured_message
+    except sqlite3.Error:
+        enabled = False
+
+    return {
+        'enabled': enabled,
+        'message': message,
+    }
+
+
+def request_has_admin_maintenance_bypass(db=None) -> bool:
+    """Permite bypass para admin/superadmin autenticados."""
+    auth_header = request.headers.get('Authorization', '')
+    if not auth_header.startswith('Bearer '):
+        return False
+
+    token = auth_header[7:]
+    payload = decode_jwt_token(token)
+    if not payload:
+        return False
+
+    user_id = payload.get('user_id')
+    if not user_id:
+        return False
+
+    db = db or get_db()
+    user = db.execute('SELECT role FROM users WHERE id = ?', (user_id,)).fetchone()
+    if not user:
+        return False
+
+    role = str(user['role'] or '').strip().lower()
+    return bool(payload.get('is_admin')) or role in ('admin', 'superadmin')
+
+
+@app.before_request
+def enforce_maintenance_mode():
+    """Bloqueia API para usuários comuns quando modo manutenção estiver ativo."""
+    if request.method == 'OPTIONS':
+        return None
+
+    path = request.path or ''
+    if not path.startswith('/api/'):
+        return None
+
+    # Sempre mantém endpoints de saúde disponíveis
+    if path in ('/api/health',):
+        return None
+
+    # Status de manutenção é público para o frontend renderizar a tela dedicada
+    if path in ('/api/maintenance/status', '/api/maintenance/status/'):
+        return None
+
+    # Configuração pública da landing também deve permanecer disponível
+    if path in ('/api/config/public', '/api/config/public/'):
+        return None
+
+    # Login fica fora do bloqueio global para permitir acesso administrativo
+    if path in ('/api/auth/login', '/api/auth/login/'):
+        return None
+
+    db = get_db()
+    maintenance = get_maintenance_status(db)
+    if not maintenance['enabled']:
+        return None
+
+    if request_has_admin_maintenance_bypass(db):
+        return None
+
+    return jsonify({
+        'error': maintenance['message'],
+        'maintenance_mode': True,
+    }), 503
 
 
 def require_auth(f):
@@ -7143,6 +7239,16 @@ def login():
             'error': 'Senha incorreta',
             'error_code': 'INVALID_PASSWORD'
         }), 401
+
+    # Em manutenção, apenas admin/superadmin podem autenticar.
+    maintenance = get_maintenance_status(db)
+    if maintenance['enabled']:
+        role = str(user['role'] or '').strip().lower() if 'role' in user.keys() else ''
+        if role not in ('admin', 'superadmin'):
+            return jsonify({
+                'error': maintenance['message'],
+                'maintenance_mode': True,
+            }), 503
 
     # Determina se é admin com base na role
     is_admin = user['role'] in ['admin', 'superadmin'] if 'role' in user.keys() else False
@@ -15472,6 +15578,17 @@ def uploaded_file(filename):
 import os
 
 STATIC_FOLDER = os.path.join(os.path.dirname(__file__), 'static')
+
+@app.route('/api/maintenance/status', methods=['GET'])
+def maintenance_status():
+    """Retorna status do modo manutenção para o frontend."""
+    db = get_db()
+    maintenance = get_maintenance_status(db)
+    return jsonify({
+        'maintenance_mode': bool(maintenance['enabled']),
+        'message': maintenance['message'],
+        'timestamp': datetime.utcnow().isoformat(),
+    }), 200
 
 @app.route('/api/health')
 @app.route('/health')

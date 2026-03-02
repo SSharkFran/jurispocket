@@ -1,4 +1,4 @@
-import { useEffect } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { BrowserRouter, Routes, Route, Navigate, useParams, useLocation } from 'react-router-dom';
 import { QueryClient, QueryClientProvider, useQueryClient } from '@tanstack/react-query';
 import { AuthProvider, useAuth } from '@/contexts/AuthContext';
@@ -39,8 +39,18 @@ import AppLayout from '@/components/AppLayout';
 import { ConvitesBanner } from '@/components/ConvitesBanner';
 import { PremiumRoute } from '@/components/premium/PremiumRoute';
 import { FullScreenLoader } from '@/components/FullScreenLoader';
+import { MaintenanceScreen } from '@/components/MaintenanceScreen';
+import { system } from '@/services/api';
 
 const queryClient = new QueryClient();
+const DEFAULT_SUPPORT_WHATSAPP = '5568992539472';
+
+function buildSupportWhatsappUrl(number: string) {
+  const sanitized = String(number || '').replace(/\D/g, '') || DEFAULT_SUPPORT_WHATSAPP;
+  const text =
+    'Ola, equipe JurisPocket! O sistema esta em manutencao e preciso de ajuda/mais informacoes.';
+  return `https://wa.me/${sanitized}?text=${encodeURIComponent(text)}`;
+}
 
 function RedirectToDashboardProcesso() {
   const { id } = useParams<{ id: string }>();
@@ -63,8 +73,31 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { isAuthenticated, isLoggingOut, finishLogoutTransition } = useAuth();
+  const { user, isAuthenticated, isLoggingOut, finishLogoutTransition } = useAuth();
   const location = useLocation();
+  const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
+  const [maintenanceMessage, setMaintenanceMessage] = useState('Sistema em manutenção no momento. Tente novamente em alguns minutos.');
+  const fallbackSupportWhatsapp = String((import.meta as any).env?.VITE_WHATSAPP_VENDAS || DEFAULT_SUPPORT_WHATSAPP);
+  const [supportWhatsappUrl, setSupportWhatsappUrl] = useState(buildSupportWhatsappUrl(fallbackSupportWhatsapp));
+  const isAdminUser = user?.role === 'admin' || user?.role === 'superadmin';
+  const showLandingAtRoot = isMaintenanceMode && !isAdminUser;
+
+  const checkMaintenanceStatus = useCallback(async () => {
+    try {
+      const response = await system.maintenanceStatus();
+      const isActive = Boolean(response.data?.maintenance_mode);
+      const message = String(
+        response.data?.message || 'Sistema em manutenção no momento. Tente novamente em alguns minutos.'
+      );
+      setIsMaintenanceMode(isActive);
+      setMaintenanceMessage(message);
+      if (!isActive) {
+        window.dispatchEvent(new Event('jurispocket:maintenance-off'));
+      }
+    } catch {
+      // Em caso de erro temporário de rede, mantém o estado atual.
+    }
+  }, []);
 
   useEffect(() => {
     if (!isLoggingOut || location.pathname !== '/login') return;
@@ -76,14 +109,66 @@ function AppRoutes() {
     return () => window.clearTimeout(timeoutId);
   }, [isLoggingOut, location.pathname, finishLogoutTransition]);
 
+  useEffect(() => {
+    checkMaintenanceStatus();
+    const intervalId = window.setInterval(checkMaintenanceStatus, 30000);
+    return () => window.clearInterval(intervalId);
+  }, [checkMaintenanceStatus]);
+
+  useEffect(() => {
+    const baseUrl = (import.meta as any).env?.VITE_API_URL || '/api';
+    fetch(`${baseUrl}/config/public`)
+      .then((response) => (response.ok ? response.json() : null))
+      .then((data) => {
+        const publicNumber = String(data?.whatsapp_vendas || '').trim();
+        if (publicNumber) {
+          setSupportWhatsappUrl(buildSupportWhatsappUrl(publicNumber));
+        }
+      })
+      .catch(() => {
+        // Mantém fallback do ambiente quando não conseguir carregar config pública.
+      });
+  }, []);
+
+  useEffect(() => {
+    const handleMaintenanceOn = (event: Event) => {
+      const detail = (event as CustomEvent<{ message?: string }>).detail;
+      setIsMaintenanceMode(true);
+      if (detail?.message) {
+        setMaintenanceMessage(detail.message);
+      }
+    };
+    const handleMaintenanceOff = () => {
+      setIsMaintenanceMode(false);
+    };
+
+    window.addEventListener('jurispocket:maintenance-on', handleMaintenanceOn as EventListener);
+    window.addEventListener('jurispocket:maintenance-off', handleMaintenanceOff);
+    return () => {
+      window.removeEventListener('jurispocket:maintenance-on', handleMaintenanceOn as EventListener);
+      window.removeEventListener('jurispocket:maintenance-off', handleMaintenanceOff);
+    };
+  }, []);
+
   if (isLoggingOut && location.pathname !== '/login') {
     return <Navigate to="/login" replace />;
+  }
+
+  // Mantém a rota de login acessível para permitir entrada administrativa.
+  if (isMaintenanceMode && !isAdminUser && location.pathname !== '/login' && location.pathname !== '/') {
+    return (
+      <MaintenanceScreen
+        message={maintenanceMessage}
+        onRetry={checkMaintenanceStatus}
+        supportWhatsappUrl={supportWhatsappUrl}
+      />
+    );
   }
 
   return (
     <Routes>
       {/* Landing Page - Página inicial pública */}
-      <Route path="/" element={isAuthenticated ? <Navigate to="/app" /> : <LandingPage />} />
+      <Route path="/" element={showLandingAtRoot ? <LandingPage /> : isAuthenticated ? <Navigate to="/app" /> : <LandingPage />} />
 
       {/* Autenticação */}
       <Route path="/login" element={isLoggingOut ? <FullScreenLoader label="Encerrando sessão..." /> : isAuthenticated ? <Navigate to="/app" /> : <LoginPage />} />
