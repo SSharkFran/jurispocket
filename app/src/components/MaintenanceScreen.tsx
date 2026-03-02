@@ -5,9 +5,10 @@ interface MaintenanceScreenProps {
   message: string;
   onRetry: () => void;
   supportWhatsappUrl?: string;
+  adminLoginUrl?: string;
 }
 
-export function MaintenanceScreen({ message, onRetry, supportWhatsappUrl }: MaintenanceScreenProps) {
+export function MaintenanceScreen({ message, onRetry, supportWhatsappUrl, adminLoginUrl }: MaintenanceScreenProps) {
   return (
     <div className="min-h-screen min-h-[100dvh] flex items-center justify-center bg-background px-4">
       <div className="w-full max-w-lg rounded-2xl border border-border bg-card/80 p-8 text-center shadow-xl">
@@ -29,6 +30,13 @@ export function MaintenanceScreen({ message, onRetry, supportWhatsappUrl }: Main
             <RefreshCcw className="mr-2 h-4 w-4" />
             Tentar novamente
           </Button>
+          {adminLoginUrl && (
+            <a href={adminLoginUrl} className="w-full sm:w-auto">
+              <Button type="button" variant="secondary" className="w-full sm:w-auto">
+                Acesso administrativo
+              </Button>
+            </a>
+          )}
           {supportWhatsappUrl && (
             <a
               href={supportWhatsappUrl}

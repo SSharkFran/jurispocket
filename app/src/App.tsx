@@ -81,6 +81,7 @@ function AppRoutes() {
   const [supportWhatsappUrl, setSupportWhatsappUrl] = useState(buildSupportWhatsappUrl(fallbackSupportWhatsapp));
   const isAdminUser = user?.role === 'admin' || user?.role === 'superadmin';
   const showLandingAtRoot = isMaintenanceMode && !isAdminUser;
+  const allowAdminLogin = location.pathname === '/login' && new URLSearchParams(location.search).get('admin') === '1';
 
   const checkMaintenanceStatus = useCallback(async () => {
     try {
@@ -154,13 +155,13 @@ function AppRoutes() {
     return <Navigate to="/login" replace />;
   }
 
-  // Mantém a rota de login acessível para permitir entrada administrativa.
-  if (isMaintenanceMode && !isAdminUser && location.pathname !== '/login' && location.pathname !== '/') {
+  if (isMaintenanceMode && !isAdminUser && !allowAdminLogin) {
     return (
       <MaintenanceScreen
         message={maintenanceMessage}
         onRetry={checkMaintenanceStatus}
         supportWhatsappUrl={supportWhatsappUrl}
+        adminLoginUrl="/login?admin=1"
       />
     );
   }
