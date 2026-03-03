@@ -82,6 +82,10 @@ function AppRoutes() {
   const isAdminUser = user?.role === 'admin' || user?.role === 'superadmin';
   const showLandingAtRoot = isMaintenanceMode && !isAdminUser;
   const allowAdminLogin = location.pathname === '/login' && new URLSearchParams(location.search).get('admin') === '1';
+  const isPublicMaintenancePath =
+    location.pathname === '/' || location.pathname.startsWith('/publico/processo/');
+  const shouldBlockWithMaintenanceScreen =
+    isMaintenanceMode && !isAdminUser && !allowAdminLogin && !isPublicMaintenancePath;
 
   const checkMaintenanceStatus = useCallback(async () => {
     try {
@@ -155,7 +159,7 @@ function AppRoutes() {
     return <Navigate to="/login" replace />;
   }
 
-  if (isMaintenanceMode && !isAdminUser && !allowAdminLogin) {
+  if (shouldBlockWithMaintenanceScreen) {
     return (
       <MaintenanceScreen
         message={maintenanceMessage}
