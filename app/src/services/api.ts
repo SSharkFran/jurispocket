@@ -104,7 +104,18 @@ export const processos = {
   list: (params?: { status?: string; search?: string; cliente_id?: number }) =>
     api.get('/processos', { params }),
   get: (id: number) => api.get(`/processos/${id}`),
-  create: (data: Partial<{ numero: string; numero_cnj?: string; titulo: string; cliente_id?: number; tipo?: string; valor_causa?: number; data_abertura?: string; descricao?: string }>) => 
+  create: (data: Partial<{
+    numero: string;
+    numero_cnj?: string;
+    titulo: string;
+    cliente_id?: number;
+    tipo?: string;
+    valor_causa?: number;
+    data_abertura?: string;
+    descricao?: string;
+    status?: string;
+    ativar_monitoramento?: boolean;
+  }>) => 
     api.post('/processos', data),
   update: (id: number, data: Partial<{ titulo?: string; status?: string; fase?: string; descricao?: string; tipo?: string; valor_causa?: number; ultimo_movimento?: string; ultimo_movimento_data?: string }>) => api.put(`/processos/${id}`, data),
   delete: (id: number) => api.delete(`/processos/${id}`),
@@ -114,6 +125,13 @@ export const processos = {
     api.get(`/processos/${id}/whatsapp`, { params }),
   // Datajud
   consultarDatajud: (id: number) => api.post(`/processos/${id}/consultar-datajud`),
+  buscarDatajudAvancado: (data: {
+    termo: string;
+    tipo?: 'numero' | 'nome' | 'documento';
+    tribunal?: string;
+    limite?: number;
+    limite_tribunais?: number;
+  }) => api.post('/datajud/busca-avancada', data),
   marcarMovimentacoesLidas: (id: number) => api.post(`/processos/${id}/movimentacoes/lidas`),
   getPJeUrl: (id: number) => api.get(`/processos/${id}/pje-url`),
   // Link público

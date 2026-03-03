@@ -653,6 +653,9 @@ def init_db():
             codigo_movimento INTEGER NOT NULL,
             nome_movimento TEXT NOT NULL,
             data_movimento TIMESTAMP NOT NULL,
+            instancia TEXT, -- 1 (primeira), 2 (segunda), superior
+            tribunal_sigla TEXT, -- Tribunal onde a movimentação foi encontrada
+            orgao_julgador TEXT, -- Órgão julgador de origem da movimentação
             complementos TEXT, -- JSON string com complementos tabelados
             fonte TEXT DEFAULT 'datajud', -- datajud, manual, etc
             lida BOOLEAN DEFAULT 0, -- Flag para movimentações novas/não lidas
@@ -1121,6 +1124,18 @@ def init_db():
         db.execute('SELECT lida FROM movimentacoes_processo LIMIT 1')
     except:
         db.execute('ALTER TABLE movimentacoes_processo ADD COLUMN lida BOOLEAN DEFAULT 0')
+    try:
+        db.execute('SELECT instancia FROM movimentacoes_processo LIMIT 1')
+    except:
+        db.execute('ALTER TABLE movimentacoes_processo ADD COLUMN instancia TEXT')
+    try:
+        db.execute('SELECT tribunal_sigla FROM movimentacoes_processo LIMIT 1')
+    except:
+        db.execute('ALTER TABLE movimentacoes_processo ADD COLUMN tribunal_sigla TEXT')
+    try:
+        db.execute('SELECT orgao_julgador FROM movimentacoes_processo LIMIT 1')
+    except:
+        db.execute('ALTER TABLE movimentacoes_processo ADD COLUMN orgao_julgador TEXT')
     
     # Migration: Adicionar colunas tribunal_codigo, tribunal_nome e tribunal_uf na tabela processos
     try:
@@ -2199,6 +2214,13 @@ class DatajudMonitor:
         'TJMRS': 'RS',
         'TJMSP': 'SP',
     }
+
+    # Lista balanceada para busca ampla sem custo excessivo de requisições
+    BUSCA_TRIBUNAIS_PRIORITARIOS = [
+        'TJSP', 'TJRJ', 'TJMG', 'TJRS', 'TJPR', 'TJSC', 'TJBA', 'TJGO',
+        'TRF1', 'TRF2', 'TRF3', 'TRF4', 'TRF5', 'TRF6',
+        'STJ', 'TST', 'TSE', 'STM',
+    ]
     
     @classmethod
     def get_uf_tribunal(cls, sigla: str) -> Optional[str]:
@@ -2414,53 +2436,699 @@ class DatajudMonitor:
         return None
     
     @classmethod
+    def obter_tribunais_consulta(cls, tribunal_origem: str) -> List[str]:
+        """
+        Define quais tribunais devem ser consultados para cobrir o fluxo recursal.
+        """
+        candidatos = [tribunal_origem]
+
+        if tribunal_origem.startswith('TJ') or tribunal_origem.startswith('TRF'):
+            candidatos.append('STJ')
+        elif tribunal_origem.startswith('TRT'):
+            candidatos.append('TST')
+        elif tribunal_origem.startswith('TRE-'):
+            candidatos.append('TSE')
+
+        tribunais = []
+        for sigla in candidatos:
+            if sigla and sigla not in tribunais and sigla in cls.TRIBUNAIS_ENDPOINTS:
+                tribunais.append(sigla)
+        return tribunais
+
+    @classmethod
+    def _parse_data_hora(cls, data_hora: Optional[str]) -> datetime:
+        if not data_hora:
+            return datetime.min
+
+        data_str = str(data_hora).strip()
+        if not data_str:
+            return datetime.min
+
+        try:
+            return datetime.fromisoformat(data_str.replace('Z', '+00:00'))
+        except Exception:
+            pass
+
+        try:
+            return datetime.strptime(data_str[:19], '%Y-%m-%dT%H:%M:%S')
+        except Exception:
+            pass
+
+        try:
+            return datetime.strptime(data_str[:19], '%Y-%m-%d %H:%M:%S')
+        except Exception:
+            return datetime.min
+
+    @classmethod
+    def formatar_data_movimento(cls, data_hora: Optional[str]) -> str:
+        dt = cls._parse_data_hora(data_hora)
+        if dt != datetime.min:
+            return dt.strftime('%Y-%m-%d %H:%M:%S')
+
+        if data_hora:
+            return str(data_hora).replace('T', ' ')[:19]
+
+        return datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+    @classmethod
+    def _inferir_instancia(
+        cls,
+        grau: Any = None,
+        orgao_julgador: str = '',
+        nome_movimento: str = '',
+        tribunal_sigla: Optional[str] = None,
+    ) -> Optional[str]:
+        grau_txt = str(grau).strip().lower() if grau is not None else ''
+        grau_digits = ''.join(ch for ch in grau_txt if ch.isdigit())
+
+        if grau_digits.startswith('1'):
+            return '1'
+        if grau_digits.startswith('2'):
+            return '2'
+        if grau_digits.startswith('3') or grau_digits.startswith('4'):
+            return 'superior'
+
+        texto = f"{orgao_julgador or ''} {nome_movimento or ''}".lower()
+        superior_keywords = (
+            'superior tribunal',
+            'recurso especial',
+            'recurso extraordin',
+            'stj',
+            'tst',
+            'tse',
+            'stm',
+        )
+        segunda_instancia_keywords = (
+            '2º grau',
+            '2o grau',
+            'segundo grau',
+            'segunda inst',
+            'turma recursal',
+            'câmara',
+            'camara',
+            'desembargador',
+            'relator',
+        )
+        primeira_instancia_keywords = (
+            '1º grau',
+            '1o grau',
+            'primeiro grau',
+            'primeira inst',
+            'vara',
+            'juizado',
+            'juízo',
+            'juizo',
+        )
+
+        if tribunal_sigla in {'STJ', 'TST', 'TSE', 'STM'} or any(k in texto for k in superior_keywords):
+            return 'superior'
+        if any(k in texto for k in segunda_instancia_keywords):
+            return '2'
+        if any(k in texto for k in primeira_instancia_keywords):
+            return '1'
+
+        return None
+
+    @classmethod
+    def inferir_fase_processual(cls, movimentos: List[Dict[str, Any]]) -> Optional[str]:
+        for mov in movimentos:
+            instancia = str(mov.get('instancia') or '').strip().lower()
+            if instancia == '1':
+                return '1ª instância'
+            if instancia == '2':
+                return '2ª instância'
+            if instancia == 'superior':
+                return 'Tribunal superior'
+        return None
+
+    @staticmethod
+    def _somente_digitos(valor: Any) -> str:
+        return re.sub(r'[^0-9]', '', str(valor or ''))
+
+    @classmethod
+    def _coletar_tribunais_workspace(cls, workspace_id: Optional[int], limite: int = 12) -> List[str]:
+        if not workspace_id:
+            return []
+
+        try:
+            db = get_db()
+            rows = db.execute(
+                '''
+                SELECT tribunal_codigo, MAX(created_at) as created_at
+                FROM processos
+                WHERE workspace_id = ?
+                  AND tribunal_codigo IS NOT NULL
+                  AND TRIM(tribunal_codigo) != ''
+                GROUP BY tribunal_codigo
+                ORDER BY created_at DESC
+                LIMIT ?
+                ''',
+                (workspace_id, int(limite)),
+            ).fetchall()
+        except Exception:
+            return []
+
+        tribunais: List[str] = []
+        for row in rows:
+            sigla = str(row['tribunal_codigo'] or '').strip().upper()
+            if sigla and sigla in cls.TRIBUNAIS_ENDPOINTS and sigla not in tribunais:
+                tribunais.append(sigla)
+        return tribunais
+
+    @classmethod
+    def _resolver_tribunais_busca(
+        cls,
+        tipo_busca: str,
+        termo: str,
+        tribunal_sigla: Optional[str] = None,
+        workspace_id: Optional[int] = None,
+        limite_tribunais: int = 14,
+    ) -> List[str]:
+        limite = max(1, min(int(limite_tribunais or 14), 30))
+        tribunal_explicitado = str(tribunal_sigla or '').strip().upper()
+
+        if tribunal_explicitado:
+            if tribunal_explicitado in cls.TRIBUNAIS_ENDPOINTS:
+                return [tribunal_explicitado]
+            return []
+
+        candidatos: List[str] = []
+
+        if tipo_busca == 'numero':
+            tribunal_origem = cls.identificar_tribunal(termo)
+            if tribunal_origem:
+                candidatos.extend(cls.obter_tribunais_consulta(tribunal_origem))
+
+        if workspace_id:
+            candidatos.extend(cls._coletar_tribunais_workspace(workspace_id, limite=limite))
+
+        candidatos.extend(cls.BUSCA_TRIBUNAIS_PRIORITARIOS)
+
+        tribunais: List[str] = []
+        for sigla in candidatos:
+            sigla_limpa = str(sigla or '').strip().upper()
+            if not sigla_limpa:
+                continue
+            if sigla_limpa in cls.TRIBUNAIS_ENDPOINTS and sigla_limpa not in tribunais:
+                tribunais.append(sigla_limpa)
+            if len(tribunais) >= limite:
+                break
+
+        if tribunais:
+            return tribunais
+
+        fallback = [s for s in cls.BUSCA_TRIBUNAIS_PRIORITARIOS if s in cls.TRIBUNAIS_ENDPOINTS]
+        if fallback:
+            return fallback[:limite]
+
+        return list(cls.TRIBUNAIS_ENDPOINTS.keys())[:limite]
+
+    @classmethod
+    def _montar_query_busca(cls, tipo_busca: str, termo: str, limite_por_tribunal: int) -> Dict[str, Any]:
+        size = max(1, min(int(limite_por_tribunal or 10), 20))
+        termo_limpo = str(termo or '').strip()
+        if not termo_limpo:
+            raise ValueError('Informe um termo para consulta.')
+
+        payload_base = {
+            "size": size,
+            "_source": [
+                "numeroProcesso",
+                "dataAjuizamento",
+                "classe",
+                "assuntos",
+                "orgaoJulgador",
+                "grau",
+                "movimentos.codigo",
+                "movimentos.nome",
+                "movimentos.dataHora",
+                "poloAtivo",
+                "poloPassivo",
+            ],
+            "sort": [
+                {
+                    "dataAjuizamento": {
+                        "order": "desc",
+                        "missing": "_last",
+                    }
+                }
+            ],
+        }
+
+        if tipo_busca == 'numero':
+            numero_limpo = cls._somente_digitos(termo_limpo)
+            if len(numero_limpo) < 7:
+                raise ValueError('Número de processo inválido para consulta.')
+
+            payload_base["query"] = {
+                "bool": {
+                    "should": [
+                        {"match": {"numeroProcesso": numero_limpo}},
+                        {"match_phrase": {"numeroProcesso": numero_limpo}},
+                        {"term": {"numeroProcesso.keyword": numero_limpo}},
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+            return payload_base
+
+        if tipo_busca == 'documento':
+            documento = cls._somente_digitos(termo_limpo)
+            if len(documento) < 8:
+                raise ValueError('CPF/CNPJ inválido para consulta.')
+
+            campos_documento = [
+                "poloAtivo.documento",
+                "poloAtivo.numeroDocumento",
+                "poloPassivo.documento",
+                "poloPassivo.numeroDocumento",
+                "partes.documento",
+                "partes.numeroDocumento",
+            ]
+            clausulas = []
+            for campo in campos_documento:
+                clausulas.append({"match_phrase": {campo: documento}})
+                clausulas.append({"match": {campo: {"query": documento, "operator": "and"}}})
+
+            payload_base["query"] = {
+                "bool": {
+                    "should": clausulas,
+                    "minimum_should_match": 1,
+                }
+            }
+            return payload_base
+
+        if tipo_busca == 'nome':
+            if len(termo_limpo) < 3:
+                raise ValueError('Informe ao menos 3 caracteres para busca por nome.')
+
+            campos_nome = [
+                "poloAtivo.nome^4",
+                "poloPassivo.nome^4",
+                "partes.nome^3",
+                "nomeParte^2",
+            ]
+            payload_base["query"] = {
+                "bool": {
+                    "should": [
+                        {
+                            "multi_match": {
+                                "query": termo_limpo,
+                                "fields": campos_nome,
+                                "operator": "and",
+                                "type": "best_fields",
+                            }
+                        },
+                        {
+                            "multi_match": {
+                                "query": termo_limpo,
+                                "fields": campos_nome,
+                                "type": "phrase",
+                            }
+                        },
+                    ],
+                    "minimum_should_match": 1,
+                }
+            }
+            return payload_base
+
+        raise ValueError('Tipo de busca inválido. Use: numero, nome ou documento.')
+
+    @classmethod
+    def _extrair_partes_resumidas(cls, source: Dict[str, Any], limite: int = 6) -> List[Dict[str, str]]:
+        partes: List[Dict[str, str]] = []
+        chaves = [('poloAtivo', 'ativo'), ('poloPassivo', 'passivo')]
+
+        for chave, tipo in chaves:
+            bloco = source.get(chave) or []
+            if isinstance(bloco, dict):
+                bloco = [bloco]
+            if not isinstance(bloco, list):
+                continue
+
+            for item in bloco:
+                if not isinstance(item, dict):
+                    continue
+
+                nome = str(
+                    item.get('nome')
+                    or item.get('nomeParte')
+                    or item.get('parte')
+                    or ''
+                ).strip()
+                if not nome:
+                    continue
+
+                documento = cls._somente_digitos(
+                    item.get('documento')
+                    or item.get('numeroDocumento')
+                    or item.get('cpfCnpj')
+                    or ''
+                )
+
+                partes.append({
+                    'nome': nome,
+                    'tipo': tipo,
+                    'documento': documento,
+                })
+
+                if len(partes) >= limite:
+                    return partes
+
+        return partes
+
+    @classmethod
+    def _resumir_hit_busca(cls, source: Dict[str, Any], tribunal_sigla: str) -> Optional[Dict[str, Any]]:
+        numero_processo = str(source.get('numeroProcesso') or '').strip()
+        if not numero_processo:
+            return None
+
+        classe = source.get('classe') or {}
+        assuntos = source.get('assuntos') or []
+        assunto_principal = None
+        if isinstance(assuntos, list) and assuntos:
+            primeiro_assunto = assuntos[0] or {}
+            if isinstance(primeiro_assunto, dict):
+                assunto_principal = primeiro_assunto.get('nome') or primeiro_assunto.get('descricao')
+            else:
+                assunto_principal = str(primeiro_assunto)
+
+        orgao_julgador = (source.get('orgaoJulgador') or {}).get('nome')
+        grau = source.get('grau')
+
+        movimentos_raw = source.get('movimentos') or []
+        if isinstance(movimentos_raw, dict):
+            movimentos_raw = [movimentos_raw]
+        if not isinstance(movimentos_raw, list):
+            movimentos_raw = []
+
+        movimentos_resumidos: List[Dict[str, Any]] = []
+        for mov in movimentos_raw:
+            if not isinstance(mov, dict):
+                continue
+            nome_mov = mov.get('nome')
+            movimentos_resumidos.append({
+                'codigo': mov.get('codigo'),
+                'nome': nome_mov,
+                'data_hora': mov.get('dataHora'),
+                'instancia': cls._inferir_instancia(
+                    grau=grau,
+                    orgao_julgador=orgao_julgador or '',
+                    nome_movimento=nome_mov or '',
+                    tribunal_sigla=tribunal_sigla,
+                ),
+            })
+
+        movimentos_resumidos.sort(
+            key=lambda x: cls._parse_data_hora(x.get('data_hora')),
+            reverse=True,
+        )
+
+        instancias_detectadas: List[str] = []
+        for mov in movimentos_resumidos:
+            instancia = str(mov.get('instancia') or '').strip()
+            if instancia and instancia not in instancias_detectadas:
+                instancias_detectadas.append(instancia)
+
+        ultima_mov = movimentos_resumidos[0] if movimentos_resumidos else None
+        return {
+            'numero_processo': numero_processo,
+            'tribunal_sigla': tribunal_sigla,
+            'tribunal_nome': cls.get_nome_tribunal(tribunal_sigla),
+            'data_ajuizamento': source.get('dataAjuizamento'),
+            'classe_codigo': (classe or {}).get('codigo'),
+            'classe_nome': (classe or {}).get('nome'),
+            'assunto_principal': assunto_principal,
+            'orgao_julgador': orgao_julgador,
+            'total_movimentos': len(movimentos_raw),
+            'ultima_movimentacao': (ultima_mov or {}).get('nome'),
+            'ultima_movimentacao_data': (ultima_mov or {}).get('data_hora'),
+            'fase_atual': cls.inferir_fase_processual(movimentos_resumidos),
+            'instancias_detectadas': instancias_detectadas,
+            'partes': cls._extrair_partes_resumidas(source),
+        }
+
+    @classmethod
+    def _mesclar_resultados_busca(cls, resultados: List[Dict[str, Any]]) -> List[Dict[str, Any]]:
+        if not resultados:
+            return []
+
+        agregados: Dict[str, Dict[str, Any]] = {}
+        for item in resultados:
+            numero = str(item.get('numero_processo') or '').strip()
+            if not numero:
+                continue
+
+            chave = cls._somente_digitos(numero) or f"{item.get('tribunal_sigla', '')}:{numero}"
+            atual = agregados.get(chave)
+
+            if not atual:
+                novo = dict(item)
+                novo['tribunais_relacionados'] = [item.get('tribunal_sigla')] if item.get('tribunal_sigla') else []
+                agregados[chave] = novo
+                continue
+
+            tribunal_item = item.get('tribunal_sigla')
+            if tribunal_item and tribunal_item not in atual.get('tribunais_relacionados', []):
+                atual.setdefault('tribunais_relacionados', []).append(tribunal_item)
+
+            if not atual.get('classe_nome') and item.get('classe_nome'):
+                atual['classe_nome'] = item.get('classe_nome')
+            if not atual.get('classe_codigo') and item.get('classe_codigo'):
+                atual['classe_codigo'] = item.get('classe_codigo')
+            if not atual.get('assunto_principal') and item.get('assunto_principal'):
+                atual['assunto_principal'] = item.get('assunto_principal')
+            if not atual.get('orgao_julgador') and item.get('orgao_julgador'):
+                atual['orgao_julgador'] = item.get('orgao_julgador')
+            if not atual.get('fase_atual') and item.get('fase_atual'):
+                atual['fase_atual'] = item.get('fase_atual')
+
+            atual['total_movimentos'] = max(
+                int(atual.get('total_movimentos') or 0),
+                int(item.get('total_movimentos') or 0),
+            )
+
+            dt_atual = cls._parse_data_hora(atual.get('ultima_movimentacao_data'))
+            dt_item = cls._parse_data_hora(item.get('ultima_movimentacao_data'))
+            if dt_item > dt_atual:
+                atual['ultima_movimentacao'] = item.get('ultima_movimentacao')
+                atual['ultima_movimentacao_data'] = item.get('ultima_movimentacao_data')
+                if item.get('tribunal_sigla'):
+                    atual['tribunal_sigla'] = item.get('tribunal_sigla')
+                if item.get('tribunal_nome'):
+                    atual['tribunal_nome'] = item.get('tribunal_nome')
+                if item.get('orgao_julgador'):
+                    atual['orgao_julgador'] = item.get('orgao_julgador')
+
+            instancias = list(atual.get('instancias_detectadas') or [])
+            for instancia in item.get('instancias_detectadas') or []:
+                if instancia and instancia not in instancias:
+                    instancias.append(instancia)
+            atual['instancias_detectadas'] = instancias
+
+            partes = list(atual.get('partes') or [])
+            partes_chaves = {(p.get('nome'), p.get('tipo'), p.get('documento')) for p in partes if isinstance(p, dict)}
+            for parte in item.get('partes') or []:
+                if not isinstance(parte, dict):
+                    continue
+                chave_parte = (parte.get('nome'), parte.get('tipo'), parte.get('documento'))
+                if chave_parte in partes_chaves:
+                    continue
+                partes.append(parte)
+                partes_chaves.add(chave_parte)
+                if len(partes) >= 8:
+                    break
+            atual['partes'] = partes
+
+        consolidados = list(agregados.values())
+        consolidados.sort(
+            key=lambda x: (
+                cls._parse_data_hora(x.get('ultima_movimentacao_data')),
+                cls._parse_data_hora(x.get('data_ajuizamento')),
+            ),
+            reverse=True,
+        )
+        return consolidados
+
+    @classmethod
+    def buscar_processos(
+        cls,
+        termo: str,
+        tipo_busca: str = 'numero',
+        tribunal_sigla: Optional[str] = None,
+        limite: int = 10,
+        workspace_id: Optional[int] = None,
+        limite_tribunais: int = 14,
+    ) -> Dict[str, Any]:
+        if not cls.API_KEY:
+            return {
+                'sucesso': False,
+                'erro': 'API Key do Datajud não configurada. Configure a variável de ambiente DATAJUD_API_KEY',
+            }
+
+        tipo = str(tipo_busca or 'numero').strip().lower()
+        if tipo in {'cpf', 'cnpj', 'cpf_cnpj', 'doc'}:
+            tipo = 'documento'
+        if tipo in {'processo', 'numero_processo'}:
+            tipo = 'numero'
+        if tipo not in {'numero', 'nome', 'documento'}:
+            return {
+                'sucesso': False,
+                'erro': 'Tipo de busca inválido. Use: numero, nome ou documento.',
+            }
+
+        try:
+            limite_resultados = max(1, min(int(limite or 10), 20))
+            payload = cls._montar_query_busca(tipo, termo, limite_resultados)
+        except ValueError as e:
+            return {
+                'sucesso': False,
+                'erro': str(e),
+            }
+
+        tribunais_consultados = cls._resolver_tribunais_busca(
+            tipo_busca=tipo,
+            termo=termo,
+            tribunal_sigla=tribunal_sigla,
+            workspace_id=workspace_id,
+            limite_tribunais=limite_tribunais,
+        )
+        if not tribunais_consultados:
+            return {
+                'sucesso': False,
+                'erro': 'Nenhum tribunal disponível para consulta.',
+            }
+
+        headers = {
+            'Authorization': f'ApiKey {cls.API_KEY}',
+            'Content-Type': 'application/json',
+        }
+
+        import time
+        tempo_total_ms = 0
+        erros_consulta: List[Dict[str, Any]] = []
+        resultados_brutos: List[Dict[str, Any]] = []
+
+        for tribunal_atual in tribunais_consultados:
+            endpoint = cls.TRIBUNAIS_ENDPOINTS.get(tribunal_atual)
+            if not endpoint:
+                continue
+
+            url = f"{cls.BASE_URL}{endpoint}"
+            inicio = time.time()
+            try:
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=cls.TIMEOUT,
+                )
+                tempo_req_ms = int((time.time() - inicio) * 1000)
+                tempo_total_ms += tempo_req_ms
+            except requests.exceptions.Timeout:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Timeout na consulta ao tribunal {tribunal_atual}',
+                })
+                continue
+            except requests.exceptions.RequestException as e:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Erro de conexão: {str(e)}',
+                })
+                continue
+
+            if response.status_code != 200:
+                detalhe = (response.text or '')[:180]
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Erro na API Datajud: HTTP {response.status_code}',
+                    'detalhe': detalhe,
+                })
+                continue
+
+            try:
+                data = response.json()
+            except Exception as e:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Resposta inválida da API: {str(e)}',
+                })
+                continue
+
+            hits = data.get('hits', {}).get('hits', []) or []
+            for hit in hits:
+                source = hit.get('_source', {}) or {}
+                resumo = cls._resumir_hit_busca(source, tribunal_atual)
+                if resumo:
+                    resultados_brutos.append(resumo)
+
+            if len(resultados_brutos) >= limite_resultados * 4:
+                break
+
+        if not resultados_brutos:
+            return {
+                'sucesso': True,
+                'encontrado': False,
+                'tipo_busca': tipo,
+                'termo': termo,
+                'mensagem': 'Nenhum processo encontrado para os filtros informados.',
+                'tribunais_consultados': tribunais_consultados,
+                'erros_consulta': erros_consulta,
+                'resultados': [],
+                'total_resultados': 0,
+                'parcial': bool(erros_consulta),
+                'tempo_resposta_ms': tempo_total_ms,
+            }
+
+        resultados_consolidados = cls._mesclar_resultados_busca(resultados_brutos)
+        resultados_finais = resultados_consolidados[:limite_resultados]
+
+        return {
+            'sucesso': True,
+            'encontrado': True,
+            'tipo_busca': tipo,
+            'termo': termo,
+            'tribunais_consultados': tribunais_consultados,
+            'erros_consulta': erros_consulta,
+            'resultados': resultados_finais,
+            'total_resultados': len(resultados_consolidados),
+            'parcial': bool(erros_consulta),
+            'tempo_resposta_ms': tempo_total_ms,
+        }
+
+    @classmethod
     def consultar_processo(cls, numero_processo: str, tribunal_sigla: Optional[str] = None) -> Dict[str, Any]:
         """
-        Consulta um processo na API Datajud
-        
-        Args:
-            numero_processo: Número do processo (NPU)
-            tribunal_sigla: Sigla do tribunal (opcional, auto-detecta se não informado)
-            
-        Returns:
-            Dict com os dados do processo ou erro
+        Consulta um processo na API Datajud cobrindo origem + recursal e consolidando múltiplos hits.
         """
-        # Verifica se API Key está configurada
         if not cls.API_KEY:
             return {
                 'sucesso': False,
                 'erro': 'API Key do Datajud não configurada. Configure a variável de ambiente DATAJUD_API_KEY'
             }
-        
-        # Identifica o tribunal
+
         if not tribunal_sigla:
             tribunal_sigla = cls.identificar_tribunal(numero_processo)
-        
+
         if not tribunal_sigla:
             return {
                 'sucesso': False,
                 'erro': 'Não foi possível identificar o tribunal pelo número do processo. Verifique o NPU.'
             }
-        
-        # Obtém o endpoint
-        endpoint = cls.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla)
-        if not endpoint:
+
+        if tribunal_sigla not in cls.TRIBUNAIS_ENDPOINTS:
             return {
                 'sucesso': False,
                 'erro': f'Tribunal {tribunal_sigla} não suportado pela API Datajud'
             }
-        
-        # Prepara a requisição
-        url = f"{cls.BASE_URL}{endpoint}"
+
+        numero_limpo = re.sub(r'[^0-9]', '', numero_processo or '')
+        tribunais_consultados = cls.obter_tribunais_consulta(tribunal_sigla)
         headers = {
             'Authorization': f'ApiKey {cls.API_KEY}',
             'Content-Type': 'application/json'
         }
-        
-        # Limpa o número do processo para a consulta
-        numero_limpo = re.sub(r'[^0-9]', '', numero_processo)
-        
-        # Payload da consulta (formato Elasticsearch)
         payload = {
             "query": {
                 "match": {
@@ -2468,98 +3136,192 @@ class DatajudMonitor:
                 }
             }
         }
-        
-        try:
-            import time
+
+        import time
+        tempo_total_ms = 0
+        erros_consulta: List[Dict[str, Any]] = []
+        fontes_encontradas: List[Dict[str, Any]] = []
+        movimentos_coletados: List[Dict[str, Any]] = []
+        numero_encontrado: Optional[str] = None
+        data_ajuizamento: Optional[str] = None
+        classe = {'codigo': None, 'nome': None}
+        orgao_julgador_nome: Optional[str] = None
+
+        for tribunal_atual in tribunais_consultados:
+            endpoint = cls.TRIBUNAIS_ENDPOINTS.get(tribunal_atual)
+            if not endpoint:
+                continue
+
+            url = f"{cls.BASE_URL}{endpoint}"
             inicio = time.time()
-            
-            response = requests.post(
-                url,
-                headers=headers,
-                json=payload,
-                timeout=cls.TIMEOUT
-            )
-            
-            tempo_resposta = int((time.time() - inicio) * 1000)
-            
-            # Verifica erro HTTP
+            try:
+                response = requests.post(
+                    url,
+                    headers=headers,
+                    json=payload,
+                    timeout=cls.TIMEOUT
+                )
+                tempo_req_ms = int((time.time() - inicio) * 1000)
+                tempo_total_ms += tempo_req_ms
+            except requests.exceptions.Timeout:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Timeout na consulta ao tribunal {tribunal_atual}',
+                })
+                continue
+            except requests.exceptions.RequestException as e:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Erro de conexão: {str(e)}',
+                })
+                continue
+
             if response.status_code != 200:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Erro na API Datajud: HTTP {response.status_code}',
+                    'status_code': response.status_code,
+                })
+                continue
+
+            try:
+                data = response.json()
+            except Exception as e:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': f'Resposta inválida da API: {str(e)}',
+                })
+                continue
+
+            hits = data.get('hits', {}).get('hits', []) or []
+            if not hits:
+                continue
+
+            for hit in hits:
+                source = hit.get('_source', {}) or {}
+                numero_hit = source.get('numeroProcesso')
+                if not numero_encontrado and numero_hit:
+                    numero_encontrado = numero_hit
+
+                data_ajuizamento_hit = source.get('dataAjuizamento')
+                if not data_ajuizamento and data_ajuizamento_hit:
+                    data_ajuizamento = data_ajuizamento_hit
+
+                classe_hit = source.get('classe', {}) or {}
+                if not classe.get('codigo') and not classe.get('nome') and (classe_hit.get('codigo') or classe_hit.get('nome')):
+                    classe = {
+                        'codigo': classe_hit.get('codigo'),
+                        'nome': classe_hit.get('nome')
+                    }
+
+                orgao_nome = (source.get('orgaoJulgador', {}) or {}).get('nome')
+                if not orgao_julgador_nome and orgao_nome:
+                    orgao_julgador_nome = orgao_nome
+
+                grau_hit = source.get('grau')
+                instancia_hit = cls._inferir_instancia(
+                    grau=grau_hit,
+                    orgao_julgador=orgao_nome,
+                    tribunal_sigla=tribunal_atual,
+                )
+
+                movimentos_raw = source.get('movimentos', []) or []
+                fontes_encontradas.append({
+                    'tribunal': tribunal_atual,
+                    'orgao_julgador': orgao_nome,
+                    'instancia': instancia_hit,
+                    'quantidade_movimentos': len(movimentos_raw),
+                })
+
+                for mov in movimentos_raw:
+                    nome_mov = mov.get('nome')
+                    movimentos_coletados.append({
+                        'codigo': mov.get('codigo'),
+                        'nome': nome_mov,
+                        'data_hora': mov.get('dataHora'),
+                        'complementos': mov.get('complementosTabelados', []),
+                        'tribunal_sigla': tribunal_atual,
+                        'orgao_julgador': orgao_nome,
+                        'instancia': cls._inferir_instancia(
+                            grau=grau_hit,
+                            orgao_julgador=orgao_nome,
+                            nome_movimento=nome_mov,
+                            tribunal_sigla=tribunal_atual,
+                        ) or instancia_hit,
+                    })
+
+        if not movimentos_coletados:
+            if erros_consulta and len(erros_consulta) >= len(tribunais_consultados):
                 return {
                     'sucesso': False,
-                    'erro': f'Erro na API Datajud: HTTP {response.status_code}',
+                    'erro': 'Falha ao consultar todos os tribunais previstos para o processo',
                     'tribunal': tribunal_sigla,
-                    'tempo_resposta_ms': tempo_resposta
+                    'tribunais_consultados': tribunais_consultados,
+                    'erros_consulta': erros_consulta,
+                    'tempo_resposta_ms': tempo_total_ms,
                 }
-            
-            # Parse da resposta
-            data = response.json()
-            
-            # Extrai hits do resultado Elasticsearch
-            hits = data.get('hits', {}).get('hits', [])
-            
-            if not hits:
-                return {
-                    'sucesso': True,
-                    'encontrado': False,
-                    'mensagem': 'Processo não encontrado no tribunal',
-                    'tribunal': tribunal_sigla,
-                    'tempo_resposta_ms': tempo_resposta
-                }
-            
-            # Extrai dados do primeiro hit (mais relevante)
-            source = hits[0].get('_source', {})
-            
-            # Extrai movimentações
-            movimentos_raw = source.get('movimentos', [])
-            movimentos = []
-            
-            for mov in movimentos_raw:
-                movimentos.append({
-                    'codigo': mov.get('codigo'),
-                    'nome': mov.get('nome'),
-                    'data_hora': mov.get('dataHora'),
-                    'complementos': mov.get('complementosTabelados', [])
-                })
-            
-            # Ordena movimentações por data (mais recente primeiro)
-            movimentos.sort(key=lambda x: x.get('data_hora', ''), reverse=True)
-            
+
             return {
                 'sucesso': True,
-                'encontrado': True,
+                'encontrado': False,
+                'mensagem': 'Processo não encontrado nos tribunais consultados',
                 'tribunal': tribunal_sigla,
-                'numero_processo': source.get('numeroProcesso'),
-                'data_ajuizamento': source.get('dataAjuizamento'),
-                'classe': {
-                    'codigo': source.get('classe', {}).get('codigo'),
-                    'nome': source.get('classe', {}).get('nome')
-                },
-                'orgao_julgador': {
-                    'nome': source.get('orgaoJulgador', {}).get('nome')
-                },
-                'movimentos': movimentos,
-                'total_movimentos': len(movimentos),
-                'tempo_resposta_ms': tempo_resposta
+                'tribunais_consultados': tribunais_consultados,
+                'erros_consulta': erros_consulta,
+                'tempo_resposta_ms': tempo_total_ms
             }
-            
-        except requests.exceptions.Timeout:
-            return {
-                'sucesso': False,
-                'erro': f'Timeout na consulta ao tribunal {tribunal_sigla}. Tente novamente.',
-                'tribunal': tribunal_sigla
-            }
-        except requests.exceptions.RequestException as e:
-            return {
-                'sucesso': False,
-                'erro': f'Erro de conexão: {str(e)}',
-                'tribunal': tribunal_sigla
-            }
-        except Exception as e:
-            return {
-                'sucesso': False,
-                'erro': f'Erro inesperado: {str(e)}',
-                'tribunal': tribunal_sigla
-            }
+
+        movimentos_unicos: List[Dict[str, Any]] = []
+        chaves_vistas = set()
+        for mov in movimentos_coletados:
+            chave = (
+                mov.get('codigo'),
+                mov.get('nome'),
+                mov.get('data_hora'),
+                mov.get('tribunal_sigla'),
+                mov.get('orgao_julgador'),
+            )
+            if chave in chaves_vistas:
+                continue
+            chaves_vistas.add(chave)
+            movimentos_unicos.append(mov)
+
+        movimentos_unicos.sort(key=lambda x: cls._parse_data_hora(x.get('data_hora')), reverse=True)
+
+        if movimentos_unicos and movimentos_unicos[0].get('orgao_julgador'):
+            orgao_julgador_nome = movimentos_unicos[0].get('orgao_julgador')
+
+        instancias_detectadas = []
+        tribunais_com_resultado = []
+        for mov in movimentos_unicos:
+            instancia = mov.get('instancia')
+            tribunal_mov = mov.get('tribunal_sigla')
+
+            if instancia and instancia not in instancias_detectadas:
+                instancias_detectadas.append(instancia)
+            if tribunal_mov and tribunal_mov not in tribunais_com_resultado:
+                tribunais_com_resultado.append(tribunal_mov)
+
+        return {
+            'sucesso': True,
+            'encontrado': True,
+            'tribunal': tribunal_sigla,
+            'tribunais_consultados': tribunais_consultados,
+            'tribunais_com_resultado': tribunais_com_resultado,
+            'instancias_detectadas': instancias_detectadas,
+            'numero_processo': numero_encontrado or numero_limpo,
+            'data_ajuizamento': data_ajuizamento,
+            'classe': classe,
+            'orgao_julgador': {
+                'nome': orgao_julgador_nome
+            },
+            'movimentos': movimentos_unicos,
+            'total_movimentos': len(movimentos_unicos),
+            'fontes_encontradas': fontes_encontradas,
+            'erros_consulta': erros_consulta,
+            'fase_atual': cls.inferir_fase_processual(movimentos_unicos),
+            'tempo_resposta_ms': tempo_total_ms
+        }
     
     @classmethod
     def salvar_movimentacoes(cls, processo_id: int, workspace_id: int, movimentos: List[Dict]) -> Dict[str, Any]:
@@ -2585,35 +3347,64 @@ class DatajudMonitor:
                 codigo = mov.get('codigo')
                 nome = mov.get('nome', 'Movimentação sem descrição')
                 data_hora = mov.get('data_hora')
+                instancia = mov.get('instancia')
+                tribunal_mov = mov.get('tribunal_sigla')
+                orgao_julgador = mov.get('orgao_julgador')
                 complementos = json.dumps(mov.get('complementos', []), ensure_ascii=False)
-                
-                # Converte data ISO 8601 para formato do banco
-                if data_hora:
-                    try:
-                        # Remove timezone se presente e converte
-                        data_clean = data_hora.replace('Z', '+00:00')
-                        dt = datetime.fromisoformat(data_clean)
-                        data_movimento = dt.strftime('%Y-%m-%d %H:%M:%S')
-                    except:
-                        data_movimento = data_hora
-                else:
-                    data_movimento = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+
+                data_movimento = cls.formatar_data_movimento(data_hora)
                 
                 try:
-                    cursor = db.execute('''
-                        INSERT OR IGNORE INTO movimentacoes_processo 
-                        (workspace_id, processo_id, codigo_movimento, nome_movimento, 
-                         data_movimento, complementos, fonte)
-                        VALUES (?, ?, ?, ?, ?, ?, ?)
-                    ''', (workspace_id, processo_id, codigo, nome, data_movimento, 
-                          complementos, 'datajud'))
+                    try:
+                        cursor = db.execute('''
+                            INSERT OR IGNORE INTO movimentacoes_processo 
+                            (workspace_id, processo_id, codigo_movimento, nome_movimento, 
+                             data_movimento, instancia, tribunal_sigla, orgao_julgador, complementos, fonte)
+                            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                        ''', (
+                            workspace_id,
+                            processo_id,
+                            codigo,
+                            nome,
+                            data_movimento,
+                            instancia,
+                            tribunal_mov,
+                            orgao_julgador,
+                            complementos,
+                            'datajud',
+                        ))
+                    except sqlite3.OperationalError as schema_error:
+                        if (
+                            'instancia' in str(schema_error).lower()
+                            or 'tribunal_sigla' in str(schema_error).lower()
+                            or 'orgao_julgador' in str(schema_error).lower()
+                        ):
+                            cursor = db.execute('''
+                                INSERT OR IGNORE INTO movimentacoes_processo 
+                                (workspace_id, processo_id, codigo_movimento, nome_movimento, 
+                                 data_movimento, complementos, fonte)
+                                VALUES (?, ?, ?, ?, ?, ?, ?)
+                            ''', (
+                                workspace_id,
+                                processo_id,
+                                codigo,
+                                nome,
+                                data_movimento,
+                                complementos,
+                                'datajud',
+                            ))
+                        else:
+                            raise
                     
                     if cursor.rowcount > 0:
                         inseridas += 1
                         novas_movimentacoes.append({
                             'codigo': codigo,
                             'nome': nome,
-                            'data': data_movimento
+                            'data': data_movimento,
+                            'instancia': instancia,
+                            'tribunal_sigla': tribunal_mov,
+                            'orgao_julgador': orgao_julgador,
                         })
                     else:
                         duplicadas += 1
@@ -6633,9 +7424,19 @@ def monitorar_datajud_job():
                 tempo_ms = int((fim_consulta - inicio_consulta).total_seconds() * 1000)
                 
                 # Status da consulta para log
-                status_consulta = 'sucesso' if resultado.get('sucesso') and resultado.get('encontrado') else 'erro'
+                if resultado.get('sucesso') and resultado.get('encontrado'):
+                    status_consulta = 'sucesso'
+                elif resultado.get('sucesso'):
+                    status_consulta = 'vazio'
+                else:
+                    status_consulta = 'erro'
                 movs_encontradas = resultado.get('total_movimentos', 0) if resultado.get('encontrado') else 0
                 erro_msg = resultado.get('erro') if not resultado.get('sucesso') else None
+                endpoints_usados = ','.join(
+                    DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(sigla, '')
+                    for sigla in (resultado.get('tribunais_consultados') or [tribunal_sigla])
+                    if DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(sigla)
+                )
                 
                 # Registra log da consulta
                 db.execute('''
@@ -6646,13 +7447,15 @@ def monitorar_datajud_job():
                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 ''', (
                     workspace_id, processo_id, numero_processo, tribunal_sigla,
-                    DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
+                    endpoints_usados or DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
                     status_consulta, movs_encontradas, 0, erro_msg, tempo_ms, fim_consulta
                 ))
                 
                 # Se encontrou o processo, processa movimentações
                 if resultado.get('sucesso') and resultado.get('encontrado') and resultado.get('movimentos'):
                     movimentos = resultado['movimentos']
+                    fase_atual = resultado.get('fase_atual') or DatajudMonitor.inferir_fase_processual(movimentos)
+                    movimento_recente = movimentos[0] if movimentos else None
                     
                     # Salva movimentações (INSERT IGNORE para evitar duplicatas)
                     resultado_salvamento = DatajudMonitor.salvar_movimentacoes(
@@ -6667,6 +7470,32 @@ def monitorar_datajud_job():
                         SET movimentacoes_novas = ? 
                         WHERE processo_id = ? AND created_at = ?
                     ''', (len(movs_novas), processo_id, fim_consulta))
+
+                    if movimento_recente:
+                        data_recente = DatajudMonitor.formatar_data_movimento(
+                            movimento_recente.get('data_hora') or movimento_recente.get('data')
+                        )
+                        if fase_atual:
+                            db.execute('''
+                                UPDATE processos
+                                SET ultimo_movimento = ?, ultimo_movimento_data = ?, fase = ?
+                                WHERE id = ?
+                            ''', (
+                                movimento_recente.get('nome'),
+                                data_recente,
+                                fase_atual,
+                                processo_id
+                            ))
+                        else:
+                            db.execute('''
+                                UPDATE processos
+                                SET ultimo_movimento = ?, ultimo_movimento_data = ?
+                                WHERE id = ?
+                            ''', (
+                                movimento_recente.get('nome'),
+                                data_recente,
+                                processo_id
+                            ))
                     
                     # Se há movimentações novas, cria alertas
                     if movs_novas:
@@ -6674,14 +7503,6 @@ def monitorar_datajud_job():
                             processo_id, workspace_id, movs_novas, numero_processo
                         )
                         print(f"  ✅ {numero_processo}: {len(movs_novas)} nova(s) movimentação(ões), {alertas_criados} alerta(s)")
-                        
-                        # Atualiza último movimento no processo
-                        ultima_mov = movs_novas[0]  # Mais recente
-                        db.execute('''
-                            UPDATE processos 
-                            SET ultimo_movimento = ?, ultimo_movimento_data = ? 
-                            WHERE id = ?
-                        ''', (ultima_mov['nome'], ultima_mov['data'], processo_id))
                     else:
                         print(f"  ℹ️ {numero_processo}: Sem novas movimentações")
                 
@@ -8305,25 +9126,45 @@ def consultar_datajud(id):
         status_consulta = 'erro'
         erro_msg = resultado.get('erro', 'Erro na consulta ao Datajud')
     elif resultado.get('encontrado') and movimentos:
+        fase_atual = resultado.get('fase_atual') or DatajudMonitor.inferir_fase_processual(movimentos)
+        movimento_recente = movimentos[0]
+
         # Salva movimentações no banco (evita duplicatas)
         resultado_salvamento = DatajudMonitor.salvar_movimentacoes(
             id, workspace_id, movimentos
         )
         movs_novas = resultado_salvamento.get('novas_movimentacoes', [])
 
+        # Atualiza fase e último movimento mesmo sem novas inserções (consolidação multi-instância)
+        data_recente = DatajudMonitor.formatar_data_movimento(
+            movimento_recente.get('data_hora') or movimento_recente.get('data')
+        )
+        if fase_atual:
+            db.execute(
+                '''UPDATE processos
+                   SET ultimo_movimento = ?, ultimo_movimento_data = ?, fase = ?
+                   WHERE id = ?''',
+                (movimento_recente.get('nome'), data_recente, fase_atual, id),
+            )
+        else:
+            db.execute(
+                '''UPDATE processos
+                   SET ultimo_movimento = ?, ultimo_movimento_data = ?
+                   WHERE id = ?''',
+                (movimento_recente.get('nome'), data_recente, id),
+            )
+
         # Se há movimentações novas, cria alertas
         if movs_novas:
             DatajudMonitor.criar_alertas_movimentacao(
                 id, workspace_id, movs_novas, numero_processo
             )
-            # Atualiza último movimento do processo com o mais recente entre os novos
-            ultima_mov = movs_novas[0]
-            db.execute(
-                '''UPDATE processos
-                   SET ultimo_movimento = ?, ultimo_movimento_data = ?
-                   WHERE id = ?''',
-                (ultima_mov['nome'], ultima_mov['data'], id),
-            )
+
+    endpoints_usados = ','.join(
+        DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(sigla, '')
+        for sigla in (resultado.get('tribunais_consultados') or [tribunal_sigla])
+        if DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(sigla)
+    )
 
     # Registra log da consulta (sempre)
     db.execute(
@@ -8337,7 +9178,7 @@ def consultar_datajud(id):
             id,
             numero_processo,
             tribunal_sigla,
-            DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
+            endpoints_usados or DatajudMonitor.TRIBUNAIS_ENDPOINTS.get(tribunal_sigla, ''),
             status_consulta,
             movs_encontradas,
             len(movs_novas),
@@ -8378,6 +9219,74 @@ def consultar_datajud(id):
             'sucesso': False,
             'erro': erro_msg or 'Erro na consulta ao Datajud'
         }), 500
+
+    return jsonify(resultado)
+
+
+@app.route('/api/datajud/busca-avancada', methods=['POST'])
+@require_auth
+@require_recurso('pje')
+def buscar_datajud_avancado():
+    """
+    Busca processos no Datajud por número, nome ou CPF/CNPJ.
+    Retorna apenas dados resumidos para exibição em modal/lista rápida.
+    """
+    data = request.get_json() or {}
+
+    termo = str(data.get('termo') or '').strip()
+    if not termo:
+        return jsonify({
+            'sucesso': False,
+            'erro': 'Informe um termo para consulta.',
+        }), 400
+
+    tipo = str(data.get('tipo') or 'numero').strip().lower()
+    tribunal = str(data.get('tribunal') or '').strip().upper() or None
+
+    try:
+        limite = int(data.get('limite', 10))
+    except Exception:
+        limite = 10
+    limite = max(1, min(limite, 20))
+
+    try:
+        limite_tribunais = int(data.get('limite_tribunais', 14))
+    except Exception:
+        limite_tribunais = 14
+    limite_tribunais = max(1, min(limite_tribunais, 30))
+
+    resultado = DatajudMonitor.buscar_processos(
+        termo=termo,
+        tipo_busca=tipo,
+        tribunal_sigla=tribunal,
+        limite=limite,
+        workspace_id=g.auth['workspace_id'],
+        limite_tribunais=limite_tribunais,
+    )
+
+    if not resultado.get('sucesso'):
+        erro = str(resultado.get('erro') or '').lower()
+        status_code = 503 if 'api key' in erro else 400
+        return jsonify(resultado), status_code
+
+    db = get_db()
+    processos_workspace = db.execute(
+        'SELECT id, numero, numero_cnj FROM processos WHERE workspace_id = ?',
+        (g.auth['workspace_id'],),
+    ).fetchall()
+
+    mapa_numeros: Dict[str, int] = {}
+    for proc in processos_workspace:
+        for campo in ('numero', 'numero_cnj'):
+            numero = re.sub(r'[^0-9]', '', str(proc[campo] or ''))
+            if numero and numero not in mapa_numeros:
+                mapa_numeros[numero] = proc['id']
+
+    for item in resultado.get('resultados') or []:
+        numero_item = re.sub(r'[^0-9]', '', str(item.get('numero_processo') or ''))
+        processo_id = mapa_numeros.get(numero_item)
+        item['ja_cadastrado'] = bool(processo_id)
+        item['processo_id_workspace'] = processo_id
 
     return jsonify(resultado)
 
