@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { Button } from '@/components/ui/button';
@@ -54,9 +54,16 @@ export function DashboardLayout() {
   const location = useLocation();
   const navigate = useNavigate();
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
+  const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [avatarRetryAttempt, setAvatarRetryAttempt] = useState(0);
+  const avatarRetryTimeoutRef = useRef<number | null>(null);
   const [notificacoesList, setNotificacoesList] = useState<any[]>([]);
   const [naoLidas, setNaoLidas] = useState(0);
   const [notifOpen, setNotifOpen] = useState(false);
+  const baseUserAvatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
+  const userAvatarUrl = baseUserAvatarUrl
+    ? `${baseUserAvatarUrl}${baseUserAvatarUrl.includes('?') ? '&' : '?'}v=${avatarRetryAttempt}`
+    : '';
 
   // Buscar notificações
   useEffect(() => {
@@ -73,6 +80,23 @@ export function DashboardLayout() {
     // Atualiza a cada 30 segundos
     const interval = setInterval(loadNotificacoes, 30000);
     return () => clearInterval(interval);
+  }, []);
+
+  useEffect(() => {
+    setAvatarLoadError(false);
+    setAvatarRetryAttempt(0);
+    if (avatarRetryTimeoutRef.current) {
+      window.clearTimeout(avatarRetryTimeoutRef.current);
+      avatarRetryTimeoutRef.current = null;
+    }
+  }, [baseUserAvatarUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarRetryTimeoutRef.current) {
+        window.clearTimeout(avatarRetryTimeoutRef.current);
+      }
+    };
   }, []);
 
   const marcarLida = async (id: number) => {
@@ -103,6 +127,30 @@ export function DashboardLayout() {
       .join('')
       .toUpperCase()
       .slice(0, 2);
+  };
+
+  const handleAvatarError = () => {
+    if (!baseUserAvatarUrl) {
+      setAvatarLoadError(true);
+      return;
+    }
+
+    if (avatarRetryAttempt >= 2) {
+      setAvatarLoadError(true);
+      return;
+    }
+
+    setAvatarLoadError(true);
+    if (avatarRetryTimeoutRef.current) {
+      window.clearTimeout(avatarRetryTimeoutRef.current);
+    }
+
+    const nextAttempt = avatarRetryAttempt + 1;
+    avatarRetryTimeoutRef.current = window.setTimeout(() => {
+      setAvatarRetryAttempt(nextAttempt);
+      setAvatarLoadError(false);
+      avatarRetryTimeoutRef.current = null;
+    }, nextAttempt * 1500);
   };
 
   const NavContent = () => (
@@ -147,9 +195,10 @@ export function DashboardLayout() {
         <div className="flex items-center gap-3 px-4 py-3 rounded-xl glass-card">
           <Avatar className="w-10 h-10 border-2 border-primary/40">
             <AvatarImage 
-              src={user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : undefined} 
+              src={userAvatarUrl && !avatarLoadError ? userAvatarUrl : undefined}
               alt={user?.nome}
               className="object-cover"
+              onError={handleAvatarError}
             />
             <AvatarFallback className="bg-gradient-primary text-white text-sm">
               {user?.nome ? getInitials(user.nome) : 'U'}
@@ -257,9 +306,10 @@ export function DashboardLayout() {
                   <Button variant="ghost" className="flex items-center gap-2 text-muted-foreground hover:text-foreground">
                     <Avatar className="w-8 h-8 border border-border/50">
                       <AvatarImage 
-                        src={user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : undefined} 
+                        src={userAvatarUrl && !avatarLoadError ? userAvatarUrl : undefined}
                         alt={user?.nome}
                         className="object-cover"
+                        onError={handleAvatarError}
                       />
                       <AvatarFallback className="bg-gradient-primary text-white text-xs">
                         {user?.nome ? getInitials(user.nome) : 'U'}

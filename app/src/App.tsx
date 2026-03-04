@@ -73,14 +73,13 @@ function PrivateRoute({ children }: { children: React.ReactNode }) {
 }
 
 function AppRoutes() {
-  const { user, isAuthenticated, isLoggingOut, finishLogoutTransition } = useAuth();
+  const { user, isAuthenticated, isLoading, isLoggingOut, finishLogoutTransition } = useAuth();
   const location = useLocation();
   const [isMaintenanceMode, setIsMaintenanceMode] = useState(false);
   const [maintenanceMessage, setMaintenanceMessage] = useState('Sistema em manutenção no momento. Tente novamente em alguns minutos.');
   const fallbackSupportWhatsapp = String((import.meta as any).env?.VITE_WHATSAPP_VENDAS || DEFAULT_SUPPORT_WHATSAPP);
   const [supportWhatsappUrl, setSupportWhatsappUrl] = useState(buildSupportWhatsappUrl(fallbackSupportWhatsapp));
   const isAdminUser = user?.role === 'admin' || user?.role === 'superadmin';
-  const showLandingAtRoot = isMaintenanceMode && !isAdminUser;
   const allowAdminLogin = location.pathname === '/login' && new URLSearchParams(location.search).get('admin') === '1';
   const isPublicMaintenancePath =
     location.pathname === '/' || location.pathname.startsWith('/publico/processo/');
@@ -173,11 +172,27 @@ function AppRoutes() {
   return (
     <Routes>
       {/* Landing Page - Página inicial pública */}
-      <Route path="/" element={showLandingAtRoot ? <LandingPage /> : isAuthenticated ? <Navigate to="/app" /> : <LandingPage />} />
+      <Route path="/" element={<LandingPage />} />
 
       {/* Autenticação */}
-      <Route path="/login" element={isLoggingOut ? <FullScreenLoader label="Encerrando sessão..." /> : isAuthenticated ? <Navigate to="/app" /> : <LoginPage />} />
-      <Route path="/register" element={isAuthenticated ? <Navigate to="/app" /> : <RegisterPage />} />
+      <Route
+        path="/login"
+        element={
+          isLoggingOut ? (
+            <FullScreenLoader label="Encerrando sessão..." />
+          ) : isLoading ? (
+            <FullScreenLoader />
+          ) : isAuthenticated ? (
+            <Navigate to="/app" />
+          ) : (
+            <LoginPage />
+          )
+        }
+      />
+      <Route
+        path="/register"
+        element={isLoading ? <FullScreenLoader /> : isAuthenticated ? <Navigate to="/app" /> : <RegisterPage />}
+      />
 
       {/* App Layout - Nova estrutura com /app como base */}
       <Route

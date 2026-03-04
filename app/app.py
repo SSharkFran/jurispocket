@@ -129,7 +129,23 @@ app.config['SECRET_KEY'] = os.environ.get('SECRET_KEY', 'dev-secret-key-change-i
 DEFAULT_DB_PATH = os.path.join(os.path.dirname(__file__), 'jurispocket.db')
 app.config['DATABASE'] = os.environ.get('DATABASE_PATH', DEFAULT_DB_PATH)
 
-app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(__file__), 'uploads')
+DEFAULT_UPLOADS_PATH = os.path.join(os.path.dirname(__file__), 'uploads')
+configured_uploads_path = (
+    os.environ.get('UPLOAD_FOLDER')
+    or os.environ.get('UPLOADS_DIR')
+    or ''
+).strip()
+if configured_uploads_path:
+    upload_path = (
+        configured_uploads_path
+        if os.path.isabs(configured_uploads_path)
+        else os.path.join(os.path.dirname(__file__), configured_uploads_path)
+    )
+else:
+    data_dir = (os.environ.get('DATA_DIR') or '').strip()
+    upload_path = os.path.join(data_dir, 'uploads') if data_dir else DEFAULT_UPLOADS_PATH
+
+app.config['UPLOAD_FOLDER'] = os.path.abspath(upload_path)
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # Token opcional para bootstrap seguro de superadmin
@@ -2602,9 +2618,9 @@ class DatajudMonitor:
         termo: str,
         tribunal_sigla: Optional[str] = None,
         workspace_id: Optional[int] = None,
-        limite_tribunais: int = 14,
+        limite_tribunais: int = 30,
     ) -> List[str]:
-        limite = max(1, min(int(limite_tribunais or 14), 30))
+        limite = max(1, min(int(limite_tribunais or 30), 80))
         tribunal_explicitado = str(tribunal_sigla or '').strip().upper()
 
         if tribunal_explicitado:
@@ -2618,11 +2634,16 @@ class DatajudMonitor:
             tribunal_origem = cls.identificar_tribunal(termo)
             if tribunal_origem:
                 candidatos.extend(cls.obter_tribunais_consulta(tribunal_origem))
+            else:
+                # Sem tribunal identificado no NPU: amplia cobertura para reduzir falso negativo.
+                candidatos.extend(list(cls.TRIBUNAIS_ENDPOINTS.keys()))
 
         if workspace_id:
             candidatos.extend(cls._coletar_tribunais_workspace(workspace_id, limite=limite))
 
         candidatos.extend(cls.BUSCA_TRIBUNAIS_PRIORITARIOS)
+        # Fallback nacional para busca avancada (nome/documento e NPU sem tribunal detectado).
+        candidatos.extend(list(cls.TRIBUNAIS_ENDPOINTS.keys()))
 
         tribunais: List[str] = []
         for sigla in candidatos:
@@ -2686,6 +2707,7 @@ class DatajudMonitor:
                         {"match": {"numeroProcesso": numero_limpo}},
                         {"match_phrase": {"numeroProcesso": numero_limpo}},
                         {"term": {"numeroProcesso.keyword": numero_limpo}},
+                        {"wildcard": {"numeroProcesso.keyword": f"*{numero_limpo}*"}},
                     ],
                     "minimum_should_match": 1,
                 }
@@ -2709,6 +2731,8 @@ class DatajudMonitor:
             for campo in campos_documento:
                 clausulas.append({"match_phrase": {campo: documento}})
                 clausulas.append({"match": {campo: {"query": documento, "operator": "and"}}})
+                clausulas.append({"term": {f"{campo}.keyword": documento}})
+                clausulas.append({"wildcard": {f"{campo}.keyword": f"*{documento}*"}})
 
             payload_base["query"] = {
                 "bool": {
@@ -2744,6 +2768,14 @@ class DatajudMonitor:
                                 "query": termo_limpo,
                                 "fields": campos_nome,
                                 "type": "phrase",
+                            }
+                        },
+                        {
+                            "multi_match": {
+                                "query": termo_limpo,
+                                "fields": campos_nome,
+                                "type": "most_fields",
+                                "operator": "or",
                             }
                         },
                     ],
@@ -2958,7 +2990,7 @@ class DatajudMonitor:
         tribunal_sigla: Optional[str] = None,
         limite: int = 10,
         workspace_id: Optional[int] = None,
-        limite_tribunais: int = 14,
+        limite_tribunais: int = 30,
     ) -> Dict[str, Any]:
         if not cls.API_KEY:
             return {
@@ -3005,11 +3037,20 @@ class DatajudMonitor:
         }
 
         import time
+        timeout_busca = min(max(int(cls.TIMEOUT or 30), 6), 8)
         tempo_total_ms = 0
+        inicio_busca_global = time.time()
         erros_consulta: List[Dict[str, Any]] = []
         resultados_brutos: List[Dict[str, Any]] = []
 
         for tribunal_atual in tribunais_consultados:
+            if (time.time() - inicio_busca_global) > 45:
+                erros_consulta.append({
+                    'tribunal': tribunal_atual,
+                    'erro': 'Limite de tempo da busca avancada atingido; resultado parcial.',
+                })
+                break
+
             endpoint = cls.TRIBUNAIS_ENDPOINTS.get(tribunal_atual)
             if not endpoint:
                 continue
@@ -3021,7 +3062,7 @@ class DatajudMonitor:
                     url,
                     headers=headers,
                     json=payload,
-                    timeout=cls.TIMEOUT,
+                    timeout=timeout_busca,
                 )
                 tempo_req_ms = int((time.time() - inicio) * 1000)
                 tempo_total_ms += tempo_req_ms
@@ -3065,6 +3106,49 @@ class DatajudMonitor:
 
             if len(resultados_brutos) >= limite_resultados * 4:
                 break
+
+        if not resultados_brutos and tipo == 'numero':
+            tribunal_origem = cls.identificar_tribunal(termo)
+            fallback_numero = cls.consultar_processo(termo, tribunal_origem)
+            if fallback_numero.get('sucesso') and fallback_numero.get('encontrado'):
+                movimentos_fallback = fallback_numero.get('movimentos') or []
+                movimentos_fallback = sorted(
+                    movimentos_fallback,
+                    key=lambda x: cls._parse_data_hora(x.get('data_hora')),
+                    reverse=True,
+                )
+                ultima_mov = movimentos_fallback[0] if movimentos_fallback else {}
+                classe = fallback_numero.get('classe') or {}
+                orgao = fallback_numero.get('orgao_julgador') or {}
+                item_fallback = {
+                    'numero_processo': fallback_numero.get('numero_processo') or cls._somente_digitos(termo),
+                    'tribunal_sigla': fallback_numero.get('tribunal'),
+                    'tribunal_nome': cls.get_nome_tribunal(str(fallback_numero.get('tribunal') or '')),
+                    'tribunais_relacionados': fallback_numero.get('tribunais_com_resultado') or [fallback_numero.get('tribunal')],
+                    'classe_codigo': classe.get('codigo'),
+                    'classe_nome': classe.get('nome'),
+                    'assunto_principal': None,
+                    'orgao_julgador': orgao.get('nome'),
+                    'data_ajuizamento': fallback_numero.get('data_ajuizamento'),
+                    'ultima_movimentacao': ultima_mov.get('nome'),
+                    'ultima_movimentacao_data': ultima_mov.get('data_hora'),
+                    'total_movimentos': fallback_numero.get('total_movimentos') or len(movimentos_fallback),
+                    'fase_atual': fallback_numero.get('fase_atual'),
+                    'instancias_detectadas': fallback_numero.get('instancias_detectadas') or [],
+                    'partes': [],
+                }
+                return {
+                    'sucesso': True,
+                    'encontrado': True,
+                    'tipo_busca': tipo,
+                    'termo': termo,
+                    'tribunais_consultados': fallback_numero.get('tribunais_consultados') or tribunais_consultados,
+                    'erros_consulta': (erros_consulta + (fallback_numero.get('erros_consulta') or [])),
+                    'resultados': [item_fallback],
+                    'total_resultados': 1,
+                    'parcial': bool(erros_consulta or fallback_numero.get('erros_consulta')),
+                    'tempo_resposta_ms': tempo_total_ms + int(fallback_numero.get('tempo_resposta_ms') or 0),
+                }
 
         if not resultados_brutos:
             return {
@@ -8397,8 +8481,15 @@ def upload_avatar():
     if ext not in allowed_extensions:
         return jsonify({'error': 'Formato não suportado. Use PNG, JPG, GIF ou WEBP'}), 400
     
+    db = get_db()
+    atual = db.execute(
+        'SELECT avatar_url FROM users WHERE id = ?',
+        (g.auth['user_id'],),
+    ).fetchone()
+    avatar_anterior = str(atual['avatar_url'] or '') if atual else ''
+
     # Criar nome único
-    filename = f"avatar_{g.auth['user_id']}_{int(datetime.now().timestamp())}.{ext}"
+    filename = f"avatar_{g.auth['user_id']}_{int(datetime.now().timestamp() * 1000)}.{ext}"
     filepath = os.path.join(app.config['UPLOAD_FOLDER'], filename)
     
     # Salvar arquivo
@@ -8406,9 +8497,11 @@ def upload_avatar():
     
     # Atualizar banco
     avatar_url = f"/uploads/{filename}"
-    db = get_db()
     db.execute('UPDATE users SET avatar_url = ? WHERE id = ?', (avatar_url, g.auth['user_id']))
     db.commit()
+
+    if avatar_anterior and avatar_anterior != avatar_url:
+        _remove_upload_file_from_url(avatar_anterior)
     
     return jsonify({'avatar_url': avatar_url})
 
@@ -8419,17 +8512,17 @@ def delete_avatar():
     db = get_db()
     
     # Buscar avatar atual
-    user = db.execute('SELECT avatar_url FROM users WHERE id = ?', (g.auth['user_id'],)).fetchone()
-    
-    if user and user['avatar_url']:
-        # Deletar arquivo
-        filepath = os.path.join(app.config['UPLOAD_FOLDER'], os.path.basename(user['avatar_url']))
-        if os.path.exists(filepath):
-            os.remove(filepath)
-        
-        # Limpar no banco
-        db.execute('UPDATE users SET avatar_url = NULL WHERE id = ?', (g.auth['user_id'],))
-        db.commit()
+    user = db.execute(
+        'SELECT avatar_url FROM users WHERE id = ?',
+        (g.auth['user_id'],),
+    ).fetchone()
+    avatar_atual = str(user['avatar_url'] or '') if user else ''
+
+    db.execute('UPDATE users SET avatar_url = NULL WHERE id = ?', (g.auth['user_id'],))
+    db.commit()
+
+    if avatar_atual:
+        _remove_upload_file_from_url(avatar_atual)
     
     return jsonify({'message': 'Avatar removido'})
 
@@ -9250,10 +9343,10 @@ def buscar_datajud_avancado():
     limite = max(1, min(limite, 20))
 
     try:
-        limite_tribunais = int(data.get('limite_tribunais', 14))
+        limite_tribunais = int(data.get('limite_tribunais', 30))
     except Exception:
-        limite_tribunais = 14
-    limite_tribunais = max(1, min(limite_tribunais, 30))
+        limite_tribunais = 30
+    limite_tribunais = max(1, min(limite_tribunais, 80))
 
     resultado = DatajudMonitor.buscar_processos(
         termo=termo,

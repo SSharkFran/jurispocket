@@ -344,6 +344,7 @@ export default function DatajudPage() {
         termo: consultaNumero,
         tipo: tipoBusca,
         limite: 12,
+        limite_tribunais: 30,
       });
 
       const payload = buscaRes.data || {};

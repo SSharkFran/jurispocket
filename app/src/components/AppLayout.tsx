@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { Outlet, Link, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/contexts/AuthContext';
 import { motion, AnimatePresence } from 'framer-motion';
@@ -67,6 +67,8 @@ const AppLayout = () => {
   const [mobileOpen, setMobileOpen] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [avatarLoadError, setAvatarLoadError] = useState(false);
+  const [avatarRetryAttempt, setAvatarRetryAttempt] = useState(0);
+  const avatarRetryTimeoutRef = useRef<number | null>(null);
   const [notificacoesOpen, setNotificacoesOpen] = useState(false);
   const [listaNotificacoes, setListaNotificacoes] = useState<Notificacao[]>([]);
   const [notificacoesNaoLidas, setNotificacoesNaoLidas] = useState(0);
@@ -126,11 +128,51 @@ const AppLayout = () => {
   const userInitials = user?.nome 
     ? user.nome.split(' ').map(n => n[0]).join('').slice(0, 2).toUpperCase()
     : 'U';
-  const userAvatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
+  const baseUserAvatarUrl = user?.avatar_url ? `${API_BASE_URL}${user.avatar_url}` : '';
+  const userAvatarUrl = baseUserAvatarUrl
+    ? `${baseUserAvatarUrl}${baseUserAvatarUrl.includes('?') ? '&' : '?'}v=${avatarRetryAttempt}`
+    : '';
 
   useEffect(() => {
     setAvatarLoadError(false);
-  }, [userAvatarUrl]);
+    setAvatarRetryAttempt(0);
+    if (avatarRetryTimeoutRef.current) {
+      window.clearTimeout(avatarRetryTimeoutRef.current);
+      avatarRetryTimeoutRef.current = null;
+    }
+  }, [baseUserAvatarUrl]);
+
+  useEffect(() => {
+    return () => {
+      if (avatarRetryTimeoutRef.current) {
+        window.clearTimeout(avatarRetryTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  const handleAvatarError = () => {
+    if (!baseUserAvatarUrl) {
+      setAvatarLoadError(true);
+      return;
+    }
+
+    if (avatarRetryAttempt >= 2) {
+      setAvatarLoadError(true);
+      return;
+    }
+
+    setAvatarLoadError(true);
+    if (avatarRetryTimeoutRef.current) {
+      window.clearTimeout(avatarRetryTimeoutRef.current);
+    }
+
+    const nextAttempt = avatarRetryAttempt + 1;
+    avatarRetryTimeoutRef.current = window.setTimeout(() => {
+      setAvatarRetryAttempt(nextAttempt);
+      setAvatarLoadError(false);
+      avatarRetryTimeoutRef.current = null;
+    }, nextAttempt * 1500);
+  };
 
   const formatPlano = (plano?: string) => {
     const codigo = (plano || '').toLowerCase();
@@ -212,7 +254,7 @@ const AppLayout = () => {
                 src={userAvatarUrl}
                 alt={user?.nome || 'Avatar'}
                 className="h-full w-full object-cover"
-                onError={() => setAvatarLoadError(true)}
+                onError={handleAvatarError}
               />
             ) : (
               userInitials
